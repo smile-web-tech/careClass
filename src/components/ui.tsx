@@ -1,0 +1,587 @@
+import * as Haptics from 'expo-haptics';
+import { forwardRef, type ReactNode } from 'react';
+import {
+  Platform,
+  Pressable,
+  type PressableProps,
+  type StyleProp,
+  StyleSheet,
+  Text,
+  type TextProps,
+  TextInput,
+  type TextInputProps,
+  type TextStyle,
+  View,
+  type ViewProps,
+  type ViewStyle,
+} from 'react-native';
+
+import { Icon, type IconName } from '@/components/Icon';
+import { accents, type AccentName, color, PRESS_OPACITY, radius, shadow } from '@/theme/tokens';
+import { body, text } from '@/theme/type';
+
+/* -------------------------------------------------------------------------- */
+/* Text                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every piece of copy in the app goes through `Txt` so the Plus Jakarta family
+ * and ink colour are applied by default — RN's `Text` would otherwise fall back
+ * to the system font the moment a style is overridden.
+ */
+export function Txt({ style, ...rest }: TextProps) {
+  return <Text style={[styles.txt, style]} {...rest} />;
+}
+
+/** Small-caps section label ("TO", "RECIPIENTS", "CONTACT"). */
+export function Overline({ style, ...rest }: TextProps) {
+  return <Text style={[text.overline, style]} {...rest} />;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pressable                                                                  */
+/* -------------------------------------------------------------------------- */
+
+type PressProps = Omit<PressableProps, 'style'> & {
+  /** Fire a selection tick on press. Use for state-changing taps, not navigation. */
+  haptic?: boolean | Haptics.ImpactFeedbackStyle;
+  style?: StyleProp<ViewStyle>;
+};
+
+/**
+ * The single tappable primitive. The design has no ripple, just a quick opacity
+ * dip, so that is what this does on both platforms.
+ */
+export const Press = forwardRef<View, PressProps>(function Press(
+  { haptic, onPress, style, disabled, ...rest },
+  ref,
+) {
+  return (
+    <Pressable
+      ref={ref}
+      disabled={disabled}
+      onPress={(e) => {
+        if (haptic && Platform.OS !== 'web') {
+          Haptics.impactAsync(
+            haptic === true ? Haptics.ImpactFeedbackStyle.Light : haptic,
+          ).catch(() => {});
+        }
+        onPress?.(e);
+      }}
+      style={({ pressed }) => [
+        style,
+        pressed && { opacity: PRESS_OPACITY },
+        disabled && { opacity: 0.55 },
+      ]}
+      {...rest}
+    />
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* Surfaces                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** White surface, 1px cool border, 16px radius — the app's default container. */
+export function Card({ style, ...rest }: ViewProps) {
+  return <View style={[styles.card, style]} {...rest} />;
+}
+
+/** Hairline used inside cards. `inset` matches the design's `margin-left`. */
+export function Divider({ inset = 0 }: { inset?: number }) {
+  return <View style={[styles.divider, { marginLeft: inset }]} />;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Buttons                                                                    */
+/* -------------------------------------------------------------------------- */
+
+type ButtonProps = {
+  label: string;
+  icon?: IconName;
+  onPress?: () => void;
+  /** solid = primary blue, tonal = white on tint, ghost = borderless. */
+  variant?: 'solid' | 'outline' | 'tonal' | 'ghost' | 'success';
+  disabled?: boolean;
+  height?: number;
+  style?: ViewStyle;
+  /** Fill the row rather than hugging its label. */
+  grow?: boolean;
+};
+
+const BUTTON_SKINS: Record<
+  NonNullable<ButtonProps['variant']>,
+  { bg: string; fg: string; border?: string }
+> = {
+  solid: { bg: color.primary, fg: '#fff' },
+  success: { bg: color.success, fg: '#fff' },
+  outline: { bg: color.surface, fg: color.ink, border: color.border },
+  tonal: { bg: color.primaryTint, fg: color.primaryInk },
+  ghost: { bg: 'transparent', fg: color.primary },
+};
+
+export function Button({
+  label,
+  icon,
+  onPress,
+  variant = 'solid',
+  disabled,
+  height = 48,
+  grow,
+  style,
+}: ButtonProps) {
+  const skin = BUTTON_SKINS[variant];
+  const bg = disabled && variant === 'solid' ? color.borderStrong : skin.bg;
+
+  return (
+    <Press
+      onPress={onPress}
+      disabled={disabled}
+      style={[
+        styles.button,
+        {
+          height,
+          backgroundColor: bg,
+          borderWidth: skin.border ? 1 : 0,
+          borderColor: skin.border,
+        },
+        grow ? { flex: 1 } : null,
+        style as ViewStyle,
+      ]}>
+      {icon ? <Icon name={icon} size={16} color={skin.fg} /> : null}
+      <Text style={[text.button, { color: skin.fg }]}>{label}</Text>
+    </Press>
+  );
+}
+
+/** Square icon-only control — nav bar actions, row call/message shortcuts. */
+export function IconButton({
+  name,
+  onPress,
+  size = 40,
+  iconSize = 18,
+  tint = color.bg,
+  fg = color.ink,
+  strokeWidth,
+  radius: r = radius.control,
+  style,
+}: {
+  name: IconName;
+  onPress?: () => void;
+  size?: number;
+  iconSize?: number;
+  tint?: string;
+  fg?: string;
+  strokeWidth?: number;
+  radius?: number;
+  style?: ViewStyle;
+}) {
+  return (
+    <Press
+      onPress={onPress}
+      style={[
+        styles.center,
+        { width: size, height: size, borderRadius: r, backgroundColor: tint },
+        style as ViewStyle,
+      ]}>
+      <Icon name={name} size={iconSize} color={fg} strokeWidth={strokeWidth} />
+    </Press>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Identity                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** "Amir Rasulov" -> "AR". Falls back to a single letter for mononyms. */
+export function initialsOf(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** Rounded-square initials tile, tinted by the owner's accent colour. */
+export function Avatar({
+  name,
+  accent = 'blue',
+  size = 42,
+  radius: r,
+  fontSize,
+  style,
+}: {
+  name: string;
+  accent?: AccentName;
+  size?: number;
+  radius?: number;
+  fontSize?: number;
+  style?: ViewStyle;
+}) {
+  const a = accents[accent];
+  return (
+    <View
+      style={[
+        styles.center,
+        {
+          width: size,
+          height: size,
+          borderRadius: r ?? Math.round(size * 0.33),
+          backgroundColor: a.tint,
+        },
+        style as ViewStyle,
+      ]}>
+      <Text
+        style={{
+          fontFamily: 'SpaceGrotesk_600SemiBold',
+          fontSize: fontSize ?? Math.round(size * 0.345 * 10) / 10,
+          color: a.ink,
+        }}>
+        {initialsOf(name)}
+      </Text>
+    </View>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Chips & badges                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** Coloured label pill — group tags, delivery status, "2 absences". */
+export function Badge({
+  label,
+  bg,
+  fg,
+  icon,
+  dot,
+  style,
+  textStyle,
+}: {
+  label: string;
+  bg: string;
+  fg: string;
+  icon?: IconName;
+  dot?: string;
+  style?: ViewStyle;
+  textStyle?: TextStyle;
+}) {
+  return (
+    <View style={[styles.badge, { backgroundColor: bg }, style as ViewStyle]}>
+      {dot ? <View style={[styles.badgeDot, { backgroundColor: dot }]} /> : null}
+      {icon ? <Icon name={icon} size={12} color={fg} /> : null}
+      <Text style={[styles.badgeText, { color: fg }, textStyle]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Selectable group chip used by the composer and the add-student form. */
+export function SelectChip({
+  label,
+  dot,
+  count,
+  selected,
+  onPress,
+  height = 40,
+}: {
+  label: string;
+  dot?: string;
+  count?: number;
+  selected: boolean;
+  onPress: () => void;
+  height?: number;
+}) {
+  return (
+    <Press
+      haptic
+      onPress={onPress}
+      style={[
+        styles.selectChip,
+        {
+          height,
+          borderRadius: height >= 42 ? radius.field : radius.control,
+          backgroundColor: selected ? color.primaryTint : color.surface,
+          borderColor: selected ? color.primary : color.border,
+        },
+      ]}>
+      {dot ? <View style={[styles.chipDot, { backgroundColor: dot }]} /> : null}
+      <Text
+        style={{
+          fontFamily: body[600],
+          fontSize: 13.5,
+          color: selected ? color.primaryInk : color.inkSoft,
+        }}>
+        {label}
+      </Text>
+      {count != null ? (
+        <Text
+          style={{
+            fontFamily: body[600],
+            fontSize: 12,
+            opacity: 0.65,
+            color: selected ? color.primaryInk : color.inkSoft,
+            ...text.tabular,
+          }}>
+          {count}
+        </Text>
+      ) : null}
+    </Press>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Stats                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** One cell of the three-up stat strip on group and student screens. */
+export function StatTile({
+  value,
+  label,
+  tone,
+  fontSize = 22,
+}: {
+  value: string;
+  label: string;
+  tone?: string;
+  fontSize?: number;
+}) {
+  return (
+    <Card style={styles.statTile}>
+      <Text style={[text.stat, { fontSize, color: tone ?? color.ink }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inputs                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** Labelled input row inside a grouped card (add-student form). */
+export function FieldRow({
+  label,
+  labelWidth = 74,
+  ...input
+}: TextInputProps & { label: string; labelWidth?: number }) {
+  return (
+    <View style={styles.fieldRow}>
+      <Text style={[styles.fieldLabel, { width: labelWidth }]}>{label}</Text>
+      <TextInput
+        placeholderTextColor={color.faint}
+        style={styles.fieldInput}
+        {...input}
+      />
+    </View>
+  );
+}
+
+/** iOS-style switch drawn to the design's exact geometry. */
+export function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <Press
+      haptic
+      onPress={() => onChange(!value)}
+      style={[
+        styles.toggle,
+        {
+          backgroundColor: value ? color.primary : color.dashed,
+          justifyContent: value ? 'flex-end' : 'flex-start',
+        },
+      ]}>
+      <View style={styles.toggleKnob} />
+    </Press>
+  );
+}
+
+/** Sliding segmented control (Students / Parents / Both). */
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  return (
+    <View style={styles.segmentTrack}>
+      {options.map((o) => {
+        const on = o.key === value;
+        return (
+          <Press
+            key={o.key}
+            haptic
+            onPress={() => onChange(o.key)}
+            style={[
+              styles.segment,
+              on && { backgroundColor: color.surface, ...shadow.segment },
+            ]}>
+            <Text
+              style={{
+                fontFamily: on ? body[700] : body[600],
+                fontSize: 13.5,
+                color: on ? color.ink : color.muted,
+              }}>
+              {o.label}
+            </Text>
+          </Press>
+        );
+      })}
+    </View>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Misc                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/** The three-bar ClassCare mark. Scales from the 38px header to the 46px hero. */
+export function Logo({ size = 46, tint = color.primary }: { size?: number; tint?: string }) {
+  const u = size / 46;
+  return (
+    <View
+      style={[
+        styles.center,
+        { width: size, height: size, borderRadius: 14 * u, backgroundColor: tint, gap: 3 * u },
+      ]}>
+      {[
+        [20, 1],
+        [14, 0.75],
+        [17, 0.5],
+      ].map(([w, o], i) => (
+        <View
+          key={i}
+          style={{
+            width: w * u,
+            height: 3 * u,
+            borderRadius: 2 * u,
+            backgroundColor: '#fff',
+            opacity: o,
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** Centered "nothing here" state used by search and empty calendar days. */
+export function EmptyState({ title, hint }: { title: string; hint: string }) {
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyHint}>{hint}</Text>
+    </View>
+  );
+}
+
+/** Small helper for the repeated `<Overline>` + content block rhythm. */
+export function Section({
+  label,
+  action,
+  children,
+  style,
+}: {
+  label: string;
+  action?: ReactNode;
+  children: ReactNode;
+  style?: ViewStyle;
+}) {
+  return (
+    <View style={style}>
+      <View style={styles.sectionHead}>
+        <Overline>{label}</Overline>
+        {action}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  txt: { fontFamily: body[400], color: color.ink },
+  center: { alignItems: 'center', justifyContent: 'center' },
+
+  card: {
+    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: color.border,
+    borderRadius: radius.card,
+  },
+  divider: { height: 1, backgroundColor: color.divider },
+
+  button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.button,
+    paddingHorizontal: 20,
+  },
+
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  badgeDot: { width: 7, height: 7, borderRadius: 2 },
+  badgeText: { fontFamily: body[700], fontSize: 11.5 },
+
+  selectChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 13,
+    borderWidth: 1.5,
+  },
+  chipDot: { width: 8, height: 8, borderRadius: 3 },
+
+  statTile: { flex: 1, borderRadius: radius.tile - 1, paddingHorizontal: 12, paddingVertical: 13 },
+  statLabel: { fontFamily: body[600], fontSize: 11, color: color.mutedLight, marginTop: 3 },
+
+  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, paddingVertical: 12 },
+  fieldLabel: { fontFamily: body[700], fontSize: 12.5, color: color.muted },
+  fieldInput: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: body[600],
+    fontSize: 15,
+    color: color.ink,
+    padding: 0,
+  },
+
+  toggle: { width: 50, height: 30, borderRadius: 15, padding: 3, flexDirection: 'row' },
+  toggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    boxShadow: '0 1px 4px rgba(12,23,41,0.2)',
+  },
+
+  segmentTrack: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 4,
+    backgroundColor: color.canvas,
+    borderRadius: radius.button,
+  },
+  segment: {
+    flex: 1,
+    height: 42,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  empty: { alignItems: 'center', gap: 5, paddingVertical: 40, paddingHorizontal: 20 },
+  emptyTitle: { fontFamily: body[700], fontSize: 15, color: color.inkSoft },
+  emptyHint: { fontFamily: body[400], fontSize: 13, color: color.mutedLight },
+
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+});

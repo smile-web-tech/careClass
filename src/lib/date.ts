@@ -1,0 +1,115 @@
+/** Local-time date helpers. Everything the app shows is in the teacher's own timezone. */
+
+const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** `YYYY-MM-DD` in *local* time — `toISOString` would shift across UTC. */
+export function toKey(d: Date) {
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+export function fromKey(key: string) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function addDays(d: Date, n: number) {
+  const out = new Date(d);
+  out.setDate(out.getDate() + n);
+  return out;
+}
+
+export function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Monday-first week containing `d`. */
+export function startOfWeek(d: Date) {
+  const s = startOfDay(d);
+  const shift = (s.getDay() + 6) % 7;
+  return addDays(s, -shift);
+}
+
+export function weekDays(anchor: Date) {
+  const start = startOfWeek(anchor);
+  return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+}
+
+export const dowShort = (d: Date) => DOW_SHORT[d.getDay()];
+export const dowLong = (d: Date) => DOW_LONG[d.getDay()];
+export const monthLong = (d: Date) => MONTH_LONG[d.getMonth()];
+export const monthShort = (d: Date) => MONTH_SHORT[d.getMonth()];
+
+export const isSameDay = (a: Date, b: Date) => toKey(a) === toKey(b);
+
+/** "Friday 31 July" — the home screen eyebrow. */
+export const longDate = (d: Date) => `${dowLong(d)} ${d.getDate()} ${monthLong(d)}`;
+
+/** "Fri 31 Jul" — compact form used in nav bars and session lists. */
+export const shortDate = (d: Date) => `${dowShort(d)} ${d.getDate()} ${monthShort(d)}`;
+
+/** Minutes since local midnight for an `HH:mm` string. */
+export function minutesOf(hhmm: string) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** Combine a `YYYY-MM-DD` key and an `HH:mm` time into a local Date. */
+export function at(dateKey: string, hhmm: string) {
+  const d = fromKey(dateKey);
+  const [h, m] = hhmm.split(':').map(Number);
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+/**
+ * "in 2h 12m" / "in 45m" / "now" — the countdown on the home hero card.
+ * Past a day the minute count stops being useful, so it degrades to the day.
+ */
+export function countdownTo(target: Date, now = new Date()) {
+  const mins = Math.round((target.getTime() - now.getTime()) / 60000);
+  if (mins <= 0) return 'now';
+
+  const days = Math.round(
+    (startOfDay(target).getTime() - startOfDay(now).getTime()) / 86400000,
+  );
+  if (days === 1) return 'tomorrow';
+  if (days > 1) return dowLong(target);
+
+  const h = Math.floor(mins / 60);
+  return `in ${h > 0 ? `${h}h ` : ''}${mins % 60}m`;
+}
+
+/** "Today 16:00" / "Tomorrow 10:30" / "Wed 18:00" — group list subtitle. */
+export function relativeSlot(when: Date, now = new Date()) {
+  const time = `${`${when.getHours()}`.padStart(2, '0')}:${`${when.getMinutes()}`.padStart(2, '0')}`;
+  const days = Math.round(
+    (startOfDay(when).getTime() - startOfDay(now).getTime()) / 86400000,
+  );
+  if (days === 0) return { label: `Today ${time}`, imminent: true };
+  if (days === 1) return { label: `Tomorrow ${time}`, imminent: false };
+  return { label: `${dowShort(when)} ${time}`, imminent: false };
+}
+
+/** "18 min ago" / "2h ago" / "Yesterday" / "Wed" — message + reply timestamps. */
+export function timeAgo(ts: number, now = Date.now()) {
+  const mins = Math.floor((now - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 12) return `${hours}h ago`;
+  const days = Math.round(
+    (startOfDay(new Date(now)).getTime() - startOfDay(new Date(ts)).getTime()) / 86400000,
+  );
+  if (days <= 0) return `${hours}h ago`;
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return dowShort(new Date(ts));
+  return shortDate(new Date(ts));
+}

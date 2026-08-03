@@ -1,0 +1,349 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Icon } from '@/components/Icon';
+import { Screen } from '@/components/layout';
+import {
+  Button,
+  Card,
+  Divider,
+  IconButton,
+  Overline,
+  Press,
+  StatTile,
+  Txt,
+} from '@/components/ui';
+import {
+  attendanceRate,
+  recentSessionsFor,
+  useGroups,
+  useStudent,
+} from '@/data/store';
+import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
+import { shortDate } from '@/lib/date';
+import { accents, color, radius, space, status } from '@/theme/tokens';
+import { body, display, text } from '@/theme/type';
+
+export default function StudentProfile() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const student = useStudent(id);
+  const groups = useGroups();
+
+  const stats = useMemo(() => {
+    if (!student) return null;
+    return attendanceRate([student.id], student.groupIds);
+  }, [student]);
+
+  const recent = useMemo(() => (student ? recentSessionsFor(student, 3) : []), [student]);
+
+  if (!student) {
+    return (
+      <Screen>
+        <View style={styles.missing}>
+          <Txt>That student is no longer on your roster.</Txt>
+          <Button label="Go back" variant="ghost" onPress={() => router.back()} />
+        </View>
+      </Screen>
+    );
+  }
+
+  const a = accents[student.accent];
+  const memberOf = groups.filter((g) => student.groupIds.includes(g.id));
+
+  return (
+    <Screen>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        showsVerticalScrollIndicator={false}>
+        <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+          <View style={styles.headerBar}>
+            <IconButton name="chevronLeft" onPress={() => router.back()} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <IconButton name="pencil" iconSize={17} fg={color.inkSoft} />
+              <IconButton name="more" iconSize={17} fg={color.inkSoft} />
+            </View>
+          </View>
+
+          <View style={styles.identity}>
+            <View style={[styles.bigAvatar, { backgroundColor: a.tint }]}>
+              <Text style={[styles.bigInitials, { color: a.ink }]}>
+                {student.name
+                  .split(' ')
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join('')
+                  .toUpperCase()}
+              </Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.name}>{student.name}</Text>
+              <View style={styles.tagRow}>
+                {memberOf.map((g) => {
+                  const ga = accents[g.accent];
+                  return (
+                    <Press
+                      key={g.id}
+                      onPress={() => router.push(`/group/${g.id}`)}
+                      style={[styles.tag, { backgroundColor: ga.tint }]}>
+                      <Text style={[styles.tagLabel, { color: ga.inkDeep }]}>{g.name}</Text>
+                    </Press>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.actionRow}>
+            <Button
+              grow
+              variant="success"
+              icon="phone"
+              label="Call"
+              onPress={() => callNumber(student.phone)}
+            />
+            <Button
+              grow
+              icon="chat"
+              label="Message"
+              onPress={() => smsNumber(student.phone)}
+            />
+            <Press
+              onPress={() => student.email && emailAddress(student.email)}
+              disabled={!student.email}
+              style={styles.mailButton}>
+              <Icon name="mail" size={17} color={color.inkSoft} />
+            </Press>
+          </View>
+        </View>
+
+        <View style={styles.statRow}>
+          <StatTile
+            value={stats?.rate != null ? `${stats.rate}%` : '—'}
+            label="Attendance"
+            tone={stats?.rate != null ? color.success : color.mutedLight}
+            fontSize={21}
+          />
+          <StatTile
+            value={student.avgScore != null ? student.avgScore.toFixed(1) : '—'}
+            label="Avg. score"
+            fontSize={21}
+          />
+          <StatTile value={String(stats?.sessions ?? 0)} label="Sessions" fontSize={21} />
+        </View>
+
+        <View style={styles.block}>
+          <Overline style={{ marginBottom: 10 }}>Contact</Overline>
+          <Card style={{ overflow: 'hidden' }}>
+            <ContactRow
+              icon="phone"
+              tint="#EAF6F1"
+              fg={color.success}
+              label="Student"
+              value={student.phone}
+              tabular
+              onPress={() => callNumber(student.phone)}
+            />
+            {student.email ? (
+              <>
+                <Divider inset={64} />
+                <ContactRow
+                  icon="mail"
+                  tint={color.bg}
+                  fg={color.inkSoft}
+                  label="Email"
+                  value={student.email}
+                  onPress={() => emailAddress(student.email!)}
+                />
+              </>
+            ) : null}
+            {student.parentPhone ? (
+              <>
+                <Divider inset={64} />
+                <ContactRow
+                  icon="person"
+                  tint={accents.violet.tint}
+                  fg={accents.violet.ink}
+                  label={`Parent${student.parentName ? ` · ${student.parentName}` : ''}`}
+                  value={student.parentPhone}
+                  tabular
+                  onPress={() => callNumber(student.parentPhone!)}
+                />
+              </>
+            ) : null}
+          </Card>
+        </View>
+
+        <View style={styles.block}>
+          <View style={styles.blockHead}>
+            <Overline>Recent sessions</Overline>
+            <Press onPress={() => router.push('/(tabs)/calendar')}>
+              <Text style={styles.seeAll}>See all</Text>
+            </Press>
+          </View>
+          <Card style={styles.sessionCard}>
+            {recent.length === 0 ? (
+              <Txt style={styles.noSessions}>No sessions yet.</Txt>
+            ) : (
+              recent.map((r, i) => {
+                const s = status[r.mark];
+                return (
+                  <View key={r.key}>
+                    {i > 0 ? <Divider /> : null}
+                    <View style={styles.sessionRow}>
+                      <View style={[styles.sessionDot, { backgroundColor: s.dot }]} />
+                      <Text style={styles.sessionLabel}>
+                        {shortDate(r.date)} · {r.group.name}
+                      </Text>
+                      <Text style={[styles.sessionStatus, { color: s.ink }]}>{s.label}</Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </Card>
+        </View>
+
+        {student.note ? (
+          <View style={styles.block}>
+            <Overline style={{ marginBottom: 10 }}>Note</Overline>
+            <Card style={styles.noteCard}>
+              <Text style={styles.noteText}>{student.note}</Text>
+            </Card>
+          </View>
+        ) : null}
+      </ScrollView>
+    </Screen>
+  );
+}
+
+function ContactRow({
+  icon,
+  tint,
+  fg,
+  label,
+  value,
+  tabular,
+  onPress,
+}: {
+  icon: 'phone' | 'mail' | 'person';
+  tint: string;
+  fg: string;
+  label: string;
+  value: string;
+  tabular?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Press onPress={onPress} style={styles.contactRow}>
+      <View style={[styles.contactIcon, { backgroundColor: tint }]}>
+        <Icon name={icon} size={16} color={fg} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.contactLabel}>{label}</Text>
+        <Text
+          style={[styles.contactValue, tabular ? text.tabular : null]}
+          numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+      <Icon name="disclosure" size={16} color={color.chevron} />
+    </Press>
+  );
+}
+
+const styles = StyleSheet.create({
+  missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+
+  header: {
+    backgroundColor: color.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border,
+    paddingHorizontal: space.gutter,
+    paddingBottom: 20,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 20 },
+  bigAvatar: {
+    width: 76,
+    height: 76,
+    borderRadius: radius.sheet,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bigInitials: { fontFamily: display[600], fontSize: 27 },
+  name: { ...text.pageTitle, lineHeight: 27.6 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
+  tag: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: radius.sm + 1 },
+  tagLabel: { fontFamily: body[600], fontSize: 11.5 },
+
+  actionRow: { flexDirection: 'row', gap: 9, marginTop: 18 },
+  mailButton: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.button,
+    backgroundColor: color.bg,
+    borderWidth: 1,
+    borderColor: color.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  statRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: space.gutter,
+    paddingTop: 16,
+  },
+
+  block: { paddingHorizontal: space.gutter, paddingTop: 20 },
+  blockHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  seeAll: { fontFamily: body[700], fontSize: 12.5, color: color.primary },
+
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+  },
+  contactIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactLabel: {
+    fontFamily: body[700],
+    fontSize: 10.5,
+    letterSpacing: 0.84,
+    textTransform: 'uppercase',
+    color: color.mutedLight,
+  },
+  contactValue: { fontFamily: body[600], fontSize: 14.5, color: color.ink, marginTop: 2 },
+
+  sessionCard: { paddingHorizontal: 15, paddingVertical: 6 },
+  sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
+  sessionDot: { width: 9, height: 9, borderRadius: 4.5 },
+  sessionLabel: { flex: 1, fontFamily: body[600], fontSize: 14, color: color.ink },
+  sessionStatus: { fontFamily: body[700], fontSize: 13 },
+  noSessions: { fontSize: 13.5, color: color.mutedLight, paddingVertical: 10 },
+
+  noteCard: { paddingHorizontal: 15, paddingVertical: 14 },
+  noteText: { fontFamily: body[400], fontSize: 14, lineHeight: 21.7, color: color.inkSoft },
+});

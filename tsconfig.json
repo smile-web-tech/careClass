@@ -16,5 +16,12 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    // Edge Functions run on Deno with their own types and are checked by
+    // `deno check` / `supabase functions deploy`, not by the app's tsconfig.
+    "supabase/functions"
   ]
 }

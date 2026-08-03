@@ -1,56 +1,163 @@
-# Welcome to your Expo app 👋
+# ClassCare
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Teacher-side class management for independent tutors. One teacher, their own
+students, their own data — not a school LMS.
 
-## Get started
+Groups · students · attendance in under 30 seconds · bulk SMS/email/push with
+per-recipient placeholders · announcements · a week calendar · one search field
+that matches groups, subjects and student names.
 
-1. Install dependencies
+Built with **Expo SDK 57** (React Native 0.86, React 19.2) + **expo-router**,
+targeting iOS, Android and web from one codebase.
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Running it
 
 ```bash
-npm run reset-project
+npm install
+npm start          # then press i / a, or scan the QR code
+npm run web        # browser
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The app runs with no backend at all — `src/data/seed.ts` provides a full demo
+roster, and the schedule is derived live from each group's weekly slots, so the
+calendar is correct whatever day you open it.
 
-### Other setup steps
+## Connecting Supabase
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```bash
+cp .env.example .env      # fill in URL + publishable key
+```
 
-## Learn more
+Once `EXPO_PUBLIC_SUPABASE_URL` points at a real project the app switches from
+seed data to the backend automatically (`hasSupabase` in `src/lib/supabase.ts`).
 
-To learn more about developing your project with Expo, look at the following resources:
+**1. Apply the schema**
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npx supabase link --project-ref <ref>
+npx supabase db push
+```
 
-## Join the community
+`supabase/migrations/0001_init.sql` creates every table plus row level security.
+The policy is the same on all of them — `teacher_id = auth.uid()` — so a teacher
+can only ever read or write their own rows.
 
-Join our community of developers creating universal apps.
+**2. Enable auth providers**
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Dashboard → Authentication → Providers → Google and Apple. Add the redirect URL
+`classcare://auth/callback` for native, plus your web origin.
+
+**3. Deploy the message fan-out**
+
+```bash
+npx supabase functions deploy send-message
+npx supabase secrets set \
+  SUPABASE_SECRET_KEY=sb_secret_... \
+  ESKIZ_EMAIL=... ESKIZ_PASSWORD=... ESKIZ_SENDER=... \
+  RESEND_API_KEY=re_... RESEND_FROM="ClassCare <no-reply@yourdomain>"
+```
+
+The secret key bypasses row level security. It belongs in function secrets and
+nowhere else — never in `.env`, never under `src/`.
+
+## Why bulk sending is server-side
+
+Neither iOS nor Android lets an app dispatch an SMS without the user tapping
+send in the native composer. "Message all 11 students, each with their own name
+filled in" is therefore impossible on-device — it would open the composer eleven
+times.
+
+So the app posts the draft to `supabase/functions/send-message`, which renders
+`{name}` / `{group}` / `{time}` per recipient and calls the gateways:
+
+- **SMS** — [Eskiz.uz](https://eskiz.uz), a local Uzbek gateway. The roster is
+  `+998`, and Uzbek traffic through Eskiz costs a fraction of Twilio's rate for
+  the same route. Swap the two functions in `index.ts` for another market.
+- **Email** — Resend.
+- **Push** — Expo push. Currently a no-op: push needs a device token, and a
+  student-facing app is explicitly out of scope.
+
+Every recipient gets a `message_deliveries` row before anything is dispatched,
+so a gateway outage leaves an accurate record instead of silence. One bad number
+fails its own row and nothing else.
+
+Tap-to-call and tap-to-message from a student's profile are a different thing —
+those are `tel:` / `sms:` handoffs to the OS (`src/lib/contact.ts`) and stay
+on-device.
+
+## Layout
+
+```
+src/
+  app/                    expo-router routes
+    sign-in.tsx           1 · Sign in
+    (tabs)/index.tsx      2 · Home
+    group/[id].tsx        3 · Group detail
+    attendance.tsx        4 · Attendance
+    compose.tsx           5 · Bulk message
+    student/[id].tsx      6 · Student profile
+    student/new.tsx       7 · Add student
+    (tabs)/calendar.tsx   8 · Calendar
+    (tabs)/messages.tsx   9 · Messages
+    (tabs)/students.tsx   address book
+    group/new.tsx         create a group
+  components/
+    Icon.tsx              the icon set, path data lifted from the design
+    ui.tsx                buttons, cards, chips, avatars, inputs
+    layout.tsx            Screen / TopBar / StickyFooter / tab insets
+    decor.tsx             gradients, glows, rings
+  theme/
+    tokens.ts             colours, radii, spacing, shadows, status palette
+    type.ts               named text styles
+  data/
+    types.ts              domain model
+    seed.ts               demo roster
+    store.ts              zustand store — what the UI reads
+    api.ts                Supabase repository
+    sync.ts               write-through bridge between the two
+  lib/
+    date.ts schedule.ts contact.ts auth.ts supabase.ts
+supabase/
+  migrations/0001_init.sql
+  functions/send-message/
+```
+
+### Design system
+
+Every value in `src/theme/tokens.ts` is lifted verbatim from the Claude Design
+source. Screens reference tokens, never raw hex.
+
+Space Grotesk carries headings and numerals, Plus Jakarta Sans the body. React
+Native cannot synthesise weights for custom fonts, so `src/theme/type.ts` maps a
+weight to the right family name — use `body[700]`, not `fontWeight: '700'`.
+
+### Sessions are derived, not stored
+
+A group owns weekly `slots`; `src/lib/schedule.ts` turns those into concrete
+sessions for any date. Only attendance the teacher actually marked is persisted.
+Sessions from before install are filled by `historicMark()` in `store.ts`, a
+deterministic hash of (student, session) — so attendance percentages and
+recent-session lists come from real records and stay put across reloads instead
+of reshuffling on every render.
+
+### Writes are local-first
+
+Screens never await the network. `store.ts` applies a change immediately and
+hands it to an optional mirror; `sync.ts` registers that mirror and queues the
+Supabase write in the background. Taking attendance works on classroom wifi that
+drops.
+
+## Known gaps
+
+- **Import from contacts** fills the form from one contact via the native
+  picker. The design's "add several at once" needs a custom multi-select list —
+  not built, and the row copy says what it actually does.
+- **Group schedule chips** show the group's real days (`Mon · Wed · Fri`), which
+  is why they can differ from the static mockup.
+- Edit buttons on the group and student headers are placed but inert.
+- Delivery receipts need gateway webhooks pointed at a `message_deliveries`
+  updater; the Edge Function only writes `sent` / `failed`.
+- The remote write queue logs failures rather than retrying them; an offline
+  banner and retry are the next step.
