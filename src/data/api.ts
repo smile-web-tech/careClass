@@ -2,6 +2,7 @@ import type {
   AttendanceRecord,
   AttendanceStatus,
   Audience,
+  CalendarEvent,
   Channel,
   Group,
   Message,
@@ -11,6 +12,7 @@ import type {
 } from '@/data/types';
 import type {
   AttendanceRow,
+  CalendarEventRow,
   GroupRow,
   GroupSlotRow,
   MessageRow,
@@ -18,6 +20,8 @@ import type {
   StudentRow,
   TeacherRow,
 } from '@/lib/database.types';
+import { AppState } from 'react-native';
+
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -302,6 +306,139 @@ export async function createGroup(group: Omit<Group, 'id'>): Promise<Group> {
   return { ...group, id: row.id };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Calendar events                                                            */
+/* -------------------------------------------------------------------------- */
+
+const toEvent = (r: CalendarEventRow): CalendarEvent => ({
+  id: r.id,
+  title: r.title,
+  note: r.note ?? undefined,
+  date: r.event_date,
+  allDay: r.all_day,
+  start: r.starts_at ?? undefined,
+  end: r.ends_at ?? undefined,
+  accent: r.accent,
+});
+
+export async function fetchEvents(): Promise<CalendarEvent[]> {
+  const rows = unwrap(
+    await supabase.from('calendar_events').select('*').order('event_date'),
+  ) as CalendarEventRow[];
+  return rows.map(toEvent);
+}
+
+export async function createEvent(event: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent> {
+  const teacherId = await requireUser();
+  const row = unwrap(
+    await supabase
+      .from('calendar_events')
+      .insert({
+        teacher_id: teacherId,
+        title: event.title,
+        note: event.note ?? null,
+        event_date: event.date,
+        all_day: event.allDay,
+        // The table's `times_present` constraint requires both or neither.
+        starts_at: event.allDay ? null : (event.start ?? null),
+        ends_at: event.allDay ? null : (event.end ?? null),
+        accent: event.accent,
+      })
+      .select()
+      .single(),
+  ) as CalendarEventRow;
+  return toEvent(row);
+}
+
+export async function updateEvent(id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) {
+  const teacherId = await requireUser();
+  const fields: Partial<CalendarEventRow> = {};
+  if (patch.title !== undefined) fields.title = patch.title;
+  if (patch.note !== undefined) fields.note = patch.note ?? null;
+  if (patch.date !== undefined) fields.event_date = patch.date;
+  if (patch.accent !== undefined) fields.accent = patch.accent;
+  if (patch.allDay !== undefined) {
+    fields.all_day = patch.allDay;
+    // Clearing the times alongside the flag keeps `times_present` satisfied
+    // even when the caller only flips all-day on.
+    if (patch.allDay) {
+      fields.starts_at = null;
+      fields.ends_at = null;
+    }
+  }
+  if (patch.start !== undefined && !patch.allDay) fields.starts_at = patch.start ?? null;
+  if (patch.end !== undefined && !patch.allDay) fields.ends_at = patch.end ?? null;
+
+  if (!Object.keys(fields).length) return;
+  unwrap(
+    await supabase.from('calendar_events').update(fields).eq('id', id).eq('teacher_id', teacherId),
+  );
+}
+
+export async function deleteEvent(id: string) {
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('calendar_events').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+/**
+ * Edit a group in place.
+ *
+ * Slots are replaced wholesale rather than diffed. A group has at most a
+ * handful, and the alternative — matching old rows to new by weekday — silently
+ * does the wrong thing the moment a teacher moves a class from Tuesday to
+ * Thursday. Delete-then-insert is unambiguous.
+ *
+ * Attendance is keyed by `groupId@date#start`, so moving a slot's start time
+ * orphans that slot's history. That is the honest outcome: those records belong
+ * to sessions that, as far as the schedule is now concerned, never happened.
+ */
+export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>) {
+  const teacherId = await requireUser();
+
+  const fields: Partial<GroupRow> = {};
+  if (patch.name !== undefined) fields.name = patch.name;
+  if (patch.subject !== undefined) fields.subject = patch.subject;
+  if (patch.room !== undefined) fields.room = patch.room;
+  if (patch.accent !== undefined) fields.accent = patch.accent;
+
+  if (Object.keys(fields).length) {
+    // The teacher_id filter is belt-and-braces: RLS already blocks other rows,
+    // but this makes the intent explicit and fails loudly rather than silently
+    // updating nothing.
+    unwrap(await supabase.from('groups').update(fields).eq('id', id).eq('teacher_id', teacherId));
+  }
+
+  if (patch.slots) {
+    unwrap(await supabase.from('group_slots').delete().eq('group_id', id));
+    if (patch.slots.length) {
+      unwrap(
+        await supabase.from('group_slots').insert(
+          patch.slots.map((s) => ({
+            group_id: id,
+            teacher_id: teacherId,
+            weekday: s.day,
+            starts_at: s.start,
+            ends_at: s.end,
+          })),
+        ),
+      );
+    }
+  }
+}
+
+/**
+ * Delete a group and everything hanging off it.
+ *
+ * `group_slots`, `student_groups`, `attendance` and `message_groups` all
+ * declare `on delete cascade`, so this one statement removes the schedule, the
+ * roster links and the attendance history. Students themselves survive — they
+ * are people, not group members, and may well be in another class.
+ */
+export async function deleteGroup(id: string) {
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('groups').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
 export async function createStudent(student: Omit<Student, 'id'>): Promise<Student> {
   const teacherId = await requireUser();
 
@@ -465,18 +602,88 @@ export async function markRepliesRead() {
  * Replies and delivery receipts arrive from webhooks, not from anything the
  * teacher did — so the only way the badge is ever right is to subscribe.
  */
+/**
+ * Watch for inbound replies and delivery-state changes.
+ *
+ * Uses Realtime where it is available, and falls back to polling where it is
+ * not. That fallback exists because the app reaches Supabase through a PHP
+ * reverse proxy on shared hosting (see `docs/reverse-proxy.md`) — PHP cannot
+ * hold a WebSocket open, so `/realtime/v1` is not carried.
+ *
+ * Polling costs one small query per interval, and only while the app is in the
+ * foreground: a background timer would drain battery to learn about a reply the
+ * teacher cannot see anyway.
+ */
 export function subscribeToInbox(onChange: () => void) {
-  const channel = supabase
-    .channel('inbox')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'replies' }, onChange)
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'message_deliveries' },
-      onChange,
-    )
-    .subscribe();
+  if (realtimeAvailable()) {
+    const channel = supabase
+      .channel('inbox')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'replies' }, onChange)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'message_deliveries' },
+        onChange,
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }
+
+  let timer: ReturnType<typeof setInterval> | null = null;
+  // Only refire `onChange` when something actually changed, so a poll that
+  // finds nothing new does not re-render the inbox every 30 seconds.
+  let lastSeen: string | null = null;
+
+  const check = async () => {
+    try {
+      const { data } = await supabase
+        .from('replies')
+        .select('id, received_at')
+        .order('received_at', { ascending: false })
+        .limit(1);
+      const newest = data?.[0]?.received_at ?? null;
+      if (newest !== lastSeen) {
+        // Skip the very first read: it establishes the baseline rather than
+        // signalling an arrival.
+        if (lastSeen !== null) onChange();
+        lastSeen = newest;
+      }
+    } catch {
+      // Offline or proxy hiccup. The next tick tries again.
+    }
+  };
+
+  const start = () => {
+    if (timer) return;
+    void check();
+    timer = setInterval(check, POLL_MS);
+  };
+  const stop = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+
+  const sub = AppState.addEventListener('change', (s) =>
+    s === 'active' ? start() : stop(),
+  );
+  if (AppState.currentState === 'active') start();
 
   return () => {
-    supabase.removeChannel(channel);
+    stop();
+    sub.remove();
   };
+}
+
+/** How often to check for replies when Realtime is unavailable. */
+const POLL_MS = 30_000;
+
+/**
+ * Realtime needs a WebSocket. The PHP proxy cannot carry one, so it is disabled
+ * whenever the configured URL is not a `*.supabase.co` host.
+ */
+function realtimeAvailable() {
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
+  return /\.supabase\.(co|in)$/.test(new URL(url).hostname);
 }

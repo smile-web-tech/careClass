@@ -7,8 +7,9 @@
 // this function renders it per recipient and calls the gateways.
 //
 // Deploy:  supabase functions deploy send-message
-// Secrets: supabase secrets set SUPABASE_SECRET_KEY=... ESKIZ_EMAIL=... \
-//            ESKIZ_PASSWORD=... ESKIZ_SENDER=... RESEND_API_KEY=... RESEND_FROM=...
+// Secrets: supabase secrets set RESEND_API_KEY=... RESEND_FROM=... \
+//            RESEND_REPLY_TO=... ESKIZ_EMAIL=... ESKIZ_PASSWORD=... ESKIZ_SENDER=...
+//          (SUPABASE_URL / _ANON_KEY / _SERVICE_ROLE_KEY are injected automatically)
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
@@ -75,10 +76,66 @@ function nextSlotTime(slots: { weekday: number; starts_at: string }[], now: Date
 /* -------------------------------------------------------------------------- */
 
 /**
- * Eskiz.uz — a local Uzbek gateway. Uzbek traffic through it costs a small
- * fraction of what Twilio charges for the same route, which matters when a
- * tutor sends 30 reminders a day.
+ * SMS gateways.
+ *
+ * Which one is live is chosen by `SMS_PROVIDER`, because the right answer
+ * depends on the country the teacher is in and that is not knowable here:
+ *
+ *  - `twilio`  — global. Covers Turkmenistan (+993, Altyn Asyr / TM CELL,
+ *                >90% of the market). Most expensive per message.
+ *  - `telnyx`  — global, usually cheaper than Twilio on the same routes.
+ *  - `eskiz`   — Uzbekistan only. Far cheaper for +998 traffic, useless for
+ *                anything else.
+ *
+ * Alphanumeric sender IDs do NOT survive to Turkmenistan: carriers there
+ * overwrite them with a long code or a generic ID, so recipients see a number
+ * rather than "ClassCare". Nothing to configure — just do not promise the
+ * teacher a branded sender.
  */
+type SmsProvider = 'twilio' | 'telnyx' | 'eskiz';
+const smsProvider = () => (Deno.env.get('SMS_PROVIDER') ?? 'twilio') as SmsProvider;
+
+/** E.164 for the gateways: digits with a leading `+`. */
+const toE164 = (p: string) => {
+  const digits = p.replace(/[^\d]/g, '');
+  return digits.startsWith('+') ? digits : `+${digits}`;
+};
+
+async function sendViaTwilio(phone: string, text: string) {
+  const sid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const token = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const from = Deno.env.get('TWILIO_FROM');
+  if (!sid || !token || !from) throw new Error('Twilio is not configured');
+
+  const form = new URLSearchParams({ To: toE164(phone), From: from, Body: text });
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      authorization: `Basic ${btoa(`${sid}:${token}`)}`,
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.message ?? `Twilio failed: ${res.status}`);
+  return String(body?.sid ?? '');
+}
+
+async function sendViaTelnyx(phone: string, text: string) {
+  const key = Deno.env.get('TELNYX_API_KEY');
+  const from = Deno.env.get('TELNYX_FROM');
+  if (!key || !from) throw new Error('Telnyx is not configured');
+
+  const res = await fetch('https://api.telnyx.com/v2/messages', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ from, to: toE164(phone), text }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.errors?.[0]?.detail ?? `Telnyx failed: ${res.status}`);
+  return String(body?.data?.id ?? '');
+}
+
 let eskizToken: { value: string; expires: number } | null = null;
 
 async function eskizAuth() {
@@ -101,7 +158,7 @@ async function eskizAuth() {
   return token;
 }
 
-async function sendSms(phone: string, text: string) {
+async function sendViaEskiz(phone: string, text: string) {
   const token = await eskizAuth();
   const form = new FormData();
   form.append('mobile_phone', normalizePhone(phone));
@@ -118,7 +175,100 @@ async function sendSms(phone: string, text: string) {
   return String(body?.id ?? '');
 }
 
-async function sendEmail(to: string, subject: string, text: string) {
+/** Route one message through whichever gateway is configured. */
+function sendSms(phone: string, text: string) {
+  switch (smsProvider()) {
+    case 'telnyx':
+      return sendViaTelnyx(phone, text);
+    case 'eskiz':
+      // Uzbekistan only. A +993 number handed to Eskiz will simply be rejected.
+      return sendViaEskiz(phone, text);
+    case 'twilio':
+    default:
+      return sendViaTwilio(phone, text);
+  }
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
+
+/**
+ * Render one notification as plain text and HTML.
+ *
+ * Written to reach the inbox rather than the promotions tab or spam. The rules
+ * that actually move the needle, in rough order of weight:
+ *
+ *  - Authenticated domain (SPF + DKIM + DMARC on the sending domain).
+ *  - A real `From` name and a working `Reply-To`. A parent replying to a school
+ *    notification and hitting a black hole is both bad manners and a spam
+ *    signal, because "never replied to" correlates with unwanted mail.
+ *  - Both text/plain and text/html parts. HTML-only is a classic spam shape.
+ *  - `List-Unsubscribe`, which Gmail and Yahoo have required of bulk senders
+ *    since February 2024.
+ *  - A specific subject naming the class. No ALL CAPS, no "!!!", no "FREE",
+ *    no emoji in the subject line.
+ *  - Plain, letter-like HTML: no images, no tracking pixel, no link shorteners,
+ *    no giant CTA button. This looks like a person wrote it, because one did.
+ *  - Say who is writing and why this address is receiving it.
+ */
+function renderEmail(opts: {
+  body: string;
+  teacherName: string;
+  groupName: string;
+  isAnnouncement: boolean;
+  recipientKind: 'student' | 'parent';
+}) {
+  const { body, teacherName, groupName, isAnnouncement, recipientKind } = opts;
+
+  const subject = isAnnouncement
+    ? `Announcement from ${teacherName}`
+    : `${groupName} — note from ${teacherName}`;
+
+  const why =
+    recipientKind === 'parent'
+      ? `You are receiving this because you are listed as the parent or guardian contact for a student in ${groupName}.`
+      : `You are receiving this because you are enrolled in ${groupName}.`;
+
+  const signoff = `${teacherName}\n${isAnnouncement ? 'ClassCare' : groupName}`;
+
+  const text = [body.trim(), '', '—', signoff, '', why, 'To stop these, reply STOP.'].join('\n');
+
+  // Inline styles only, and a table-free single column: Gmail strips <style>
+  // blocks, and anything resembling a marketing layout invites the promotions
+  // tab. System font stack so nothing is fetched from a remote host.
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(subject)}</title></head>
+<body style="margin:0;padding:24px;background:#f4f7fb;">
+<div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e1e7f0;border-radius:14px;padding:28px 26px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0c1729;font-size:15px;line-height:1.6;">
+<p style="margin:0 0 18px;white-space:pre-wrap;">${escapeHtml(body.trim())}</p>
+<p style="margin:0 0 4px;color:#47566e;">—</p>
+<p style="margin:0;font-weight:600;">${escapeHtml(teacherName)}</p>
+<p style="margin:2px 0 0;color:#6b7a94;font-size:13.5px;">${escapeHtml(isAnnouncement ? 'ClassCare' : groupName)}</p>
+<hr style="border:none;border-top:1px solid #e1e7f0;margin:22px 0 14px;">
+<p style="margin:0;color:#8494ac;font-size:12px;line-height:1.5;">${escapeHtml(why)} Reply to this email to reach ${escapeHtml(teacherName)} directly, or reply STOP to be removed.</p>
+</div></body></html>`;
+
+  return { subject, text, html };
+}
+
+async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  replyTo?: string;
+}) {
+  const from = Deno.env.get('RESEND_FROM') ?? 'ClassCare <onboarding@resend.dev>';
+  // Prefer a real mailbox the teacher reads. Falling back to the From address
+  // is still better than no Reply-To at all.
+  const replyTo = opts.replyTo || Deno.env.get('RESEND_REPLY_TO') || undefined;
+  const unsubscribeMailbox =
+    Deno.env.get('RESEND_UNSUBSCRIBE') || replyTo || from.replace(/^.*<|>$/g, '');
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -126,10 +276,20 @@ async function sendEmail(to: string, subject: string, text: string) {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      from: Deno.env.get('RESEND_FROM') ?? 'ClassCare <onboarding@resend.dev>',
-      to,
-      subject,
-      text,
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      text: opts.text,
+      html: opts.html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+      headers: {
+        // Required of bulk senders by Gmail and Yahoo. `mailto:` alone is a
+        // valid List-Unsubscribe; one-click (RFC 8058) additionally needs an
+        // HTTPS endpoint, which is worth adding once volume justifies it.
+        'List-Unsubscribe': `<mailto:${unsubscribeMailbox}?subject=unsubscribe>`,
+        // Transactional class: tells filters this is not marketing.
+        'X-Entity-Ref-ID': crypto.randomUUID(),
+      },
     }),
   });
   const body = await res.json().catch(() => ({}));
@@ -169,7 +329,24 @@ Deno.serve(async (req) => {
 
   // Everything after this point is scoped manually to `teacherId`. The secret
   // key bypasses RLS, so every query below filters on it explicitly.
-  const db = createClient(url, Deno.env.get('SUPABASE_SECRET_KEY')!);
+  // `SUPABASE_SERVICE_ROLE_KEY` is injected into every Edge Function by the
+  // platform. The `SUPABASE_` prefix is reserved, so a custom
+  // `SUPABASE_SECRET_KEY` can never be set and would always read undefined —
+  // which `createClient` rejects with "supabaseKey is required".
+  const serviceKey =
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SECRET_KEY');
+  if (!serviceKey) return json({ error: 'Server missing its service role key' }, 500);
+  const db = createClient(url, serviceKey);
+
+  // Mail signed by a named person clears filters far better than "your teacher",
+  // and gives the parent someone to reply to.
+  const { data: teacherRow } = await db
+    .from('teachers')
+    .select('name, email')
+    .eq('id', teacherId)
+    .single();
+  const teacherName = (teacherRow?.name ?? '').trim() || 'Your teacher';
+  const teacherEmail = teacherRow?.email ?? undefined;
 
   let payload: Payload;
   try {
@@ -257,6 +434,10 @@ Deno.serve(async (req) => {
     }
   }
 
+  // Dispatch works from delivery rows, which carry only ids; keep a lookup so
+  // each email can name the right class.
+  const byStudent = new Map(recipients.map((r) => [`${r.studentId}:${r.kind}`, r]));
+
   const { data: message, error: messageError } = await db
     .from('messages')
     .insert({
@@ -311,9 +492,23 @@ Deno.serve(async (req) => {
       try {
         let providerId = '';
         if (d.channel === 'sms') providerId = await sendSms(d.destination, d.rendered);
-        else if (d.channel === 'email')
-          providerId = await sendEmail(d.destination, `${message.announcement ? 'Announcement' : 'Message'} from your teacher`, d.rendered);
-        else return; // Push is batched below.
+        else if (d.channel === 'email') {
+          const r = byStudent.get(`${d.student_id}:${d.recipient}`);
+          const { subject, text, html } = renderEmail({
+            body: d.rendered,
+            teacherName,
+            groupName: r?.groupName ?? 'your class',
+            isAnnouncement: !!message.announcement,
+            recipientKind: d.recipient as 'student' | 'parent',
+          });
+          providerId = await sendEmail({
+            to: d.destination,
+            subject,
+            text,
+            html,
+            replyTo: teacherEmail,
+          });
+        } else return; // Push is batched below.
 
         await db
           .from('message_deliveries')

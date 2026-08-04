@@ -127,6 +127,7 @@ export default function NewStudent() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top + 60}>
         <ScrollView
+          automaticallyAdjustKeyboardInsets
           contentContainerStyle={{
             padding: space.gutter,
             paddingBottom: insets.bottom + 140,
@@ -159,7 +160,7 @@ export default function NewStudent() {
             <Divider inset={15} />
             <FieldRow
               label="Phone"
-              placeholder="+998 90 000 00 00"
+              placeholder="+993 65 000000"
               value={form.phone}
               onChangeText={set('phone')}
               keyboardType="phone-pad"
@@ -188,7 +189,7 @@ export default function NewStudent() {
             <Divider inset={15} />
             <FieldRow
               label="Phone"
-              placeholder="+998 90 000 00 00"
+              placeholder="+993 65 000000"
               value={form.parentPhone}
               onChangeText={set('parentPhone')}
               keyboardType="phone-pad"

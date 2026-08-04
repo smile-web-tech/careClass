@@ -47,6 +47,26 @@ export type Session = {
   end: string;
 };
 
+/**
+ * A one-off entry on the teacher's own calendar — a parent meeting, an exam, a
+ * day off. Distinct from `Session`, which is derived from a group's weekly
+ * slots and never stored.
+ *
+ * Times are local `HH:mm` on `date`, matching how slots are stored, so the
+ * calendar can merge both without reconciling timezones. `allDay` ignores them.
+ */
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  note?: string;
+  /** `YYYY-MM-DD` in local time. */
+  date: string;
+  allDay: boolean;
+  start?: string;
+  end?: string;
+  accent: AccentName;
+};
+
 /** Attendance for one session, keyed by student id. */
 export type AttendanceRecord = Record<string, AttendanceStatus>;
 

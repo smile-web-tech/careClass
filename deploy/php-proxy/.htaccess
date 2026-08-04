@@ -1,0 +1,29 @@
+# ClassCare — route every request into the proxy.
+#
+# Deploy this beside index.php in the docroot of api.smiletech.dev.
+
+RewriteEngine On
+
+# Send everything to index.php, including paths that look like real files, so
+# /rest/v1/groups is proxied rather than 404ing on a missing directory.
+RewriteCond %{REQUEST_URI} !^/index\.php
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Apache strips Authorization before PHP sees it under CGI/FastCGI. Without
+# this, every authenticated request reaches Supabase unauthenticated and comes
+# back 401 — the single most common way this setup appears "broken".
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+<IfModule mod_headers.c>
+    # The proxy is an API, never a cacheable page.
+    Header always set Cache-Control "no-store"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "no-referrer"
+</IfModule>
+
+# Do not let anything else in this directory be served directly.
+<FilesMatch "\.(md|json|log|bak|sql)$">
+    Require all denied
+</FilesMatch>

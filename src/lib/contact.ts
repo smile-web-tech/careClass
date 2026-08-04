@@ -8,10 +8,19 @@ import { Alert, Platform } from 'react-native';
  * to send SMS silently.
  */
 
+/**
+ * Hand a URL to the OS.
+ *
+ * Deliberately does NOT gate on `canOpenURL`. Since Android 11, package
+ * visibility makes `canOpenURL` return false for `tel:`, `sms:` and `mailto:`
+ * unless the app declares a matching `<queries>` entry in its manifest — even
+ * though `openURL` on those schemes works perfectly. Checking first therefore
+ * produces a false "no app registered" on most modern Android phones and blocks
+ * a call that would otherwise have connected. Attempting the open and reporting
+ * a real failure is both simpler and correct on every platform.
+ */
 const open = async (url: string, what: string) => {
   try {
-    const ok = await Linking.canOpenURL(url);
-    if (!ok) throw new Error('unsupported');
     await Linking.openURL(url);
   } catch {
     Alert.alert('Cannot open', `This device has no app registered for ${what}.`);

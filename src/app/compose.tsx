@@ -171,6 +171,7 @@ export default function Compose() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top + 60}>
         <ScrollView
+          automaticallyAdjustKeyboardInsets
           contentContainerStyle={{
             padding: space.gutter,
             paddingTop: 18,

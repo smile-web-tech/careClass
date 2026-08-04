@@ -1,6 +1,6 @@
 import * as api from '@/data/api';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
-import type { AttendanceStatus, Student } from '@/data/types';
+import type { AttendanceStatus, CalendarEvent, Group, Student } from '@/data/types';
 import { hasSupabase } from '@/lib/supabase';
 
 /**
@@ -42,12 +42,25 @@ export async function hydrate() {
     api.fetchReplies(),
   ]);
 
+  // Fetched separately and tolerantly: `calendar_events` arrived in migration
+  // 0002, so a project still on 0001 returns "relation does not exist". Inside
+  // the Promise.all above that one rejection would discard the groups, students
+  // and attendance that loaded perfectly well beside it.
+  let events: Awaited<ReturnType<typeof api.fetchEvents>> | null = null;
+  try {
+    events = await api.fetchEvents();
+  } catch (e) {
+    console.warn('[classcare] events unavailable — apply migration 0002:', e);
+  }
+
   useStore.setState({
     groups,
     students,
     attendance,
     messages,
     replies,
+    // Keep whatever is already local when the table is not there yet.
+    ...(events ? { events } : {}),
     ...(teacher && {
       teacherName: teacher.name || useStore.getState().teacherName,
       teacherEmail: teacher.email,
@@ -75,6 +88,11 @@ export const remote: StoreMirror = {
         ),
       }));
     }),
+
+  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) =>
+    enqueue(() => api.updateGroup(id, patch)),
+
+  deleteGroup: (id: string) => enqueue(() => api.deleteGroup(id)),
 
   createStudent: (student: Omit<Student, 'id'>, localId: string): void =>
     enqueue(async () => {
@@ -106,6 +124,21 @@ export const remote: StoreMirror = {
     }),
 
   markRepliesRead: () => enqueue(() => api.markRepliesRead()),
+
+  createEvent: (event: Omit<CalendarEvent, 'id'>, localId: string) =>
+    enqueue(async () => {
+      const saved = await api.createEvent(event);
+      // Swap the optimistic local id for the server's, so a later edit or
+      // delete addresses the real row rather than a id that never existed.
+      useStore.setState((s) => ({
+        events: s.events.map((e) => (e.id === localId ? { ...e, id: saved.id } : e)),
+      }));
+    }),
+
+  updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) =>
+    enqueue(() => api.updateEvent(id, patch)),
+
+  deleteEvent: (id: string) => enqueue(() => api.deleteEvent(id)),
 };
 
 /** Install the write-through mirror. Called once from the root layout. */

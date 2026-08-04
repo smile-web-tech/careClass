@@ -45,3 +45,14 @@ example
 # Local secrets
 .env
 .env.local
+
+# Firebase config, when push is wired. Never the OAuth client JSON.
+google-services.json
+GoogleService-Info.plist
+
+# Claude Code local state. Accumulates approved shell commands verbatim,
+# which means pasted tokens end up here. Never share.
+.claude/
+
+# Supabase CLI link state
+supabase/.temp/

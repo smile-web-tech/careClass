@@ -9,7 +9,19 @@ export type AttendanceStatusRow = 'present' | 'late' | 'absent';
 export type MessageAudienceRow = 'students' | 'parents' | 'both';
 export type MessageChannelRow = 'sms' | 'email' | 'push';
 export type DeliveryStateRow = 'queued' | 'sent' | 'delivered' | 'failed';
-export type GroupAccentRow = 'blue' | 'teal' | 'violet' | 'amber';
+export type GroupAccentRow =
+  | 'blue'
+  | 'teal'
+  | 'violet'
+  | 'amber'
+  | 'rose'
+  | 'emerald'
+  | 'indigo'
+  | 'orange'
+  | 'cyan'
+  | 'pink'
+  | 'lime'
+  | 'slate';
 
 type Row<T> = {
   Row: T;
@@ -25,6 +37,7 @@ export type TeacherRow = {
   avatar_url: string | null;
   timezone: string;
   push_token: string | null;
+  phone: string | null;
   created_at: string;
 };
 
@@ -120,6 +133,20 @@ export type ReplyRow = {
   read_at: string | null;
 };
 
+export type CalendarEventRow = {
+  id: string;
+  teacher_id: string;
+  title: string;
+  note: string | null;
+  event_date: string;
+  all_day: boolean;
+  starts_at: string | null;
+  ends_at: string | null;
+  accent: GroupAccentRow;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -133,6 +160,7 @@ export type Database = {
       message_groups: Row<MessageGroupRow>;
       message_deliveries: Row<MessageDeliveryRow>;
       replies: Row<ReplyRow>;
+      calendar_events: Row<CalendarEventRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

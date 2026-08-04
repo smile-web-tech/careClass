@@ -4,15 +4,16 @@ import * as Crypto from 'expo-crypto';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+
 import { supabase } from '@/lib/supabase';
 
 /**
  * Sign-in flows.
  *
- * Google goes through Supabase's OAuth endpoint in a system browser sheet
- * (works in Expo Go and in release builds alike). Apple uses the native sheet
- * and hands Supabase the identity token directly — App Store review requires
- * Sign in with Apple to be offered wherever a third-party login is.
+ * Google and Apple both use their native SDKs and hand Supabase an ID token
+ * directly. Neither opens a browser, which is what makes them work behind the
+ * reverse proxy — see the note on `signInWithGoogle`. Email is a two-step OTP.
  */
 
 // Lets the auth sheet hand control back to the app on Android.
@@ -33,12 +34,35 @@ export const redirectTo = AuthSession.makeRedirectUri({
   path: 'auth/callback',
 });
 
+/**
+ * The **Web** OAuth client id from Google Cloud — not the Android one.
+ * Supabase validates the ID token's audience against it, so it must match the
+ * client id configured on the Google provider in the Supabase dashboard.
+ */
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '';
+
 export class AuthCancelled extends Error {
   constructor() {
     super('Sign-in cancelled');
   }
 }
 
+/**
+ * Google sign-in, on the device rather than through a browser.
+ *
+ * The browser flow cannot work here. `/auth/v1/authorize` hands Google a
+ * `redirect_uri` of `https://<ref>.supabase.co/auth/v1/callback`, built from the
+ * project's own external URL — a value neither the app nor a reverse proxy can
+ * rewrite. Since `*.supabase.co` is unreachable from Turkmen networks, Google
+ * would authenticate successfully and then redirect the browser into a black
+ * hole. (Supabase's paid Custom Domain add-on is the only way to change that
+ * URL.)
+ *
+ * The native SDK avoids the problem entirely: Google talks to the device, hands
+ * back an ID token, and that token is posted to Supabase over ordinary HTTPS —
+ * which reaches the proxy fine. No browser hop, and it is faster besides.
+ * Apple sign-in has always worked this way; see `signInWithApple` below.
+ */
 export async function signInWithGoogle() {
   if (Platform.OS === 'web') {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -49,17 +73,48 @@ export async function signInWithGoogle() {
     return; // The browser navigates away and comes back with a session.
   }
 
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo, skipBrowserRedirect: true },
+  if (!GOOGLE_WEB_CLIENT_ID) {
+    throw new Error(
+      'Google sign-in is not configured.\n\nSet EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to the *Web* OAuth client id from Google Cloud.',
+    );
+  }
+
+  GoogleSignin.configure({
+    // Counter-intuitive but correct: the WEB client id, not the Android one.
+    // It is the audience Supabase validates the ID token against. The Android
+    // client still has to exist in Google Cloud (matched by package name and
+    // SHA-1) or the native call fails — it is simply never named here.
+    webClientId: GOOGLE_WEB_CLIENT_ID,
   });
-  if (error) throw error;
-  if (!data.url) throw new Error('Supabase did not return an authorization URL');
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-  if (result.type !== 'success') throw new AuthCancelled();
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const response = await GoogleSignin.signIn();
 
-  await completeOAuthCallback(result.url);
+    // v13+ returns a discriminated union; older shapes put the token at the top
+    // level. Accept both so a minor upgrade does not break sign-in.
+    const idToken =
+      (response as { data?: { idToken?: string | null } }).data?.idToken ??
+      (response as { idToken?: string | null }).idToken;
+
+    if (!idToken) throw new AuthCancelled();
+
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+    if (error) throw error;
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    // SIGN_IN_CANCELLED / IN_PROGRESS are the user's doing, not failures.
+    if (code === statusCodes.SIGN_IN_CANCELLED || code === statusCodes.IN_PROGRESS) {
+      throw new AuthCancelled();
+    }
+    if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      throw new Error('Google Play Services is required for Google sign-in on this device.');
+    }
+    throw e;
+  }
 }
 
 /**
@@ -167,6 +222,21 @@ const cleanEmail = (email: string) => email.trim().toLowerCase();
  * (Supabase → Authentication → Email Templates); the stock template only
  * contains the link.
  */
+/**
+ * Email sign-in, step 1 — send a one-time code.
+ *
+ * `shouldCreateUser: true` covers both signing in and signing up, and the app
+ * deliberately does not check first whether the address is already registered.
+ * An endpoint that answers "does this email have an account?" is an account
+ * enumeration oracle: anyone could test a list of addresses against it and
+ * learn which of your teachers use the app. Instead the same code is sent
+ * either way, and whether this is a new account is discovered *after* the code
+ * is verified — at which point the person has proved they own the mailbox.
+ *
+ * A signup abandoned at the code screen leaves only an unconfirmed
+ * `auth.users` row and no profile at all (migration 0003), so nothing is
+ * half-created and retrying behaves exactly like a first attempt.
+ */
 export async function sendEmailCode(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
     email: cleanEmail(email),
@@ -180,14 +250,77 @@ export async function sendEmailCode(email: string) {
   if (error) throw error;
 }
 
-/** Email sign-in, step 2 — exchange the code for a session. */
-export async function verifyEmailCode(email: string, code: string) {
-  const { error } = await supabase.auth.verifyOtp({
+/**
+ * Email sign-in, step 2 — exchange the code for a session.
+ *
+ * Returns whether this account still needs a profile. The `teachers` row is
+ * created by a trigger the moment the email is confirmed, so a brand-new
+ * account has a row with an empty name; an existing one has a real name and
+ * goes straight into the app.
+ */
+export async function verifyEmailCode(
+  email: string,
+  code: string,
+): Promise<{ isNewAccount: boolean }> {
+  const { data, error } = await supabase.auth.verifyOtp({
     email: cleanEmail(email),
     token: code.trim(),
     type: 'email',
   });
   if (error) throw error;
+  if (!data.user) throw new Error('That code did not produce a session.');
+
+  const { data: profile } = await supabase
+    .from('teachers')
+    .select('name')
+    .eq('id', data.user.id)
+    .maybeSingle();
+
+  return { isNewAccount: !profile?.name?.trim() };
+}
+
+/**
+ * Finish a new registration.
+ *
+ * Runs only after the code is verified, so the session already exists and RLS
+ * scopes the write to this teacher. The name also goes onto the auth user so
+ * it survives if the profile row is ever rebuilt.
+ */
+export async function completeRegistration(input: { name: string; phone?: string }) {
+  const name = input.name.trim();
+  const phone = input.phone?.trim() || null;
+  if (name.length < 2) throw new Error('Please enter your full name.');
+
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error('Your session expired. Please sign in again.');
+
+  const { error } = await supabase
+    .from('teachers')
+    .update({
+      name,
+      phone,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+    })
+    .eq('id', auth.user.id);
+  if (error) throw error;
+
+  await supabase.auth.updateUser({ data: { full_name: name } });
+}
+
+/**
+ * Abandon a half-finished registration.
+ *
+ * Called when the teacher backs out of the profile step. Signing out drops the
+ * session; the unconfirmed-or-nameless profile is cleaned up server-side, and
+ * starting again behaves like a fresh signup.
+ */
+export async function abandonRegistration() {
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // Losing the local session is what matters; a failed network call here
+    // must not strand the user on the profile step.
+  }
 }
 
 export async function signOut() {

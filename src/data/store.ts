@@ -8,6 +8,7 @@ import type {
   AttendanceRecord,
   AttendanceStatus,
   Audience,
+  CalendarEvent,
   Channel,
   Group,
   Message,
@@ -18,6 +19,7 @@ import type {
 import { at, toKey } from '@/lib/date';
 import { hasSupabase } from '@/lib/supabase';
 import { accentNames } from '@/theme';
+import type { ReminderLead } from '@/lib/notifications';
 
 /**
  * Attendance is stored sparsely: only sessions the teacher has actually saved
@@ -77,12 +79,20 @@ type State = {
   attendance: Record<string, AttendanceRecord>;
   messages: Message[];
   replies: Reply[];
+  /** The teacher's own calendar entries — not class sessions. */
+  events: CalendarEvent[];
+
+  /** Local class reminders: off, or how many minutes before the start. */
+  remindersOn: boolean;
+  reminderLead: ReminderLead;
 
   signIn: (name?: string) => void;
   signOut: () => void;
   enterDemoMode: () => void;
 
   addGroup: (g: Omit<Group, 'id' | 'accent'> & { accent?: Group['accent'] }) => string;
+  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
+  removeGroup: (id: string) => void;
   addStudent: (s: NewStudent) => string;
   updateStudent: (id: string, patch: Partial<Student>) => void;
   removeStudent: (id: string) => void;
@@ -98,6 +108,12 @@ type State = {
     announcement?: boolean;
   }) => void;
   markRepliesRead: () => void;
+
+  setReminders: (on: boolean, lead?: ReminderLead) => void;
+
+  addEvent: (e: Omit<CalendarEvent, 'id'>) => string;
+  updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) => void;
+  removeEvent: (id: string) => void;
 };
 
 const uid = (prefix: string) =>
@@ -113,6 +129,8 @@ const uid = (prefix: string) =>
  */
 export type StoreMirror = {
   createGroup: (group: Omit<Group, 'id'>, localId: string) => void;
+  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
+  deleteGroup: (id: string) => void;
   createStudent: (student: Omit<Student, 'id'>, localId: string) => void;
   updateStudent: (id: string, patch: Partial<Student>) => void;
   archiveStudent: (id: string) => void;
@@ -125,6 +143,9 @@ export type StoreMirror = {
     announcement?: boolean;
   }) => void;
   markRepliesRead: () => void;
+  createEvent: (event: Omit<CalendarEvent, 'id'>, localId: string) => void;
+  updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) => void;
+  deleteEvent: (id: string) => void;
 };
 
 let mirror: Partial<StoreMirror> = {};
@@ -146,6 +167,9 @@ export const useStore = create<State>()(
       attendance: {},
       messages: seedMessages,
       replies: seedReplies,
+      events: [],
+      remindersOn: false,
+      reminderLead: 15,
 
       signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
       signOut: () => set({ signedIn: false, demo: false }),
@@ -161,6 +185,34 @@ export const useStore = create<State>()(
         set((s) => ({ groups: [...s.groups, group] }));
         mirror.createGroup?.(group, id);
         return id;
+      },
+
+      /**
+       * Edit a group. Slots are replaced wholesale, matching what the API does
+       * — see `updateGroup` there for why diffing them would be wrong.
+       */
+      updateGroup: (id, patch) => {
+        set((s) => ({
+          groups: s.groups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
+        }));
+        mirror.updateGroup?.(id, patch);
+      },
+
+      /**
+       * Remove a group. Students stay — they are people, not memberships — but
+       * lose this group from their `groupIds`, mirroring the `student_groups`
+       * cascade on the server.
+       */
+      removeGroup: (id) => {
+        set((s) => ({
+          groups: s.groups.filter((g) => g.id !== id),
+          students: s.students.map((st) =>
+            st.groupIds.includes(id)
+              ? { ...st, groupIds: st.groupIds.filter((g) => g !== id) }
+              : st,
+          ),
+        }));
+        mirror.deleteGroup?.(id);
       },
 
       addStudent: (input) => {
@@ -185,6 +237,29 @@ export const useStore = create<State>()(
       removeStudent: (id) => {
         set((s) => ({ students: s.students.filter((x) => x.id !== id) }));
         mirror.archiveStudent?.(id);
+      },
+
+      setReminders: (on, lead) =>
+        set((s) => ({ remindersOn: on, reminderLead: lead ?? s.reminderLead })),
+
+      addEvent: (input) => {
+        const id = uid('e');
+        const event: CalendarEvent = { ...input, id };
+        set((s) => ({ events: [...s.events, event] }));
+        mirror.createEvent?.(event, id);
+        return id;
+      },
+
+      updateEvent: (id, patch) => {
+        set((s) => ({
+          events: s.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+        }));
+        mirror.updateEvent?.(id, patch);
+      },
+
+      removeEvent: (id) => {
+        set((s) => ({ events: s.events.filter((e) => e.id !== id) }));
+        mirror.deleteEvent?.(id);
       },
 
       saveAttendance: (key, record) => {
@@ -243,6 +318,9 @@ export const useStore = create<State>()(
         attendance: s.attendance,
         messages: s.messages,
         replies: s.replies,
+        events: s.events,
+        remindersOn: s.remindersOn,
+        reminderLead: s.reminderLead,
       }),
     },
   ),
@@ -254,6 +332,7 @@ export const useStore = create<State>()(
 
 export const useGroups = () => useStore((s) => s.groups);
 export const useStudents = () => useStore((s) => s.students);
+export const useEvents = () => useStore((s) => s.events);
 
 export const useGroup = (id?: string) => useStore((s) => s.groups.find((g) => g.id === id));
 

@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,12 +16,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Glow, AngledGradient, Ring } from '@/components/decor';
 import { GoogleMark, Icon } from '@/components/Icon';
+import { OtpInput } from '@/components/OtpInput';
 import { Logo, Press } from '@/components/ui';
 import { useStore } from '@/data/store';
 import {
   AuthCancelled,
   isAppleSignInAvailable,
   redirectTo,
+  abandonRegistration,
+  completeRegistration,
   sendEmailCode,
   signInWithApple,
   signInWithGoogle,
@@ -46,9 +50,23 @@ export default function SignIn() {
   const [appleReady, setAppleReady] = useState(false);
 
   const [emailOpen, setEmailOpen] = useState(false);
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [step, setStep] = useState<'email' | 'code' | 'profile'>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  /** Seconds until "Resend code" becomes tappable again. */
+  const [cooldown, setCooldown] = useState(0);
+
+  // Rejects "a@b" and trailing-dot addresses without pretending to be RFC 5322.
+  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
 
   useEffect(() => {
     isAppleSignInAvailable().then(setAppleReady);
@@ -97,9 +115,11 @@ export default function SignIn() {
 
   const sendCode = async () => {
     setBusy('email');
+    setCodeError(null);
     try {
       await sendEmailCode(email);
       setStep('code');
+      setCooldown(30);
     } catch (e) {
       Alert.alert('Could not send the code', e instanceof Error ? e.message : String(e));
     } finally {
@@ -107,17 +127,81 @@ export default function SignIn() {
     }
   };
 
-  const verifyCode = async () => {
+  const resend = async () => {
+    if (cooldown > 0) return;
     setBusy('email');
+    setCode('');
+    setCodeError(null);
     try {
-      await verifyEmailCode(email, code);
-      setEmailOpen(false);
-      router.replace('/(tabs)');
+      await sendEmailCode(email);
+      setCooldown(30);
     } catch (e) {
-      Alert.alert('That code did not work', e instanceof Error ? e.message : String(e));
+      Alert.alert('Could not resend', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
+  };
+
+  /**
+   * A correct code either lands the teacher in the app, or — for a brand-new
+   * account — moves on to collect their name. Which of the two is only known
+   * after the code is verified, deliberately: checking up front whether an
+   * email is registered would answer that question for anyone who asked.
+   */
+  const verifyCode = async (candidate: string) => {
+    if (candidate.length < 6 || busy) return;
+    setBusy('email');
+    setCodeError(null);
+    try {
+      const { isNewAccount } = await verifyEmailCode(email, candidate);
+      if (isNewAccount) {
+        setStep('profile');
+      } else {
+        setEmailOpen(false);
+        router.replace('/(tabs)');
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setCode('');
+      setCodeError(
+        /expired/i.test(msg)
+          ? 'That code has expired. Send a new one.'
+          : /invalid|token/i.test(msg)
+            ? 'That code is not right. Check and try again.'
+            : msg,
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const finishRegistration = async () => {
+    setBusy('email');
+    try {
+      await completeRegistration({ name: fullName, phone });
+      setEmailOpen(false);
+      router.replace('/(tabs)');
+    } catch (e) {
+      Alert.alert('Could not finish signing up', e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Closing the sheet mid-registration must not leave a usable half-account.
+   * Backing out of the profile step signs the new session out; the server only
+   * creates a profile once the email is confirmed (migration 0003), so the next
+   * attempt behaves exactly like a first one.
+   */
+  const closeEmail = () => {
+    if (step === 'profile') void abandonRegistration();
+    setEmailOpen(false);
+    setStep('email');
+    setCode('');
+    setCodeError(null);
+    setFullName('');
+    setPhone('');
   };
 
   return (
@@ -215,89 +299,168 @@ export default function SignIn() {
         visible={emailOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setEmailOpen(false)}>
-        <Press style={styles.scrim} onPress={() => setEmailOpen(false)} />
+        onRequestClose={closeEmail}>
+        <Press style={styles.scrim} onPress={closeEmail} accessibilityLabel="Dismiss" />
+        {/*
+          The sheet is bottom-anchored, so the keyboard would cover the input
+          and the button entirely. `padding` lifts it on iOS; on Android the
+          manifest's adjustResize does it, and adding `height` here as well
+          would double-count and leave a gap.
+        */}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={[styles.emailSheet, { paddingBottom: Math.max(insets.bottom, 18) + 16 }]}>
-            <View style={styles.grabber} />
+          <ScrollView
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
+            <View style={[styles.emailSheet, { paddingBottom: Math.max(insets.bottom, 18) + 16 }]}>
+              <View style={styles.grabber} />
 
-            {step === 'email' ? (
-              <>
-                <Text style={[text.sheetTitle, styles.ink]}>What&rsquo;s your email?</Text>
-                <Text style={styles.sheetHint}>
-                  We&rsquo;ll send a six-digit code. No password to remember.
-                </Text>
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@example.com"
-                  placeholderTextColor={color.mutedLight}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoFocus
-                  returnKeyType="send"
-                  onSubmitEditing={sendCode}
-                  style={styles.emailInput}
-                  selectionColor={color.primary}
-                  keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
-                />
-                <Press
-                  onPress={sendCode}
-                  disabled={busy !== null || !email.includes('@')}
-                  style={[
-                    styles.sheetButton,
-                    (busy !== null || !email.includes('@')) && styles.sheetButtonOff,
-                  ]}>
-                  {busy ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.sheetButtonLabel}>Send code</Text>
-                  )}
-                </Press>
-              </>
-            ) : (
-              <>
-                <Text style={[text.sheetTitle, styles.ink]}>Enter the code</Text>
-                <Text style={styles.sheetHint}>Sent to {email.trim().toLowerCase()}</Text>
-                <TextInput
-                  value={code}
-                  onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="000000"
-                  placeholderTextColor={color.dashed}
-                  keyboardType="number-pad"
-                  autoFocus
-                  maxLength={6}
-                  returnKeyType="done"
-                  onSubmitEditing={verifyCode}
-                  style={[styles.emailInput, styles.codeInput]}
-                  selectionColor={color.primary}
-                  keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
-                />
-                <Press
-                  onPress={verifyCode}
-                  disabled={busy !== null || code.length < 6}
-                  style={[
-                    styles.sheetButton,
-                    (busy !== null || code.length < 6) && styles.sheetButtonOff,
-                  ]}>
-                  {busy ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.sheetButtonLabel}>Sign in</Text>
-                  )}
-                </Press>
-                <Press
-                  onPress={() => {
-                    setStep('email');
-                    setCode('');
-                  }}
-                  style={styles.sheetLink}>
-                  <Text style={styles.sheetLinkLabel}>Use a different email</Text>
-                </Press>
-              </>
-            )}
-          </View>
+              {step === 'email' ? (
+                <>
+                  <Text style={[text.sheetTitle, styles.ink]}>What&rsquo;s your email?</Text>
+                  <Text style={styles.sheetHint}>
+                    We&rsquo;ll send a six-digit code. No password to remember.
+                  </Text>
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="you@example.com"
+                    placeholderTextColor={color.mutedLight}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    autoFocus
+                    returnKeyType="send"
+                    onSubmitEditing={() => void sendCode()}
+                    style={styles.emailInput}
+                    selectionColor={color.primary}
+                    keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
+                  />
+                  <Press
+                    onPress={() => void sendCode()}
+                    disabled={busy !== null || !emailLooksValid}
+                    style={[
+                      styles.sheetButton,
+                      (busy !== null || !emailLooksValid) && styles.sheetButtonOff,
+                    ]}>
+                    {busy ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.sheetButtonLabel}>Send code</Text>
+                    )}
+                  </Press>
+                </>
+              ) : step === 'code' ? (
+                <>
+                  <Text style={[text.sheetTitle, styles.ink]}>Enter the code</Text>
+                  <Text style={styles.sheetHint}>
+                    Sent to {email.trim().toLowerCase()} · expires in 10 minutes
+                  </Text>
+
+                  <View style={{ marginTop: 18, marginBottom: 6 }}>
+                    <OtpInput
+                      value={code}
+                      onChange={(v) => {
+                        setCode(v);
+                        if (codeError) setCodeError(null);
+                      }}
+                      invalid={!!codeError}
+                      editable={busy === null}
+                      onComplete={(c) => void verifyCode(c)}
+                    />
+                  </View>
+
+                  {codeError ? <Text style={styles.codeError}>{codeError}</Text> : null}
+
+                  <Press
+                    onPress={() => void verifyCode(code)}
+                    disabled={busy !== null || code.length < 6}
+                    style={[
+                      styles.sheetButton,
+                      (busy !== null || code.length < 6) && styles.sheetButtonOff,
+                    ]}>
+                    {busy ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.sheetButtonLabel}>Continue</Text>
+                    )}
+                  </Press>
+
+                  <View style={styles.codeFooter}>
+                    <Press onPress={() => void resend()} disabled={cooldown > 0 || busy !== null}>
+                      <Text
+                        style={[
+                          styles.sheetLinkLabel,
+                          (cooldown > 0 || busy !== null) && { color: color.mutedLight },
+                        ]}>
+                        {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+                      </Text>
+                    </Press>
+                    <Press
+                      onPress={() => {
+                        setStep('email');
+                        setCode('');
+                        setCodeError(null);
+                      }}>
+                      <Text style={styles.sheetLinkLabel}>Change email</Text>
+                    </Press>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={[text.sheetTitle, styles.ink]}>Nearly there</Text>
+                  <Text style={styles.sheetHint}>
+                    Your students will see this name on messages you send.
+                  </Text>
+
+                  <TextInput
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Full name"
+                    placeholderTextColor={color.mutedLight}
+                    autoCapitalize="words"
+                    autoComplete="name"
+                    textContentType="name"
+                    autoFocus
+                    returnKeyType="next"
+                    style={styles.emailInput}
+                    selectionColor={color.primary}
+                    keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
+                  />
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="Phone (optional)"
+                    placeholderTextColor={color.mutedLight}
+                    keyboardType="phone-pad"
+                    autoComplete="tel"
+                    textContentType="telephoneNumber"
+                    returnKeyType="done"
+                    onSubmitEditing={() => void finishRegistration()}
+                    style={[styles.emailInput, { marginTop: 10 }]}
+                    selectionColor={color.primary}
+                    keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
+                  />
+
+                  <Press
+                    onPress={() => void finishRegistration()}
+                    disabled={busy !== null || fullName.trim().length < 2}
+                    style={[
+                      styles.sheetButton,
+                      (busy !== null || fullName.trim().length < 2) && styles.sheetButtonOff,
+                    ]}>
+                    {busy ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.sheetButtonLabel}>Create my account</Text>
+                    )}
+                  </Press>
+                </>
+              )}
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -482,6 +645,21 @@ const makeStyles = ({ color }: Theme) =>
     },
     sheetButtonOff: { backgroundColor: color.borderStrong },
     sheetButtonLabel: { fontFamily: body[700], fontSize: 15.5, color: '#fff' },
+    codeError: {
+      fontFamily: body[600],
+      fontSize: 13,
+      color: color.dangerDeep,
+      textAlign: 'center',
+      marginTop: 10,
+      marginBottom: -4,
+    },
+    codeFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 14,
+      paddingHorizontal: 4,
+    },
     sheetLink: {
       height: 44,
       alignItems: 'center',

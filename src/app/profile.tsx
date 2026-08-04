@@ -1,15 +1,22 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
-import { Button, Card, Divider, Overline, Press, StatTile, Txt } from '@/components/ui';
+import { Button, Card, Divider, Overline, Press, StatTile, Toggle, Txt } from '@/components/ui';
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import { hydrate } from '@/data/sync';
+import {
+  cancelClassReminders,
+  requestNotificationPermission,
+  rescheduleClassReminders,
+  scheduledReminderCount,
+  type ReminderLead,
+} from '@/lib/notifications';
 import { signOut } from '@/lib/auth';
 import { weekDays } from '@/lib/date';
 import { sessionsForWeek } from '@/lib/schedule';
@@ -133,11 +140,13 @@ export default function Profile() {
       <TopBar title="Profile" />
 
       <ScrollView
+        automaticallyAdjustKeyboardInsets
         contentContainerStyle={{
           padding: space.gutter,
           paddingBottom: insets.bottom + 40,
         }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         showsVerticalScrollIndicator={false}>
         <View style={styles.identity}>
           {avatarUrl ? (
@@ -211,6 +220,9 @@ export default function Profile() {
           <Divider inset={58} />
           <InfoRow icon="chat" label="Messages sent" value={`${messages.length} in your history`} />
         </Card>
+
+        <Overline style={styles.label}>Reminders</Overline>
+        <ReminderSettings />
 
         <Overline style={styles.label}>Appearance</Overline>
         <ThemePicker />
@@ -307,6 +319,117 @@ function InfoRow({ icon, label, value }: { icon: IconName; label: string; value:
         </Text>
       </View>
     </View>
+  );
+}
+
+const LEADS: ReminderLead[] = [5, 15, 30, 60];
+
+/**
+ * Class reminders, raised by the phone itself rather than by the server — the
+ * schedule is already on the device, so a reminder must not depend on the
+ * network being up. See `lib/notifications.ts`.
+ */
+function ReminderSettings() {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const groups = useGroups();
+  const on = useStore((s) => s.remindersOn);
+  const lead = useStore((s) => s.reminderLead);
+  const setReminders = useStore((s) => s.setReminders);
+
+  const [blocked, setBlocked] = useState(false);
+  const [count, setCount] = useState(0);
+
+  const refresh = useCallback(async () => {
+    setCount(await scheduledReminderCount());
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const apply = useCallback(
+    async (nextOn: boolean, nextLead: ReminderLead) => {
+      if (nextOn) {
+        // Ask only when they actually turn it on — a cold prompt at launch
+        // earns a "Don't allow" that iOS never offers to revisit.
+        const ok = await requestNotificationPermission();
+        if (!ok) {
+          setBlocked(true);
+          setReminders(false);
+          return;
+        }
+        setBlocked(false);
+      }
+      setReminders(nextOn, nextLead);
+      if (nextOn) await rescheduleClassReminders(groups, nextLead);
+      else await cancelClassReminders();
+      await refresh();
+    },
+    [groups, refresh, setReminders],
+  );
+
+  return (
+    <>
+      <Card style={styles.group}>
+        <View style={styles.toggleRow}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.actionLabel}>Remind me before class</Text>
+            <Text style={styles.actionHint} numberOfLines={2}>
+              {on
+                ? count
+                  ? `${count} reminder${count === 1 ? '' : 's'} queued`
+                  : 'No upcoming classes to remind about'
+                : 'A notification shortly before each class starts'}
+            </Text>
+          </View>
+          <Toggle value={on} onChange={(v) => void apply(v, lead)} />
+        </View>
+
+        {on ? (
+          <>
+            <Divider inset={15} />
+            <View style={styles.leadRow}>
+              {LEADS.map((m) => {
+                const active = m === lead;
+                return (
+                  <Press
+                    key={m}
+                    haptic
+                    onPress={() => void apply(true, m)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                    style={[
+                      styles.leadChip,
+                      {
+                        backgroundColor: active ? color.primaryTint : color.fill,
+                        borderColor: active ? color.primary : 'transparent',
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.leadLabel,
+                        { color: active ? color.primaryInk : color.inkSoft },
+                      ]}>
+                      {m} min
+                    </Text>
+                  </Press>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
+      </Card>
+
+      {blocked ? (
+        <Press onPress={() => Linking.openSettings()} style={styles.blockedRow}>
+          <Icon name="info" size={15} color={color.warningDeep} />
+          <Text style={[styles.actionHint, { color: color.warningDeep, flex: 1 }]}>
+            Notifications are turned off for ClassCare. Tap to open Settings.
+          </Text>
+        </Press>
+      ) : null}
+    </>
   );
 }
 
@@ -460,7 +583,33 @@ const makeStyles = ({ color, status }: Theme) =>
     },
     providerPillDemo: { backgroundColor: status.late.tint },
 
-    themeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
+    toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+  },
+  leadRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 15, paddingVertical: 12 },
+  leadChip: {
+    flex: 1,
+    height: 38,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leadLabel: { fontFamily: body[700], fontSize: 12.5 },
+  blockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 4,
+    marginTop: -14,
+    marginBottom: 18,
+  },
+
+  themeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
     themeCard: {
       flex: 1,
       backgroundColor: color.surface,

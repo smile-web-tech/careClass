@@ -15,11 +15,13 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { useStore } from '@/data/store';
+import { useGroups, useStore } from '@/data/store';
 import { hydrate, installSync, watchInbox } from '@/data/sync';
+import { rescheduleClassReminders } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
 
@@ -65,9 +67,37 @@ function useSupabaseSession() {
   }, []);
 }
 
+/**
+ * Keep local class reminders true to the schedule.
+ *
+ * Reminders are scheduled from the group list, so editing a group's day or time
+ * must re-plan them — otherwise the teacher is reminded about a class that
+ * moved. Also re-plans on foreground, because the horizon is finite and a phone
+ * left closed for a week would otherwise run dry.
+ */
+function useClassReminders() {
+  const groups = useGroups();
+  const on = useStore((s) => s.remindersOn);
+  const lead = useStore((s) => s.reminderLead);
+
+  useEffect(() => {
+    if (!on) return;
+    void rescheduleClassReminders(groups, lead);
+  }, [groups, on, lead]);
+
+  useEffect(() => {
+    if (!on) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void rescheduleClassReminders(groups, lead);
+    });
+    return () => sub.remove();
+  }, [groups, on, lead]);
+}
+
 /** The app proper. Split out so it can consume the theme context above it. */
 function RootNavigator() {
   const { color, scheme } = useTheme();
+  useClassReminders();
 
   // Paint the window itself, not just our views: without this the OS shows a
   // white flash behind modal transitions and under the Android nav bar.
@@ -98,6 +128,8 @@ function RootNavigator() {
         <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
         <Stack.Screen name="student/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="group/edit" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="event/new" options={{ presentation: 'modal' }} />
       </Stack>
     </>
   );

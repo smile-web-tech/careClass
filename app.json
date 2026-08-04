@@ -25,7 +25,8 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.READ_CONTACTS"
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "output": "static",

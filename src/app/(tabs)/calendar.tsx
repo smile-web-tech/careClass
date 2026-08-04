@@ -1,20 +1,30 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { EmptyState, IconButton, Press } from '@/components/ui';
-import { useGroups, useStudents } from '@/data/store';
-import type { Group, Session } from '@/data/types';
+import { useEvents, useGroups, useStudents } from '@/data/store';
+import type { CalendarEvent, Group, Session } from '@/data/types';
 import {
   addDays,
   dowLong,
   dowShort,
   isSameDay,
+  isSameMonth,
   monthLong,
+  monthMatrix,
   monthShort,
+  startOfWeek,
   toKey,
   weekDays,
 } from '@/lib/date';
@@ -30,6 +40,15 @@ const phaseBadge = ({ color, status }: Theme) =>
     later: { label: 'Later', bg: color.fill, fg: color.muted },
   }) as const;
 
+/** Height of one row of day cells. The grid animates between 1 and 6 of these. */
+const ROW_H = 62;
+const ROWS = 6;
+
+/** A class session or a personal event, ordered together on the day timeline. */
+type Entry =
+  | { kind: 'session'; at: string; session: Session; group: Group }
+  | { kind: 'event'; at: string; event: CalendarEvent };
+
 export default function Calendar() {
   const { accents, color } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -39,24 +58,92 @@ export default function Calendar() {
 
   const groups = useGroups();
   const students = useStudents();
+  const events = useEvents();
 
   const today = useMemo(() => new Date(), []);
   const [selected, setSelected] = useState(today);
+  const [monthMode, setMonthMode] = useState(false);
 
-  const days = useMemo(() => weekDays(selected), [selected]);
-  const perDay = useMemo(
-    () => Object.fromEntries(days.map((d) => [toKey(d), sessionsOn(groups, d)])),
-    [days, groups],
+  /* -------- the grid ------------------------------------------------- */
+
+  // Always the full month matrix. Collapsed, it is clipped to the row holding
+  // the selected day; expanded, all six rows show. Same nodes either way, so
+  // the transition is a genuine unfold rather than a swap.
+  const matrix = useMemo(() => monthMatrix(selected), [selected]);
+  const selectedRow = useMemo(() => {
+    const wk = toKey(startOfWeek(selected));
+    const i = matrix.findIndex((row) => toKey(row[0]) === wk);
+    return i < 0 ? 0 : i;
+  }, [matrix, selected]);
+
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(monthMode ? 1 : 0, { duration: 240 });
+  }, [monthMode, progress]);
+
+  const gridStyle = useAnimatedStyle(() => ({
+    height: ROW_H + (ROWS - 1) * ROW_H * progress.value,
+  }));
+  const innerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -selectedRow * ROW_H * (1 - progress.value) }],
+  }));
+
+  // Drag the strip down to open the month, up to close it. A tap on the
+  // grabber does the same, so the gesture is discoverable rather than hidden.
+  const pan = Gesture.Pan()
+    .activeOffsetY([-12, 12])
+    .onEnd((e) => {
+      if (e.translationY > 20) runOnJS(setMonthMode)(true);
+      else if (e.translationY < -20) runOnJS(setMonthMode)(false);
+    });
+
+  /* -------- data ----------------------------------------------------- */
+
+  const sessionsByDay = useMemo(() => {
+    const out: Record<string, Session[]> = {};
+    for (const row of matrix) {
+      for (const d of row) out[toKey(d)] = sessionsOn(groups, d);
+    }
+    return out;
+  }, [matrix, groups]);
+
+  const eventsByDay = useMemo(() => {
+    const out: Record<string, CalendarEvent[]> = {};
+    for (const e of events) (out[e.date] ??= []).push(e);
+    return out;
+  }, [events]);
+
+  const selectedKey = toKey(selected);
+
+  /** Sessions and events for the selected day, in time order; all-day first. */
+  const entries = useMemo<Entry[]>(() => {
+    const list: Entry[] = [];
+    for (const s of sessionsByDay[selectedKey] ?? []) {
+      const g = groups.find((x) => x.id === s.groupId);
+      if (g) list.push({ kind: 'session', at: s.start, session: s, group: g });
+    }
+    for (const e of eventsByDay[selectedKey] ?? []) {
+      list.push({ kind: 'event', at: e.allDay ? '' : (e.start ?? ''), event: e });
+    }
+    return list.sort((a, b) => a.at.localeCompare(b.at));
+  }, [sessionsByDay, eventsByDay, selectedKey, groups]);
+
+  const weekTotal = weekDays(selected).reduce(
+    (n, d) => n + (sessionsByDay[toKey(d)]?.length ?? 0),
+    0,
   );
-  const weekTotal = Object.values(perDay).reduce((n, s) => n + s.length, 0);
-  const daySessions = perDay[toKey(selected)] ?? [];
 
-  const first = days[0];
-  const last = days[6];
-  const heading =
-    first.getMonth() === last.getMonth()
-      ? `${monthLong(first)} ${first.getFullYear()}`
-      : `${monthShort(first)} – ${monthShort(last)} ${last.getFullYear()}`;
+  const heading = monthMode
+    ? `${monthLong(selected)} ${selected.getFullYear()}`
+    : (() => {
+        const days = weekDays(selected);
+        const [a, b] = [days[0], days[6]];
+        return a.getMonth() === b.getMonth()
+          ? `${monthLong(a)} ${a.getFullYear()}`
+          : `${monthShort(a)} – ${monthShort(b)} ${b.getFullYear()}`;
+      })();
+
+  const step = (n: number) => setSelected((d) => addDays(d, monthMode ? n * 28 : n * 7));
 
   return (
     <Screen>
@@ -65,7 +152,9 @@ export default function Calendar() {
           <View style={{ flex: 1 }}>
             <Text style={[text.pageTitle, styles.ink]}>{heading}</Text>
             <Text style={styles.weekSummary}>
-              {weekTotal} session{weekTotal === 1 ? '' : 's'} this week
+              {monthMode
+                ? 'Drag up to collapse'
+                : `${weekTotal} session${weekTotal === 1 ? '' : 's'} this week`}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -73,73 +162,100 @@ export default function Calendar() {
               name="chevronLeft"
               iconSize={17}
               fg={color.inkSoft}
-              onPress={() => setSelected((d) => addDays(d, -7))}
+              onPress={() => step(-1)}
             />
             <IconButton
               name="chevronRight"
               iconSize={17}
               fg={color.inkSoft}
-              onPress={() => setSelected((d) => addDays(d, 7))}
+              onPress={() => step(1)}
             />
           </View>
         </View>
 
-        <View style={styles.weekStrip}>
-          {days.map((d) => {
-            const on = isSameDay(d, selected);
-            const isToday = isSameDay(d, today);
-            const dots = (perDay[toKey(d)] ?? []).slice(0, 3);
-            return (
-              <Press
-                key={toKey(d)}
-                haptic
-                onPress={() => setSelected(d)}
-                style={[styles.day, on && { backgroundColor: color.primary }]}>
-                <Text
-                  style={[
-                    styles.dayName,
-                    {
-                      color: on ? '#fff' : color.inkSoft,
-                      opacity: on ? 0.75 : 0.7,
-                    },
-                  ]}>
+        <GestureDetector gesture={pan}>
+          <View>
+            <View style={styles.dowRow}>
+              {matrix[0].map((d) => (
+                <Text key={toKey(d)} style={styles.dowLabel}>
                   {dowShort(d)}
                 </Text>
-                <Text style={[styles.dayNum, { color: on ? '#fff' : color.inkSoft }]}>
-                  {d.getDate()}
-                </Text>
-                <View style={styles.dotRow}>
-                  {dots.map((s, i) => {
-                    const g = groups.find((x) => x.id === s.groupId);
-                    return (
-                      <View
-                        key={i}
-                        style={[
-                          styles.dot,
-                          {
-                            backgroundColor: on
-                              ? 'rgba(255,255,255,0.85)'
-                              : g
-                                ? accents[g.accent].dot
-                                : color.dashed,
-                          },
-                        ]}
-                      />
-                    );
-                  })}
-                </View>
-                {isToday && !on ? <View style={styles.todayUnderline} /> : null}
-              </Press>
-            );
-          })}
-        </View>
+              ))}
+            </View>
+
+            <Animated.View style={[styles.gridClip, gridStyle]}>
+              <Animated.View style={innerStyle}>
+                {matrix.map((row) => (
+                  <View key={toKey(row[0])} style={styles.gridRow}>
+                    {row.map((d) => {
+                      const key = toKey(d);
+                      const on = isSameDay(d, selected);
+                      const isToday = isSameDay(d, today);
+                      const outside = monthMode && !isSameMonth(d, selected);
+                      const marks = [
+                        ...(sessionsByDay[key] ?? []).map((s) => {
+                          const g = groups.find((x) => x.id === s.groupId);
+                          return g ? accents[g.accent].dot : color.dashed;
+                        }),
+                        ...(eventsByDay[key] ?? []).map((e) => accents[e.accent].dot),
+                      ].slice(0, 3);
+
+                      return (
+                        <Press
+                          key={key}
+                          haptic
+                          onPress={() => setSelected(d)}
+                          accessibilityLabel={`${dowLong(d)} ${d.getDate()}`}
+                          accessibilityState={{ selected: on }}
+                          style={[styles.day, on && { backgroundColor: color.primary }]}>
+                          <Text
+                            style={[
+                              styles.dayNum,
+                              {
+                                color: on ? '#fff' : color.inkSoft,
+                                opacity: outside ? 0.35 : 1,
+                              },
+                            ]}>
+                            {d.getDate()}
+                          </Text>
+                          <View style={styles.dotRow}>
+                            {marks.map((tint, i) => (
+                              <View
+                                key={i}
+                                style={[
+                                  styles.dot,
+                                  { backgroundColor: on ? 'rgba(255,255,255,0.85)' : tint },
+                                ]}
+                              />
+                            ))}
+                          </View>
+                          {isToday && !on ? <View style={styles.todayUnderline} /> : null}
+                        </Press>
+                      );
+                    })}
+                  </View>
+                ))}
+              </Animated.View>
+            </Animated.View>
+
+            {/* Tap target as well as a visual affordance — a gesture nobody
+                can see is a gesture nobody uses. */}
+            <Press
+              onPress={() => setMonthMode((v) => !v)}
+              style={styles.grabberHit}
+              accessibilityRole="button"
+              accessibilityLabel={monthMode ? 'Collapse to week' : 'Expand to month'}>
+              <View style={styles.grabber} />
+            </Press>
+          </View>
+        </GestureDetector>
       </View>
 
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: space.gutter,
           paddingTop: 18,
-          paddingBottom: bottomInset,
+          paddingBottom: bottomInset + 72,
         }}
         showsVerticalScrollIndicator={false}>
         <View style={styles.dayHead}>
@@ -149,39 +265,105 @@ export default function Calendar() {
               : `${dowLong(selected)} ${selected.getDate()}`}
           </Text>
           <Text style={styles.dayCount}>
-            {daySessions.length
-              ? `${daySessions.length} class${daySessions.length === 1 ? '' : 'es'}`
-              : ''}
+            {entries.length ? `${entries.length} item${entries.length === 1 ? '' : 's'}` : ''}
           </Text>
         </View>
 
-        {daySessions.length === 0 ? (
-          <EmptyState title="No classes" hint="Enjoy the day off" />
+        {entries.length === 0 ? (
+          <EmptyState title="Nothing scheduled" hint="Tap + to add something of your own" />
         ) : (
-          daySessions.map((s, i) => {
-            const g = groups.find((x) => x.id === s.groupId);
-            if (!g) return null;
-            return (
+          entries.map((entry, i) =>
+            entry.kind === 'session' ? (
               <TimelineRow
-                key={`${s.groupId}-${s.start}`}
-                session={s}
-                group={g}
-                count={students.filter((x) => x.groupIds.includes(g.id)).length}
-                last={i === daySessions.length - 1}
+                key={`s-${entry.session.groupId}-${entry.session.start}`}
+                session={entry.session}
+                group={entry.group}
+                count={students.filter((x) => x.groupIds.includes(entry.group.id)).length}
+                last={i === entries.length - 1}
                 onAttendance={() =>
                   router.push({
                     pathname: '/attendance',
-                    params: { group: g.id, date: s.date, start: s.start },
+                    params: {
+                      group: entry.group.id,
+                      date: entry.session.date,
+                      start: entry.session.start,
+                    },
                   })
                 }
-                onNotify={() => router.push({ pathname: '/compose', params: { group: g.id } })}
-                onOpen={() => router.push(`/group/${g.id}`)}
+                onNotify={() =>
+                  router.push({ pathname: '/compose', params: { group: entry.group.id } })
+                }
+                onOpen={() => router.push(`/group/${entry.group.id}`)}
               />
-            );
-          })
+            ) : (
+              <EventRow
+                key={`e-${entry.event.id}`}
+                event={entry.event}
+                last={i === entries.length - 1}
+                onOpen={() => router.push(`/event/new?id=${entry.event.id}`)}
+              />
+            ),
+          )
         )}
       </ScrollView>
+
+      <Press
+        haptic
+        onPress={() => router.push(`/event/new?date=${selectedKey}`)}
+        style={[styles.fab, { bottom: bottomInset + 12 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Add an event">
+        <Icon name="plusLarge" size={23} color="#fff" />
+      </Press>
     </Screen>
+  );
+}
+
+/** A personal calendar entry. Visually lighter than a class, and has no actions. */
+function EventRow({
+  event,
+  last,
+  onOpen,
+}: {
+  event: CalendarEvent;
+  last: boolean;
+  onOpen: () => void;
+}) {
+  const { accents } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const a = accents[event.accent];
+
+  return (
+    <View style={styles.timelineRow}>
+      <View style={styles.timeCol}>
+        {event.allDay ? (
+          <Text style={styles.timeEnd}>All day</Text>
+        ) : (
+          <>
+            <Text style={styles.timeStart}>{event.start}</Text>
+            <Text style={styles.timeEnd}>{event.end}</Text>
+          </>
+        )}
+      </View>
+
+      <View style={styles.rail}>
+        <View style={[styles.railDot, styles.railDotHollow, { borderColor: a.dot }]} />
+        {!last ? <View style={styles.railLine} /> : null}
+      </View>
+
+      <View style={{ flex: 1, minWidth: 0, paddingBottom: 12 }}>
+        <Press onPress={onOpen} style={[styles.eventCard, { borderLeftColor: a.dot }]}>
+          <Text style={styles.sessionName} numberOfLines={1}>
+            {event.title}
+          </Text>
+          {event.note ? (
+            <Text style={styles.sessionMeta} numberOfLines={2}>
+              {event.note}
+            </Text>
+          ) : null}
+        </Press>
+      </View>
+    </View>
   );
 }
 
@@ -249,7 +431,7 @@ function TimelineRow({
   );
 }
 
-const makeStyles = ({ color }: Theme) =>
+const makeStyles = ({ color, shadow }: Theme) =>
   StyleSheet.create({
     /** Default body ink. Text does not inherit colour from a parent View. */
     ink: { color: color.ink },
@@ -272,37 +454,40 @@ const makeStyles = ({ color }: Theme) =>
       marginTop: 3,
     },
 
-    weekStrip: {
-      flexDirection: 'row',
-      gap: 6,
-      paddingHorizontal: 16,
-      paddingBottom: 14,
-    },
-    day: {
+    dowRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingBottom: 6 },
+    dowLabel: {
       flex: 1,
-      alignItems: 'center',
-      gap: 6,
-      paddingTop: 9,
-      paddingBottom: 8,
-      borderRadius: radius.button,
-    },
-    dayName: {
+      textAlign: 'center',
       fontFamily: body[700],
       fontSize: 10.5,
       letterSpacing: 0.63,
       textTransform: 'uppercase',
+      color: color.mutedLight,
+    },
+
+    gridClip: { overflow: 'hidden', paddingHorizontal: 16 },
+    gridRow: { flexDirection: 'row', gap: 6, height: ROW_H },
+    day: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      borderRadius: radius.button,
     },
     dayNum: { fontFamily: display[600], fontSize: 17, ...text.tabular },
     dotRow: { flexDirection: 'row', gap: 3, height: 5 },
     dot: { width: 5, height: 5, borderRadius: 2.5 },
     todayUnderline: {
       position: 'absolute',
-      bottom: 3,
+      bottom: 8,
       width: 14,
       height: 2,
       borderRadius: 1,
       backgroundColor: color.primary,
     },
+
+    grabberHit: { alignItems: 'center', paddingTop: 4, paddingBottom: 10 },
+    grabber: { width: 38, height: 4, borderRadius: 2, backgroundColor: color.dashed },
 
     dayHead: {
       flexDirection: 'row',
@@ -334,9 +519,20 @@ const makeStyles = ({ color }: Theme) =>
 
     rail: { width: 12, alignItems: 'center' },
     railDot: { width: 10, height: 10, borderRadius: 5, marginTop: 18 },
+    // Hollow marks a personal entry, so a glance separates it from a class.
+    railDotHollow: { backgroundColor: 'transparent', borderWidth: 2.5 },
     railLine: { flex: 1, width: 2, backgroundColor: color.border },
 
     sessionCard: {
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+      borderLeftWidth: 4,
+      borderRadius: radius.button,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+    eventCard: {
       backgroundColor: color.surface,
       borderWidth: 1,
       borderColor: color.border,
@@ -390,5 +586,17 @@ const makeStyles = ({ color }: Theme) =>
       fontFamily: body[600],
       fontSize: 12.5,
       color: color.inkSoft,
+    },
+
+    fab: {
+      position: 'absolute',
+      right: 18,
+      width: 54,
+      height: 54,
+      borderRadius: radius.fab,
+      backgroundColor: color.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...shadow.fab,
     },
   });

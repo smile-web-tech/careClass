@@ -132,3 +132,25 @@ export function timeAgo(ts: number, now = Date.now()) {
   if (days < 7) return dowShort(new Date(ts));
   return shortDate(new Date(ts));
 }
+
+/**
+ * The 6×7 grid a month view renders: whole weeks, padded with the tail of the
+ * previous month and the head of the next so every row has seven cells.
+ *
+ * Always six rows, never five — a grid that changes height as you page through
+ * months makes the content below it jump.
+ */
+export function monthMatrix(anchor: Date): Date[][] {
+  const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const start = startOfWeek(first);
+  return Array.from({ length: 6 }, (_, w) =>
+    Array.from({ length: 7 }, (_, d) => addDays(start, w * 7 + d)),
+  );
+}
+
+/** Same calendar month and year — used to dim the padding days in a month grid. */
+export const isSameMonth = (a: Date, b: Date) =>
+  a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear();
+
+/** `2026-08-04` → a readable `4 Aug`. */
+export const dayMonth = (d: Date) => `${d.getDate()} ${monthShort(d)}`;

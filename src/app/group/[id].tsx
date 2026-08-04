@@ -88,8 +88,20 @@ export default function GroupDetail() {
               onPress={() => router.back()}
             />
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <IconButton name="pencil" iconSize={18} tint="rgba(255,255,255,0.14)" fg="#fff" />
-              <IconButton name="more" iconSize={18} tint="rgba(255,255,255,0.14)" fg="#fff" />
+              <IconButton
+                name="pencil"
+                iconSize={18}
+                tint="rgba(255,255,255,0.14)"
+                fg="#fff"
+                onPress={() => router.push(`/group/edit?id=${group.id}`)}
+              />
+              <IconButton
+                name="more"
+                iconSize={18}
+                tint="rgba(255,255,255,0.14)"
+                fg="#fff"
+                onPress={() => router.push(`/group/edit?id=${group.id}`)}
+              />
             </View>
           </View>
 
