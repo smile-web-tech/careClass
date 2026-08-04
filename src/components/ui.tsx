@@ -17,7 +17,14 @@ import {
 } from 'react-native';
 
 import { Icon, type IconName } from '@/components/Icon';
-import { accents, type AccentName, color, PRESS_OPACITY, radius, shadow } from '@/theme/tokens';
+import {
+  PRESS_OPACITY,
+  radius,
+  useTheme,
+  useThemedStyles,
+  type AccentName,
+  type Theme,
+} from '@/theme';
 import { body, text } from '@/theme/type';
 
 /* -------------------------------------------------------------------------- */
@@ -30,12 +37,14 @@ import { body, text } from '@/theme/type';
  * to the system font the moment a style is overridden.
  */
 export function Txt({ style, ...rest }: TextProps) {
+  const styles = useThemedStyles(makeStyles);
   return <Text style={[styles.txt, style]} {...rest} />;
 }
 
 /** Small-caps section label ("TO", "RECIPIENTS", "CONTACT"). */
 export function Overline({ style, ...rest }: TextProps) {
-  return <Text style={[text.overline, style]} {...rest} />;
+  const { color } = useTheme();
+  return <Text style={[text.overline, { color: color.mutedLight }, style]} {...rest} />;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -62,9 +71,9 @@ export const Press = forwardRef<View, PressProps>(function Press(
       disabled={disabled}
       onPress={(e) => {
         if (haptic && Platform.OS !== 'web') {
-          Haptics.impactAsync(
-            haptic === true ? Haptics.ImpactFeedbackStyle.Light : haptic,
-          ).catch(() => {});
+          Haptics.impactAsync(haptic === true ? Haptics.ImpactFeedbackStyle.Light : haptic).catch(
+            () => {},
+          );
         }
         onPress?.(e);
       }}
@@ -84,11 +93,13 @@ export const Press = forwardRef<View, PressProps>(function Press(
 
 /** White surface, 1px cool border, 16px radius — the app's default container. */
 export function Card({ style, ...rest }: ViewProps) {
+  const styles = useThemedStyles(makeStyles);
   return <View style={[styles.card, style]} {...rest} />;
 }
 
 /** Hairline used inside cards. `inset` matches the design's `margin-left`. */
 export function Divider({ inset = 0 }: { inset?: number }) {
+  const styles = useThemedStyles(makeStyles);
   return <View style={[styles.divider, { marginLeft: inset }]} />;
 }
 
@@ -109,16 +120,15 @@ type ButtonProps = {
   grow?: boolean;
 };
 
-const BUTTON_SKINS: Record<
-  NonNullable<ButtonProps['variant']>,
-  { bg: string; fg: string; border?: string }
-> = {
+const buttonSkins = (
+  color: Theme['color'],
+): Record<NonNullable<ButtonProps['variant']>, { bg: string; fg: string; border?: string }> => ({
   solid: { bg: color.primary, fg: '#fff' },
   success: { bg: color.success, fg: '#fff' },
   outline: { bg: color.surface, fg: color.ink, border: color.border },
   tonal: { bg: color.primaryTint, fg: color.primaryInk },
   ghost: { bg: 'transparent', fg: color.primary },
-};
+});
 
 export function Button({
   label,
@@ -130,7 +140,9 @@ export function Button({
   grow,
   style,
 }: ButtonProps) {
-  const skin = BUTTON_SKINS[variant];
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const skin = buttonSkins(color)[variant];
   const bg = disabled && variant === 'solid' ? color.borderStrong : skin.bg;
 
   return (
@@ -160,8 +172,8 @@ export function IconButton({
   onPress,
   size = 40,
   iconSize = 18,
-  tint = color.bg,
-  fg = color.ink,
+  tint: tintProp,
+  fg: fgProp,
   strokeWidth,
   radius: r = radius.control,
   style,
@@ -176,6 +188,10 @@ export function IconButton({
   radius?: number;
   style?: ViewStyle;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const tint = tintProp ?? color.fill;
+  const fg = fgProp ?? color.ink;
   return (
     <Press
       onPress={onPress}
@@ -217,6 +233,8 @@ export function Avatar({
   fontSize?: number;
   style?: ViewStyle;
 }) {
+  const { accents } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const a = accents[accent];
   return (
     <View
@@ -264,6 +282,7 @@ export function Badge({
   style?: ViewStyle;
   textStyle?: TextStyle;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.badge, { backgroundColor: bg }, style as ViewStyle]}>
       {dot ? <View style={[styles.badgeDot, { backgroundColor: dot }]} /> : null}
@@ -289,6 +308,8 @@ export function SelectChip({
   onPress: () => void;
   height?: number;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Press
       haptic
@@ -343,6 +364,8 @@ export function StatTile({
   tone?: string;
   fontSize?: number;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Card style={styles.statTile}>
       <Text style={[text.stat, { fontSize, color: tone ?? color.ink }]}>{value}</Text>
@@ -361,6 +384,8 @@ export function FieldRow({
   labelWidth = 74,
   ...input
 }: TextInputProps & { label: string; labelWidth?: number }) {
+  const { color, scheme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.fieldRow}>
       <Text style={[styles.fieldLabel, { width: labelWidth }]}>{label}</Text>
@@ -368,6 +393,8 @@ export function FieldRow({
         placeholderTextColor={color.faint}
         style={styles.fieldInput}
         {...input}
+        selectionColor={color.primary}
+        keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
       />
     </View>
   );
@@ -375,6 +402,8 @@ export function FieldRow({
 
 /** iOS-style switch drawn to the design's exact geometry. */
 export function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Press
       haptic
@@ -401,6 +430,8 @@ export function Segmented<T extends string>({
   value: T;
   onChange: (key: T) => void;
 }) {
+  const { color, shadow } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.segmentTrack}>
       {options.map((o) => {
@@ -410,10 +441,7 @@ export function Segmented<T extends string>({
             key={o.key}
             haptic
             onPress={() => onChange(o.key)}
-            style={[
-              styles.segment,
-              on && { backgroundColor: color.surface, ...shadow.segment },
-            ]}>
+            style={[styles.segment, on && { backgroundColor: color.surface, ...shadow.segment }]}>
             <Text
               style={{
                 fontFamily: on ? body[700] : body[600],
@@ -434,13 +462,22 @@ export function Segmented<T extends string>({
 /* -------------------------------------------------------------------------- */
 
 /** The three-bar ClassCare mark. Scales from the 38px header to the 46px hero. */
-export function Logo({ size = 46, tint = color.primary }: { size?: number; tint?: string }) {
+export function Logo({ size = 46, tint: tintProp }: { size?: number; tint?: string }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const tint = tintProp ?? color.primary;
   const u = size / 46;
   return (
     <View
       style={[
         styles.center,
-        { width: size, height: size, borderRadius: 14 * u, backgroundColor: tint, gap: 3 * u },
+        {
+          width: size,
+          height: size,
+          borderRadius: 14 * u,
+          backgroundColor: tint,
+          gap: 3 * u,
+        },
       ]}>
       {[
         [20, 1],
@@ -464,6 +501,7 @@ export function Logo({ size = 46, tint = color.primary }: { size?: number; tint?
 
 /** Centered "nothing here" state used by search and empty calendar days. */
 export function EmptyState({ title, hint }: { title: string; hint: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
@@ -484,6 +522,7 @@ export function Section({
   children: ReactNode;
   style?: ViewStyle;
 }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={style}>
       <View style={styles.sectionHead}>
@@ -495,93 +534,121 @@ export function Section({
   );
 }
 
-const styles = StyleSheet.create({
-  txt: { fontFamily: body[400], color: color.ink },
-  center: { alignItems: 'center', justifyContent: 'center' },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    txt: { fontFamily: body[400], color: color.ink },
+    center: { alignItems: 'center', justifyContent: 'center' },
 
-  card: {
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    borderRadius: radius.card,
-  },
-  divider: { height: 1, backgroundColor: color.divider },
+    card: {
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+      borderRadius: radius.card,
+    },
+    divider: { height: 1, backgroundColor: color.divider },
 
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: radius.button,
-    paddingHorizontal: 20,
-  },
+    button: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: radius.button,
+      paddingHorizontal: 20,
+    },
 
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.sm,
-  },
-  badgeDot: { width: 7, height: 7, borderRadius: 2 },
-  badgeText: { fontFamily: body[700], fontSize: 11.5 },
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: radius.sm,
+    },
+    badgeDot: { width: 7, height: 7, borderRadius: 2 },
+    badgeText: { fontFamily: body[700], fontSize: 11.5 },
 
-  selectChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 13,
-    borderWidth: 1.5,
-  },
-  chipDot: { width: 8, height: 8, borderRadius: 3 },
+    selectChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 13,
+      borderWidth: 1.5,
+    },
+    chipDot: { width: 8, height: 8, borderRadius: 3 },
 
-  statTile: { flex: 1, borderRadius: radius.tile - 1, paddingHorizontal: 12, paddingVertical: 13 },
-  statLabel: { fontFamily: body[600], fontSize: 11, color: color.mutedLight, marginTop: 3 },
+    statTile: {
+      flex: 1,
+      borderRadius: radius.tile - 1,
+      paddingHorizontal: 12,
+      paddingVertical: 13,
+    },
+    statLabel: {
+      fontFamily: body[600],
+      fontSize: 11,
+      color: color.mutedLight,
+      marginTop: 3,
+    },
 
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, paddingVertical: 12 },
-  fieldLabel: { fontFamily: body[700], fontSize: 12.5, color: color.muted },
-  fieldInput: {
-    flex: 1,
-    minWidth: 0,
-    fontFamily: body[600],
-    fontSize: 15,
-    color: color.ink,
-    padding: 0,
-  },
+    fieldRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 15,
+      paddingVertical: 12,
+    },
+    fieldLabel: { fontFamily: body[700], fontSize: 12.5, color: color.muted },
+    fieldInput: {
+      flex: 1,
+      minWidth: 0,
+      fontFamily: body[600],
+      fontSize: 15,
+      color: color.ink,
+      padding: 0,
+    },
 
-  toggle: { width: 50, height: 30, borderRadius: 15, padding: 3, flexDirection: 'row' },
-  toggleKnob: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    boxShadow: '0 1px 4px rgba(12,23,41,0.2)',
-  },
+    toggle: {
+      width: 50,
+      height: 30,
+      borderRadius: 15,
+      padding: 3,
+      flexDirection: 'row',
+    },
+    toggleKnob: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: '#fff',
+      boxShadow: '0 1px 4px rgba(12,23,41,0.2)',
+    },
 
-  segmentTrack: {
-    flexDirection: 'row',
-    gap: 4,
-    padding: 4,
-    backgroundColor: color.canvas,
-    borderRadius: radius.button,
-  },
-  segment: {
-    flex: 1,
-    height: 42,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    segmentTrack: {
+      flexDirection: 'row',
+      gap: 4,
+      padding: 4,
+      backgroundColor: color.canvas,
+      borderRadius: radius.button,
+    },
+    segment: {
+      flex: 1,
+      height: 42,
+      borderRadius: radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  empty: { alignItems: 'center', gap: 5, paddingVertical: 40, paddingHorizontal: 20 },
-  emptyTitle: { fontFamily: body[700], fontSize: 15, color: color.inkSoft },
-  emptyHint: { fontFamily: body[400], fontSize: 13, color: color.mutedLight },
+    empty: {
+      alignItems: 'center',
+      gap: 5,
+      paddingVertical: 40,
+      paddingHorizontal: 20,
+    },
+    emptyTitle: { fontFamily: body[700], fontSize: 15, color: color.inkSoft },
+    emptyHint: { fontFamily: body[400], fontSize: 13, color: color.mutedLight },
 
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-});
+    sectionHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+  });

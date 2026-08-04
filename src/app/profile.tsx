@@ -14,7 +14,7 @@ import { signOut } from '@/lib/auth';
 import { weekDays } from '@/lib/date';
 import { sessionsForWeek } from '@/lib/schedule';
 import { hasSupabase } from '@/lib/supabase';
-import { color, radius, space } from '@/theme/tokens';
+import { radius, space, useTheme, useThemedStyles, type Theme, type ThemePref } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -25,6 +25,8 @@ const PROVIDER_LABEL: Record<string, string> = {
 };
 
 export default function Profile() {
+  const { color, scheme, status } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -43,10 +45,7 @@ export default function Profile() {
   const [busy, setBusy] = useState(false);
 
   const live = hasSupabase && !demo;
-  const timezone = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
-    [],
-  );
+  const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', []);
 
   const sessionsThisWeek = useMemo(() => {
     const week = sessionsForWeek(groups, weekDays(new Date()));
@@ -166,8 +165,15 @@ export default function Profile() {
                 returnKeyType="done"
                 onSubmitEditing={saveName}
                 style={styles.nameInput}
+                selectionColor={color.primary}
+                keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
               />
-              <Button label="Save" height={40} onPress={saveName} style={{ paddingHorizontal: 16 }} />
+              <Button
+                label="Save"
+                height={40}
+                onPress={saveName}
+                style={{ paddingHorizontal: 16 }}
+              />
             </View>
           ) : (
             <Press
@@ -203,12 +209,11 @@ export default function Profile() {
           <Divider inset={58} />
           <InfoRow icon="tabCalendar" label="Time zone" value={timezone} />
           <Divider inset={58} />
-          <InfoRow
-            icon="chat"
-            label="Messages sent"
-            value={`${messages.length} in your history`}
-          />
+          <InfoRow icon="chat" label="Messages sent" value={`${messages.length} in your history`} />
         </Card>
+
+        <Overline style={styles.label}>Appearance</Overline>
+        <ThemePicker />
 
         <Overline style={styles.label}>Data</Overline>
         <Card style={styles.group}>
@@ -251,7 +256,7 @@ export default function Profile() {
                 icon="warning"
                 label={busy ? 'Deleting…' : 'Delete all my data'}
                 hint="Groups, students, attendance, messages — permanently"
-                tint="#FCEBEC"
+                tint={status.absent.tint}
                 fg={color.danger}
                 labelColor={color.dangerDeep}
                 onPress={busy ? undefined : confirmDelete}
@@ -276,9 +281,7 @@ export default function Profile() {
         )}
 
         {live ? (
-          <Press
-            onPress={() => hydrate().catch(() => {})}
-            style={styles.refresh}>
+          <Press onPress={() => hydrate().catch(() => {})} style={styles.refresh}>
             <Text style={styles.refreshLabel}>Refresh from server</Text>
           </Press>
         ) : null}
@@ -290,6 +293,8 @@ export default function Profile() {
 }
 
 function InfoRow({ icon, label, value }: { icon: IconName; label: string; value: string }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       <View style={styles.rowIcon}>
@@ -305,14 +310,66 @@ function InfoRow({ icon, label, value }: { icon: IconName; label: string; value:
   );
 }
 
+const THEME_OPTIONS: {
+  key: ThemePref;
+  label: string;
+  icon: IconName;
+  hint: string;
+}[] = [
+  { key: 'light', label: 'Light', icon: 'sun', hint: 'Always light' },
+  { key: 'dark', label: 'Dark', icon: 'moon', hint: 'Always dark' },
+  { key: 'system', label: 'System', icon: 'phone', hint: 'Match the phone' },
+];
+
+/**
+ * Light / Dark / System. `System` keeps following the OS as it changes, so a
+ * phone on auto-dark flips this app with it at sunset without a second tap.
+ */
+function ThemePicker() {
+  const { color, pref, scheme, setPref } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <>
+      <View style={styles.themeRow}>
+        {THEME_OPTIONS.map((opt) => {
+          const on = pref === opt.key;
+          return (
+            <Press
+              key={opt.key}
+              haptic
+              onPress={() => setPref(opt.key)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`${opt.label} theme`}
+              style={[styles.themeCard, on && styles.themeCardOn]}>
+              <View style={[styles.themeIcon, on && styles.themeIconOn]}>
+                <Icon name={opt.icon} size={18} color={on ? color.primaryInk : color.mutedLight} />
+              </View>
+              <Text style={[styles.themeLabel, on && styles.themeLabelOn]}>{opt.label}</Text>
+              <Text style={styles.themeHint} numberOfLines={1}>
+                {opt.hint}
+              </Text>
+            </Press>
+          );
+        })}
+      </View>
+      {/* Only meaningful under `system` — otherwise the chosen card says it. */}
+      {pref === 'system' ? (
+        <Text style={styles.themeFootnote}>Following your phone, currently {scheme}.</Text>
+      ) : null}
+    </>
+  );
+}
+
 function ActionRow({
   icon,
   label,
   hint,
   onPress,
-  tint = color.bg,
-  fg = color.inkSoft,
-  labelColor = color.ink,
+  tint: tintProp,
+  fg: fgProp,
+  labelColor: labelColorProp,
 }: {
   icon: IconName;
   label: string;
@@ -322,6 +379,11 @@ function ActionRow({
   fg?: string;
   labelColor?: string;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const tint = tintProp ?? color.fill;
+  const fg = fgProp ?? color.inkSoft;
+  const labelColor = labelColorProp ?? color.ink;
   return (
     <Press onPress={onPress} disabled={!onPress} style={styles.row}>
       <View style={[styles.rowIcon, { backgroundColor: tint }]}>
@@ -338,87 +400,172 @@ function ActionRow({
   );
 }
 
-const styles = StyleSheet.create({
-  identity: { alignItems: 'center', paddingTop: 8, paddingBottom: 22 },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 30,
-    backgroundColor: color.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: { width: 88, height: 88, borderRadius: 30, backgroundColor: color.primaryTint },
-  avatarInitials: { fontFamily: display[600], fontSize: 30, color: '#fff' },
+const makeStyles = ({ color, status }: Theme) =>
+  StyleSheet.create({
+    identity: { alignItems: 'center', paddingTop: 8, paddingBottom: 22 },
+    avatar: {
+      width: 88,
+      height: 88,
+      borderRadius: 30,
+      backgroundColor: color.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarImage: {
+      width: 88,
+      height: 88,
+      borderRadius: 30,
+      backgroundColor: color.primaryTint,
+    },
+    avatarInitials: { fontFamily: display[600], fontSize: 30, color: '#fff' },
 
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
-  name: { ...text.pageTitle },
-  editRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, width: '100%' },
-  nameInput: {
-    flex: 1,
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: radius.control,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    fontFamily: body[600],
-    fontSize: 16,
-    color: color.ink,
-  },
-  email: { fontFamily: body[400], fontSize: 13.5, color: color.muted, marginTop: 6 },
-  providerPill: {
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.md,
-    backgroundColor: color.primaryTint,
-  },
-  providerPillDemo: { backgroundColor: '#FBEFDC' },
-  providerLabel: { fontFamily: body[600], fontSize: 12, color: color.primaryInk },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 16,
+    },
+    name: { ...text.pageTitle, color: color.ink },
+    editRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 16,
+      width: '100%',
+    },
+    nameInput: {
+      flex: 1,
+      height: 44,
+      paddingHorizontal: 14,
+      borderRadius: radius.control,
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+      fontFamily: body[600],
+      fontSize: 16,
+      color: color.ink,
+    },
+    email: {
+      fontFamily: body[400],
+      fontSize: 13.5,
+      color: color.muted,
+      marginTop: 6,
+    },
+    providerPill: {
+      marginTop: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: radius.md,
+      backgroundColor: color.primaryTint,
+    },
+    providerPillDemo: { backgroundColor: status.late.tint },
 
-  statRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
-  label: { marginBottom: 10 },
-  group: { overflow: 'hidden', marginBottom: 22 },
+    themeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
+    themeCard: {
+      flex: 1,
+      backgroundColor: color.surface,
+      borderWidth: 1.5,
+      borderColor: color.border,
+      borderRadius: radius.card,
+      paddingVertical: 14,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+      gap: 7,
+    },
+    themeCardOn: {
+      borderColor: color.primary,
+      backgroundColor: color.primaryTint,
+    },
+    themeIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: radius.control,
+      backgroundColor: color.fill,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    themeIconOn: { backgroundColor: color.surface },
+    themeLabel: { fontFamily: body[700], fontSize: 14, color: color.ink },
+    themeLabelOn: { color: color.primaryInk },
+    themeHint: {
+      fontFamily: body[500],
+      fontSize: 10.5,
+      color: color.mutedLight,
+    },
+    themeFootnote: {
+      fontFamily: body[500],
+      fontSize: 12,
+      color: color.mutedLight,
+      marginTop: 8,
+      marginBottom: 2,
+    },
+    providerLabel: {
+      fontFamily: body[600],
+      fontSize: 12,
+      color: color.primaryInk,
+    },
 
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  rowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.md,
-    backgroundColor: color.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowLabel: {
-    fontFamily: body[700],
-    fontSize: 10.5,
-    letterSpacing: 0.84,
-    textTransform: 'uppercase',
-    color: color.mutedLight,
-  },
-  rowValue: { fontFamily: body[600], fontSize: 14.5, color: color.ink, marginTop: 2 },
-  actionLabel: { fontFamily: body[700], fontSize: 14.5 },
-  actionHint: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight, marginTop: 2 },
+    statRow: { flexDirection: 'row', gap: 10, marginBottom: 22 },
+    label: { marginBottom: 10 },
+    group: { overflow: 'hidden', marginBottom: 22 },
 
-  demoCard: { padding: 18, marginBottom: 22 },
-  demoTitle: { fontFamily: body[700], fontSize: 15, color: color.ink },
-  demoHint: { fontSize: 13.5, lineHeight: 20, color: color.muted, marginTop: 5 },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 13,
+    },
+    rowIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.md,
+      backgroundColor: color.fill,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowLabel: {
+      fontFamily: body[700],
+      fontSize: 10.5,
+      letterSpacing: 0.84,
+      textTransform: 'uppercase',
+      color: color.mutedLight,
+    },
+    rowValue: {
+      fontFamily: body[600],
+      fontSize: 14.5,
+      color: color.ink,
+      marginTop: 2,
+    },
+    actionLabel: { fontFamily: body[700], fontSize: 14.5 },
+    actionHint: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      marginTop: 2,
+    },
 
-  refresh: { height: 44, alignItems: 'center', justifyContent: 'center' },
-  refreshLabel: { fontFamily: body[600], fontSize: 13.5, color: color.primary },
+    demoCard: { padding: 18, marginBottom: 22 },
+    demoTitle: { fontFamily: body[700], fontSize: 15, color: color.ink },
+    demoHint: {
+      fontSize: 13.5,
+      lineHeight: 20,
+      color: color.muted,
+      marginTop: 5,
+    },
 
-  version: {
-    fontFamily: body[400],
-    fontSize: 11.5,
-    color: color.faint,
-    textAlign: 'center',
-    marginTop: 12,
-  },
-});
+    refresh: { height: 44, alignItems: 'center', justifyContent: 'center' },
+    refreshLabel: {
+      fontFamily: body[600],
+      fontSize: 13.5,
+      color: color.primary,
+    },
+
+    version: {
+      fontFamily: body[400],
+      fontSize: 11.5,
+      color: color.faint,
+      textAlign: 'center',
+      marginTop: 12,
+    },
+  });

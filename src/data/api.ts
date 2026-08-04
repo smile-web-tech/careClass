@@ -61,7 +61,12 @@ const toStudent = (row: StudentRow, groupIds: string[]): Student => ({
   groupIds,
 });
 
-const toMessage = (row: MessageRow, groupIds: string[], delivered: number, total: number): Message => ({
+const toMessage = (
+  row: MessageRow,
+  groupIds: string[],
+  delivered: number,
+  total: number,
+): Message => ({
   id: row.id,
   groupIds,
   audience: row.audience,
@@ -279,15 +284,18 @@ export async function createGroup(group: Omit<Group, 'id'>): Promise<Group> {
 
   if (group.slots.length) {
     unwrap(
-      await supabase.from('group_slots').insert(
-        group.slots.map((s) => ({
-          group_id: row.id,
-          teacher_id: teacherId,
-          weekday: s.day,
-          starts_at: s.start,
-          ends_at: s.end,
-        })),
-      ).select(),
+      await supabase
+        .from('group_slots')
+        .insert(
+          group.slots.map((s) => ({
+            group_id: row.id,
+            teacher_id: teacherId,
+            weekday: s.day,
+            starts_at: s.start,
+            ends_at: s.end,
+          })),
+        )
+        .select(),
     );
   }
 
@@ -316,13 +324,16 @@ export async function createStudent(student: Omit<Student, 'id'>): Promise<Stude
 
   if (student.groupIds.length) {
     unwrap(
-      await supabase.from('student_groups').insert(
-        student.groupIds.map((group_id) => ({
-          student_id: row.id,
-          group_id,
-          teacher_id: teacherId,
-        })),
-      ).select(),
+      await supabase
+        .from('student_groups')
+        .insert(
+          student.groupIds.map((group_id) => ({
+            student_id: row.id,
+            group_id,
+            teacher_id: teacherId,
+          })),
+        )
+        .select(),
     );
   }
 
@@ -337,8 +348,12 @@ export async function updateStudent(id: string, patch: Partial<Student>) {
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.phone !== undefined && { phone: patch.phone }),
         ...(patch.email !== undefined && { email: patch.email ?? null }),
-        ...(patch.parentName !== undefined && { parent_name: patch.parentName ?? null }),
-        ...(patch.parentPhone !== undefined && { parent_phone: patch.parentPhone ?? null }),
+        ...(patch.parentName !== undefined && {
+          parent_name: patch.parentName ?? null,
+        }),
+        ...(patch.parentPhone !== undefined && {
+          parent_phone: patch.parentPhone ?? null,
+        }),
         ...(patch.note !== undefined && { note: patch.note ?? null }),
       })
       .eq('id', id)
@@ -350,9 +365,16 @@ export async function updateStudent(id: string, patch: Partial<Student>) {
     unwrap(await supabase.from('student_groups').delete().eq('student_id', id).select());
     if (patch.groupIds.length) {
       unwrap(
-        await supabase.from('student_groups').insert(
-          patch.groupIds.map((group_id) => ({ student_id: id, group_id, teacher_id: teacherId })),
-        ).select(),
+        await supabase
+          .from('student_groups')
+          .insert(
+            patch.groupIds.map((group_id) => ({
+              student_id: id,
+              group_id,
+              teacher_id: teacherId,
+            })),
+          )
+          .select(),
       );
     }
   }
@@ -395,7 +417,9 @@ export async function saveAttendance(
   unwrap(
     await supabase
       .from('attendance')
-      .upsert(rows, { onConflict: 'group_id,session_date,starts_at,student_id' })
+      .upsert(rows, {
+        onConflict: 'group_id,session_date,starts_at,student_id',
+      })
       .select(),
   );
 }
@@ -416,7 +440,9 @@ export async function sendMessage(input: {
   body: string;
   announcement?: boolean;
 }) {
-  const { data, error } = await supabase.functions.invoke('send-message', { body: input });
+  const { data, error } = await supabase.functions.invoke('send-message', {
+    body: input,
+  });
   if (error) throw new Error(error.message);
   return data as { messageId: string; queued: number };
 }

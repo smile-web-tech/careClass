@@ -54,7 +54,19 @@
       "Bash(curl -s -X POST https://epemnrnptzqarfsyvcxs.supabase.co/rest/v1/students -H 'apikey: sb_publishable_eFxapQM6joXkWoF9X74EnA_HDVQynt9' -H 'Authorization: Bearer sb_publishable_eFxapQM6joXkWoF9X74EnA_HDVQynt9' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"teacher_id\":\"00000000-0000-0000-0000-000000000000\",\"name\":\"RLS probe\",\"phone\":\"+000\"}' -w '\\\\nHTTP %{http_code}\\\\n')",
       "Bash(/home/ysmayyl/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome --headless=new --disable-gpu --no-sandbox --disable-dev-shm-usage --hide-scrollbars --remote-debugging-port=9222 --user-data-dir=/tmp/claude-1000/-home-ysmayyl-AndroidStudioProjects-careClass/7fff1052-04d4-4ea7-874b-62481e3d6b92/scratchpad/cp3 about:blank)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('enabled:', ', '.join\\(sorted\\(k for k,v in d.get\\('external',{}\\).items\\(\\) if v\\)\\)\\)\")",
-      "Bash(grep -oE \"\\\\.[a-zA-Z]+$\")"
+      "Bash(grep -oE \"\\\\.[a-zA-Z]+$\")",
+      "Bash(awk 'NR>=100 && NR<=165 && /^  [a-zA-Z]+: \\\\{/ {print NR\": \"$0}' src/theme/type.ts)",
+      "Bash(npx tsc *)",
+      "Bash(awk 'NR<=160 && /^\\(export \\)?\\(default \\)?function |^function |^const [A-Z]/ {n=NR; l=$0} END{}' 'src/app/\\(tabs\\)/students.tsx')",
+      "Bash(awk 'NR<=160 && \\(/^function /||/^export function /||/^export default function /\\) {n=NR; l=$0} END {print n\": \"l}' 'src/app/\\(tabs\\)/students.tsx')",
+      "Bash(awk 'NR<=494 && /^  [a-zA-Z]+: \\\\{/ {k=$1} NR==494 {print \"profile.tsx:494 key =\", k}' src/app/profile.tsx)",
+      "Bash(python3 -c \"import json;d=json.load\\(open\\('app.json'\\)\\)['expo'];print\\('userInterfaceStyle:',d.get\\('userInterfaceStyle'\\)\\);print\\('android.userInterfaceStyle:',d.get\\('android',{}\\).get\\('userInterfaceStyle'\\)\\);print\\('ios.userInterfaceStyle:',d.get\\('ios',{}\\).get\\('userInterfaceStyle'\\)\\);print\\('plugins:',[p if isinstance\\(p,str\\) else p[0] for p in d.get\\('plugins',[]\\)]\\)\")",
+      "Bash(export EXPO_TOKEN=ovtHs-qZuLSdz4VEy4Z-IZuzm2FKp49TGRyqXyDm)",
+      "Bash(npx eas *)",
+      "Bash(npx --yes eas-cli@latest build -p android --profile development --non-interactive --no-wait)",
+      "Bash(npx --yes eas-cli@latest build:wait --id 38e6cb8f-19e4-4b09-b756-31718d2b5f7e)",
+      "Bash(npx --yes eas-cli@latest build:view 38e6cb8f-19e4-4b09-b756-31718d2b5f7e)",
+      "Bash(npx --yes prettier@3 --write \"src/**/*.{ts,tsx}\")"
     ]
   }
 }

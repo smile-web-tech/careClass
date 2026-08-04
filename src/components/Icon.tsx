@@ -43,7 +43,11 @@ const GLYPHS = {
     ],
   },
   chat: { box: 18, sw: 1.7, d: ['M2.5 4.5h13v9h-8l-3.2 2.6V13.5H2.5z'] },
-  pencil: { box: 18, sw: 1.7, d: ['M12.2 2.9 15.1 5.8 6.4 14.5l-3.6.7.7-3.6z'] },
+  pencil: {
+    box: 18,
+    sw: 1.7,
+    d: ['M12.2 2.9 15.1 5.8 6.4 14.5l-3.6.7.7-3.6z'],
+  },
   more: { box: 18, sw: 2.2, d: ['M9 4.5h.01M9 9h.01M9 13.5h.01'] },
   mail: {
     box: 18,
@@ -52,7 +56,11 @@ const GLYPHS = {
     d: ['m3 5.5 6 4.2 6-4.2'],
   },
   /** Flat envelope used on the channel picker. */
-  envelope: { box: 18, sw: 1.6, d: ['M2.5 4h13v10h-13z', 'M3 4.6l6 4.4 6-4.4'] },
+  envelope: {
+    box: 18,
+    sw: 1.6,
+    d: ['M2.5 4h13v10h-13z', 'M3 4.6l6 4.4 6-4.4'],
+  },
   bell: {
     box: 18,
     sw: 1.6,
@@ -67,8 +75,32 @@ const GLYPHS = {
     circles: [[9, 6.5, 3]],
     d: ['M3.5 15c.9-3 3-4.5 5.5-4.5s4.6 1.5 5.5 4.5'],
   },
-  info: { box: 18, sw: 1.7, circles: [[9, 9, 6.5]], d: ['M9 5.6v3.9M9 12.2h.01'] },
-  send: { box: 18, sw: 1.8, d: ['M15.5 2.5 8 10M15.5 2.5l-5 13-2.5-5.5L2.5 7.5z'] },
+  info: {
+    box: 18,
+    sw: 1.7,
+    circles: [[9, 9, 6.5]],
+    d: ['M9 5.6v3.9M9 12.2h.01'],
+  },
+  /** Appearance picker: light. Disc plus eight rays. */
+  sun: {
+    box: 18,
+    sw: 1.7,
+    circles: [[9, 9, 3.4]],
+    d: [
+      'M9 1.6v1.8M9 14.6v1.8M1.6 9h1.8M14.6 9h1.8M3.8 3.8l1.3 1.3M12.9 12.9l1.3 1.3M14.2 3.8l-1.3 1.3M5.1 12.9l-1.3 1.3',
+    ],
+  },
+  /** Appearance picker: dark. Crescent, drawn as one closed path. */
+  moon: {
+    box: 18,
+    sw: 1.7,
+    d: ['M14.8 10.6A6.2 6.2 0 0 1 7.4 3.2a6.4 6.4 0 1 0 7.4 7.4z'],
+  },
+  send: {
+    box: 18,
+    sw: 1.8,
+    d: ['M15.5 2.5 8 10M15.5 2.5l-5 13-2.5-5.5L2.5 7.5z'],
+  },
   contacts: {
     box: 20,
     sw: 1.7,
@@ -81,7 +113,12 @@ const GLYPHS = {
     sw: 1.8,
     d: ['M2.5 6.5h3l5-3v9l-5-3h-3z', 'M12.5 5.5a3.5 3.5 0 0 1 0 5'],
   },
-  warning: { box: 16, sw: 1.9, circles: [[8, 8, 5.8]], d: ['M8 5v3.2M8 11h.01'] },
+  warning: {
+    box: 16,
+    sw: 1.9,
+    circles: [[8, 8, 5.8]],
+    d: ['M8 5v3.2M8 11h.01'],
+  },
 
   // Tab bar
   tabGroups: {
@@ -141,12 +178,7 @@ export const Icon = memo(function Icon({
   const sw = strokeWidth ?? g.sw ?? 1.7;
 
   return (
-    <Svg
-      width={edge}
-      height={edge}
-      viewBox={`0 0 ${g.box} ${g.box}`}
-      fill="none"
-      {...rest}>
+    <Svg width={edge} height={edge} viewBox={`0 0 ${g.box} ${g.box}`} fill="none" {...rest}>
       {g.rects?.map(([x, y, w, h, rx], i) => (
         <Rect
           key={`r${i}`}

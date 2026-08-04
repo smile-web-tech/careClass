@@ -5,28 +5,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
-import {
-  Button,
-  Card,
-  Divider,
-  IconButton,
-  Overline,
-  Press,
-  StatTile,
-  Txt,
-} from '@/components/ui';
-import {
-  attendanceRate,
-  recentSessionsFor,
-  useGroups,
-  useStudent,
-} from '@/data/store';
+import { Button, Card, Divider, IconButton, Overline, Press, StatTile, Txt } from '@/components/ui';
+import { attendanceRate, recentSessionsFor, useGroups, useStudent } from '@/data/store';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { shortDate } from '@/lib/date';
-import { accents, color, radius, space, status } from '@/theme/tokens';
+import { radius, space, statusMeta, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
 export default function StudentProfile() {
+  const { accents, color, status } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -106,12 +94,7 @@ export default function StudentProfile() {
               label="Call"
               onPress={() => callNumber(student.phone)}
             />
-            <Button
-              grow
-              icon="chat"
-              label="Message"
-              onPress={() => smsNumber(student.phone)}
-            />
+            <Button grow icon="chat" label="Message" onPress={() => smsNumber(student.phone)} />
             <Press
               onPress={() => student.email && emailAddress(student.email)}
               disabled={!student.email}
@@ -141,7 +124,7 @@ export default function StudentProfile() {
           <Card style={{ overflow: 'hidden' }}>
             <ContactRow
               icon="phone"
-              tint="#EAF6F1"
+              tint={status.present.tint}
               fg={color.success}
               label="Student"
               value={student.phone}
@@ -199,7 +182,9 @@ export default function StudentProfile() {
                       <Text style={styles.sessionLabel}>
                         {shortDate(r.date)} · {r.group.name}
                       </Text>
-                      <Text style={[styles.sessionStatus, { color: s.ink }]}>{s.label}</Text>
+                      <Text style={[styles.sessionStatus, { color: s.ink }]}>
+                        {statusMeta[r.mark].label}
+                      </Text>
                     </View>
                   </View>
                 );
@@ -238,6 +223,8 @@ function ContactRow({
   tabular?: boolean;
   onPress: () => void;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Press onPress={onPress} style={styles.contactRow}>
       <View style={[styles.contactIcon, { backgroundColor: tint }]}>
@@ -245,9 +232,7 @@ function ContactRow({
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.contactLabel}>{label}</Text>
-        <Text
-          style={[styles.contactValue, tabular ? text.tabular : null]}
-          numberOfLines={1}>
+        <Text style={[styles.contactValue, tabular ? text.tabular : null]} numberOfLines={1}>
           {value}
         </Text>
       </View>
@@ -256,94 +241,133 @@ function ContactRow({
   );
 }
 
-const styles = StyleSheet.create({
-  missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    missing: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+    },
 
-  header: {
-    backgroundColor: color.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border,
-    paddingHorizontal: space.gutter,
-    paddingBottom: 20,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 20 },
-  bigAvatar: {
-    width: 76,
-    height: 76,
-    borderRadius: radius.sheet,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bigInitials: { fontFamily: display[600], fontSize: 27 },
-  name: { ...text.pageTitle, lineHeight: 27.6 },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
-  tag: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: radius.sm + 1 },
-  tagLabel: { fontFamily: body[600], fontSize: 11.5 },
+    header: {
+      backgroundColor: color.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: color.border,
+      paddingHorizontal: space.gutter,
+      paddingBottom: 20,
+    },
+    headerBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    identity: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+      marginTop: 20,
+    },
+    bigAvatar: {
+      width: 76,
+      height: 76,
+      borderRadius: radius.sheet,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bigInitials: { fontFamily: display[600], fontSize: 27 },
+    name: { ...text.pageTitle, lineHeight: 27.6, color: color.ink },
+    tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
+    tag: {
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: radius.sm + 1,
+    },
+    tagLabel: { fontFamily: body[600], fontSize: 11.5 },
 
-  actionRow: { flexDirection: 'row', gap: 9, marginTop: 18 },
-  mailButton: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.button,
-    backgroundColor: color.bg,
-    borderWidth: 1,
-    borderColor: color.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    actionRow: { flexDirection: 'row', gap: 9, marginTop: 18 },
+    mailButton: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.button,
+      backgroundColor: color.fill,
+      borderWidth: 1,
+      borderColor: color.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  statRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: space.gutter,
-    paddingTop: 16,
-  },
+    statRow: {
+      flexDirection: 'row',
+      gap: 10,
+      paddingHorizontal: space.gutter,
+      paddingTop: 16,
+    },
 
-  block: { paddingHorizontal: space.gutter, paddingTop: 20 },
-  blockHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  seeAll: { fontFamily: body[700], fontSize: 12.5, color: color.primary },
+    block: { paddingHorizontal: space.gutter, paddingTop: 20 },
+    blockHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    seeAll: { fontFamily: body[700], fontSize: 12.5, color: color.primary },
 
-  contactRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-  },
-  contactIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactLabel: {
-    fontFamily: body[700],
-    fontSize: 10.5,
-    letterSpacing: 0.84,
-    textTransform: 'uppercase',
-    color: color.mutedLight,
-  },
-  contactValue: { fontFamily: body[600], fontSize: 14.5, color: color.ink, marginTop: 2 },
+    contactRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 13,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+    },
+    contactIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    contactLabel: {
+      fontFamily: body[700],
+      fontSize: 10.5,
+      letterSpacing: 0.84,
+      textTransform: 'uppercase',
+      color: color.mutedLight,
+    },
+    contactValue: {
+      fontFamily: body[600],
+      fontSize: 14.5,
+      color: color.ink,
+      marginTop: 2,
+    },
 
-  sessionCard: { paddingHorizontal: 15, paddingVertical: 6 },
-  sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
-  sessionDot: { width: 9, height: 9, borderRadius: 4.5 },
-  sessionLabel: { flex: 1, fontFamily: body[600], fontSize: 14, color: color.ink },
-  sessionStatus: { fontFamily: body[700], fontSize: 13 },
-  noSessions: { fontSize: 13.5, color: color.mutedLight, paddingVertical: 10 },
+    sessionCard: { paddingHorizontal: 15, paddingVertical: 6 },
+    sessionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 11,
+    },
+    sessionDot: { width: 9, height: 9, borderRadius: 4.5 },
+    sessionLabel: {
+      flex: 1,
+      fontFamily: body[600],
+      fontSize: 14,
+      color: color.ink,
+    },
+    sessionStatus: { fontFamily: body[700], fontSize: 13 },
+    noSessions: {
+      fontSize: 13.5,
+      color: color.mutedLight,
+      paddingVertical: 10,
+    },
 
-  noteCard: { paddingHorizontal: 15, paddingVertical: 14 },
-  noteText: { fontFamily: body[400], fontSize: 14, lineHeight: 21.7, color: color.inkSoft },
-});
+    noteCard: { paddingHorizontal: 15, paddingVertical: 14 },
+    noteText: {
+      fontFamily: body[400],
+      fontSize: 14,
+      lineHeight: 21.7,
+      color: color.inkSoft,
+    },
+  });

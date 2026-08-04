@@ -2,10 +2,33 @@
 
 const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 const MONTH_LONG = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 /** `YYYY-MM-DD` in *local* time — `toISOString` would shift across UTC. */
@@ -77,9 +100,7 @@ export function countdownTo(target: Date, now = new Date()) {
   const mins = Math.round((target.getTime() - now.getTime()) / 60000);
   if (mins <= 0) return 'now';
 
-  const days = Math.round(
-    (startOfDay(target).getTime() - startOfDay(now).getTime()) / 86400000,
-  );
+  const days = Math.round((startOfDay(target).getTime() - startOfDay(now).getTime()) / 86400000);
   if (days === 1) return 'tomorrow';
   if (days > 1) return dowLong(target);
 
@@ -90,9 +111,7 @@ export function countdownTo(target: Date, now = new Date()) {
 /** "Today 16:00" / "Tomorrow 10:30" / "Wed 18:00" — group list subtitle. */
 export function relativeSlot(when: Date, now = new Date()) {
   const time = `${`${when.getHours()}`.padStart(2, '0')}:${`${when.getMinutes()}`.padStart(2, '0')}`;
-  const days = Math.round(
-    (startOfDay(when).getTime() - startOfDay(now).getTime()) / 86400000,
-  );
+  const days = Math.round((startOfDay(when).getTime() - startOfDay(now).getTime()) / 86400000);
   if (days === 0) return { label: `Today ${time}`, imminent: true };
   if (days === 1) return { label: `Tomorrow ${time}`, imminent: false };
   return { label: `${dowShort(when)} ${time}`, imminent: false };

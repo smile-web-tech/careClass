@@ -62,15 +62,23 @@ const light = {
   surface: '#FFFFFF',
   surfacePressed: '#F8FAFD',
   canvas: '#E7ECF4',
-  fill: '#E7ECF4',
+  fill: '#F4F7FB',
   fillPressed: '#E1E7F0',
   navy: '#0C1729',
   navyRaised: '#16233C',
   navyGradientTop: '#12305F',
   /** Bottom sheet on the sign-in screen. */
   sheet: '#F4F7FB',
+  /** "Up next" hero card gradient on Home. */
+  heroFrom: '#2457E8',
+  heroTo: '#123AAE',
+  /** The light button sitting inside that hero. */
+  heroActionBg: '#FFFFFF',
+  heroActionInk: '#1B44BC',
   /** Translucent tab-bar / action-bar backing. */
   barTint: 'rgba(255,255,255,0.95)',
+  /** Dim behind a modal sheet. */
+  scrim: 'rgba(12,23,41,0.35)',
 
   // Lines
   border: '#E1E7F0',
@@ -130,7 +138,13 @@ const dark: Palette = {
   navyRaised: '#151D2A',
   navyGradientTop: '#17376B',
   sheet: '#151D2A',
+  heroFrom: '#2A56D8',
+  heroTo: '#122A72',
+  heroActionBg: '#F2F6FF',
+  heroActionInk: '#123AAE',
   barTint: 'rgba(15,21,32,0.9)',
+  // Navy-on-navy reads as nothing; dark needs true black to separate.
+  scrim: 'rgba(0,0,0,0.62)',
 
   // Lines
   border: '#2A3442',

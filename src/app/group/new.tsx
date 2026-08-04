@@ -1,20 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { Button, Card, Divider, FieldRow, Overline, Press } from '@/components/ui';
 import { useStore } from '@/data/store';
 import type { Weekday } from '@/data/types';
-import { accentNames, accents, color, radius, space } from '@/theme/tokens';
+import { accentNames, radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
 
 const DAYS: { day: Weekday; label: string }[] = [
@@ -35,6 +28,8 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
  * chip pickers, sticky save.
  */
 export default function NewGroup() {
+  const { accents, color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const addGroup = useStore((s) => s.addGroup);
@@ -101,12 +96,7 @@ export default function NewGroup() {
               autoCapitalize="words"
             />
             <Divider inset={15} />
-            <FieldRow
-              label="Room"
-              placeholder="Optional"
-              value={room}
-              onChangeText={setRoom}
-            />
+            <FieldRow label="Room" placeholder="Optional" value={room} onChangeText={setRoom} />
           </Card>
 
           <Overline style={styles.label}>Meets on</Overline>
@@ -125,8 +115,7 @@ export default function NewGroup() {
                       borderColor: on ? color.primary : color.border,
                     },
                   ]}>
-                  <Text
-                    style={[styles.dayLabel, { color: on ? '#fff' : color.inkSoft }]}>
+                  <Text style={[styles.dayLabel, { color: on ? '#fff' : color.inkSoft }]}>
                     {d.label}
                   </Text>
                 </Press>
@@ -193,33 +182,53 @@ export default function NewGroup() {
   );
 }
 
-const styles = StyleSheet.create({
-  label: { marginBottom: 10 },
-  group: { overflow: 'hidden', marginBottom: 22 },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    label: { marginBottom: 10 },
+    group: { overflow: 'hidden', marginBottom: 22 },
 
-  dayRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 22 },
-  dayChip: {
-    width: 46,
-    height: 42,
-    borderRadius: radius.field,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayLabel: { fontFamily: body[600], fontSize: 12.5 },
+    dayRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 22,
+    },
+    dayChip: {
+      width: 46,
+      height: 42,
+      borderRadius: radius.field,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dayLabel: { fontFamily: body[600], fontSize: 12.5 },
 
-  accentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
-  accentSwatch: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    height: 42,
-    paddingHorizontal: 14,
-    borderRadius: radius.field,
-    borderWidth: 2,
-  },
-  accentDot: { width: 10, height: 10, borderRadius: 3 },
-  accentLabel: { fontFamily: display[600], fontSize: 13, textTransform: 'capitalize' },
+    accentRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 8,
+    },
+    accentSwatch: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      height: 42,
+      paddingHorizontal: 14,
+      borderRadius: radius.field,
+      borderWidth: 2,
+    },
+    accentDot: { width: 10, height: 10, borderRadius: 3 },
+    accentLabel: {
+      fontFamily: display[600],
+      fontSize: 13,
+      textTransform: 'capitalize',
+    },
 
-  validation: { fontFamily: body[600], fontSize: 12.5, color: color.dangerDeep, marginTop: 4 },
-});
+    validation: {
+      fontFamily: body[600],
+      fontSize: 12.5,
+      color: color.dangerDeep,
+      marginTop: 4,
+    },
+  });

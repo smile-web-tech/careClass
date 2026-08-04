@@ -65,7 +65,12 @@ export function Glow({
   return (
     <View
       style={[
-        { position: 'absolute', width: size, height: size, pointerEvents: 'none' },
+        {
+          position: 'absolute',
+          width: size,
+          height: size,
+          pointerEvents: 'none',
+        },
         style,
       ]}>
       <Svg width={size} height={size}>

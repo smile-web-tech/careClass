@@ -27,7 +27,7 @@ import {
   verifyEmailCode,
 } from '@/lib/auth';
 import { hasSupabase } from '@/lib/supabase';
-import { color, radius } from '@/theme/tokens';
+import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
 const ON_DARK = 'rgba(234,240,251,';
@@ -35,6 +35,8 @@ const ON_DARK = 'rgba(234,240,251,';
 type Provider = 'google' | 'apple' | 'email';
 
 export default function SignIn() {
+  const { color, scheme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const signIn = useStore((s) => s.signIn);
@@ -147,7 +149,7 @@ export default function SignIn() {
       </View>
 
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) + 16 }]}>
-        <Text style={text.sheetTitle}>Get started</Text>
+        <Text style={[text.sheetTitle, styles.ink]}>Get started</Text>
         <Text style={styles.sheetHint}>Your data stays in your own account.</Text>
 
         <View style={styles.actions}>
@@ -173,11 +175,11 @@ export default function SignIn() {
               disabled={busy !== null}
               style={styles.appleButton}>
               {busy === 'apple' ? (
-                <ActivityIndicator color={color.bg} />
+                <ActivityIndicator color={color.appleInk} />
               ) : (
                 <>
-                  <Icon name="apple" size={17} color={color.bg} />
-                  <Text style={[styles.providerLabel, { color: color.bg }]}>
+                  <Icon name="apple" size={17} color={color.appleInk} />
+                  <Text style={[styles.providerLabel, { color: color.appleInk }]}>
                     Continue with Apple
                   </Text>
                 </>
@@ -185,10 +187,7 @@ export default function SignIn() {
             </Press>
           ) : null}
 
-          <Press
-            onPress={() => enter('email')}
-            disabled={busy !== null}
-            style={styles.emailButton}>
+          <Press onPress={() => enter('email')} disabled={busy !== null} style={styles.emailButton}>
             <Text style={styles.emailLabel}>Use email instead</Text>
           </Press>
         </View>
@@ -224,7 +223,7 @@ export default function SignIn() {
 
             {step === 'email' ? (
               <>
-                <Text style={text.sheetTitle}>What&rsquo;s your email?</Text>
+                <Text style={[text.sheetTitle, styles.ink]}>What&rsquo;s your email?</Text>
                 <Text style={styles.sheetHint}>
                   We&rsquo;ll send a six-digit code. No password to remember.
                 </Text>
@@ -240,6 +239,8 @@ export default function SignIn() {
                   returnKeyType="send"
                   onSubmitEditing={sendCode}
                   style={styles.emailInput}
+                  selectionColor={color.primary}
+                  keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
                 />
                 <Press
                   onPress={sendCode}
@@ -257,7 +258,7 @@ export default function SignIn() {
               </>
             ) : (
               <>
-                <Text style={text.sheetTitle}>Enter the code</Text>
+                <Text style={[text.sheetTitle, styles.ink]}>Enter the code</Text>
                 <Text style={styles.sheetHint}>Sent to {email.trim().toLowerCase()}</Text>
                 <TextInput
                   value={code}
@@ -270,6 +271,8 @@ export default function SignIn() {
                   returnKeyType="done"
                   onSubmitEditing={verifyCode}
                   style={[styles.emailInput, styles.codeInput]}
+                  selectionColor={color.primary}
+                  keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
                 />
                 <Press
                   onPress={verifyCode}
@@ -302,6 +305,7 @@ export default function SignIn() {
 }
 
 function Chip({ label }: { label: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.chip}>
       <Text style={styles.chipLabel}>{label}</Text>
@@ -309,157 +313,184 @@ function Chip({ label }: { label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: color.navy },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    /** Default body ink. Text does not inherit colour from a parent View. */
+    ink: { color: color.ink },
+    root: { flex: 1, backgroundColor: color.navy },
 
-  hero: {
-    flex: 1,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 26,
-    paddingBottom: 34,
-  },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 34 },
-  brandName: {
-    fontFamily: display[600],
-    fontSize: 20,
-    letterSpacing: -0.2,
-    color: color.onDark,
-  },
-  title: { ...text.hero, color: color.onDark },
-  subtitle: {
-    fontFamily: body[400],
-    fontSize: 15,
-    lineHeight: 23.25,
-    color: `${ON_DARK}0.6)`,
-    marginTop: 14,
-    maxWidth: 290,
-  },
+    hero: {
+      flex: 1,
+      overflow: 'hidden',
+      justifyContent: 'flex-end',
+      paddingHorizontal: 26,
+      paddingBottom: 34,
+    },
+    brandRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 34,
+    },
+    brandName: {
+      fontFamily: display[600],
+      fontSize: 20,
+      letterSpacing: -0.2,
+      color: color.onDark,
+    },
+    title: { ...text.hero, color: color.onDark },
+    subtitle: {
+      fontFamily: body[400],
+      fontSize: 15,
+      lineHeight: 23.25,
+      color: `${ON_DARK}0.6)`,
+      marginTop: 14,
+      maxWidth: 290,
+    },
 
-  chipRow: { flexDirection: 'row', gap: 8, marginTop: 26 },
-  chip: {
-    backgroundColor: `${ON_DARK}0.1)`,
-    borderWidth: 1,
-    borderColor: `${ON_DARK}0.14)`,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: radius.md,
-  },
-  chipLabel: {
-    fontFamily: body[600],
-    fontSize: 12,
-    letterSpacing: 0.24,
-    color: `${ON_DARK}0.8)`,
-  },
+    chipRow: { flexDirection: 'row', gap: 8, marginTop: 26 },
+    chip: {
+      backgroundColor: `${ON_DARK}0.1)`,
+      borderWidth: 1,
+      borderColor: `${ON_DARK}0.14)`,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: radius.md,
+    },
+    chipLabel: {
+      fontFamily: body[600],
+      fontSize: 12,
+      letterSpacing: 0.24,
+      color: `${ON_DARK}0.8)`,
+    },
 
-  sheet: {
-    backgroundColor: color.bg,
-    borderTopLeftRadius: radius.sheet,
-    borderTopRightRadius: radius.sheet,
-    paddingHorizontal: 24,
-    paddingTop: 26,
-  },
-  sheetHint: { fontFamily: body[400], fontSize: 13.5, color: color.muted, marginTop: 5 },
+    sheet: {
+      backgroundColor: color.sheet,
+      borderTopLeftRadius: radius.sheet,
+      borderTopRightRadius: radius.sheet,
+      paddingHorizontal: 24,
+      paddingTop: 26,
+    },
+    sheetHint: {
+      fontFamily: body[400],
+      fontSize: 13.5,
+      color: color.muted,
+      marginTop: 5,
+    },
 
-  actions: { gap: 10, marginTop: 20 },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 11,
-    height: 54,
-    borderRadius: radius.button,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: '#DDE4EF',
-  },
-  appleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 11,
-    height: 54,
-    borderRadius: radius.button,
-    backgroundColor: color.navy,
-  },
-  providerLabel: { fontFamily: body[600], fontSize: 15.5, color: color.ink },
+    actions: { gap: 10, marginTop: 20 },
+    googleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 11,
+      height: 54,
+      borderRadius: radius.button,
+      backgroundColor: color.googleBg,
+      borderWidth: 1,
+      borderColor: color.googleBorder,
+    },
+    appleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 11,
+      height: 54,
+      borderRadius: radius.button,
+      backgroundColor: color.appleBg,
+    },
+    providerLabel: { fontFamily: body[600], fontSize: 15.5, color: color.ink },
 
-  emailButton: {
-    height: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.button,
-  },
-  emailLabel: { fontFamily: body[600], fontSize: 15, color: color.primary },
+    emailButton: {
+      height: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.button,
+    },
+    emailLabel: { fontFamily: body[600], fontSize: 15, color: color.primary },
 
-  terms: {
-    fontFamily: body[400],
-    fontSize: 11.5,
-    lineHeight: 17.25,
-    color: color.mutedLight,
-    textAlign: 'center',
-    marginTop: 12,
-  },
+    terms: {
+      fontFamily: body[400],
+      fontSize: 11.5,
+      lineHeight: 17.25,
+      color: color.mutedLight,
+      textAlign: 'center',
+      marginTop: 12,
+    },
 
-  redirectHint: {
-    fontFamily: body[400],
-    fontSize: 10,
-    color: color.faint,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  skip: { height: 40, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  skipLabel: {
-    fontFamily: body[600],
-    fontSize: 12.5,
-    color: color.mutedLight,
-    textDecorationLine: 'underline',
-  },
+    redirectHint: {
+      fontFamily: body[400],
+      fontSize: 10,
+      color: color.faint,
+      textAlign: 'center',
+      marginTop: 2,
+    },
+    skip: {
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    skipLabel: {
+      fontFamily: body[600],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      textDecorationLine: 'underline',
+    },
 
-  scrim: { flex: 1, backgroundColor: 'rgba(12,23,41,0.45)' },
-  emailSheet: {
-    backgroundColor: color.bg,
-    borderTopLeftRadius: radius.sheet,
-    borderTopRightRadius: radius.sheet,
-    paddingHorizontal: 24,
-    paddingTop: 10,
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: color.dashed,
-    marginBottom: 16,
-  },
-  emailInput: {
-    height: 54,
-    marginTop: 18,
-    paddingHorizontal: 16,
-    borderRadius: radius.button,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    fontFamily: body[600],
-    fontSize: 16,
-    color: color.ink,
-  },
-  codeInput: {
-    textAlign: 'center',
-    fontFamily: display[600],
-    fontSize: 26,
-    letterSpacing: 8,
-  },
-  sheetButton: {
-    height: 54,
-    marginTop: 10,
-    borderRadius: radius.button,
-    backgroundColor: color.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sheetButtonOff: { backgroundColor: color.borderStrong },
-  sheetButtonLabel: { fontFamily: body[700], fontSize: 15.5, color: '#fff' },
-  sheetLink: { height: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  sheetLinkLabel: { fontFamily: body[600], fontSize: 14, color: color.primary },
-});
+    scrim: { flex: 1, backgroundColor: color.scrim },
+    emailSheet: {
+      backgroundColor: color.sheet,
+      borderTopLeftRadius: radius.sheet,
+      borderTopRightRadius: radius.sheet,
+      paddingHorizontal: 24,
+      paddingTop: 10,
+    },
+    grabber: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: color.dashed,
+      marginBottom: 16,
+    },
+    emailInput: {
+      height: 54,
+      marginTop: 18,
+      paddingHorizontal: 16,
+      borderRadius: radius.button,
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+      fontFamily: body[600],
+      fontSize: 16,
+      color: color.ink,
+    },
+    codeInput: {
+      textAlign: 'center',
+      fontFamily: display[600],
+      fontSize: 26,
+      letterSpacing: 8,
+    },
+    sheetButton: {
+      height: 54,
+      marginTop: 10,
+      borderRadius: radius.button,
+      backgroundColor: color.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sheetButtonOff: { backgroundColor: color.borderStrong },
+    sheetButtonLabel: { fontFamily: body[700], fontSize: 15.5, color: '#fff' },
+    sheetLink: {
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 4,
+    },
+    sheetLinkLabel: {
+      fontFamily: body[600],
+      fontSize: 14,
+      color: color.primary,
+    },
+  });

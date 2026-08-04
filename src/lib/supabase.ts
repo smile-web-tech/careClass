@@ -21,8 +21,7 @@ const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 /** True once both env vars point at a real project. */
-export const hasSupabase =
-  !!url && !!publishableKey && !url.includes('YOUR-PROJECT-REF');
+export const hasSupabase = !!url && !!publishableKey && !url.includes('YOUR-PROJECT-REF');
 
 function build(): SupabaseClient<Database> {
   const client = createClient<Database>(url!, publishableKey!, {

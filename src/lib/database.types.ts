@@ -11,7 +11,12 @@ export type MessageChannelRow = 'sms' | 'email' | 'push';
 export type DeliveryStateRow = 'queued' | 'sent' | 'delivered' | 'failed';
 export type GroupAccentRow = 'blue' | 'teal' | 'violet' | 'amber';
 
-type Row<T> = { Row: T; Insert: Partial<T>; Update: Partial<T>; Relationships: [] };
+type Row<T> = {
+  Row: T;
+  Insert: Partial<T>;
+  Update: Partial<T>;
+  Relationships: [];
+};
 
 export type TeacherRow = {
   id: string;

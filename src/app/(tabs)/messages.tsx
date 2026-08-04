@@ -9,7 +9,7 @@ import { Avatar, Badge, Card, EmptyState, IconButton, Press } from '@/components
 import { useGroups, useStore } from '@/data/store';
 import type { Message, Reply } from '@/data/types';
 import { timeAgo } from '@/lib/date';
-import { accents, color, radius, space } from '@/theme/tokens';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
 const AUDIENCE_LABEL = {
@@ -21,6 +21,8 @@ const AUDIENCE_LABEL = {
 const CHANNEL_LABEL = { sms: 'SMS', email: 'Email', push: 'Push' } as const;
 
 export default function Messages() {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const bottomInset = useTabInset(20);
   const router = useRouter();
@@ -45,7 +47,7 @@ export default function Messages() {
     <Screen>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headerRow}>
-          <Text style={text.pageTitle}>Messages</Text>
+          <Text style={[text.pageTitle, styles.ink]}>Messages</Text>
           <IconButton
             name="plusLarge"
             iconSize={19}
@@ -98,6 +100,8 @@ function TabLink({
   active: boolean;
   onPress: () => void;
 }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Press
       onPress={onPress}
@@ -115,6 +119,8 @@ function TabLink({
 }
 
 function SentCard({ message }: { message: Message }) {
+  const { accents, color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const groups = useGroups();
   const targets = groups.filter((g) => message.groupIds.includes(g.id));
   const partial = message.delivered < message.total;
@@ -127,7 +133,7 @@ function SentCard({ message }: { message: Message }) {
             label="Announcement"
             icon="megaphone"
             bg={accents.amber.tint}
-            fg="#7A4E10"
+            fg={color.warningDeep}
           />
         ) : (
           targets.map((g) => (
@@ -181,6 +187,7 @@ function SentCard({ message }: { message: Message }) {
 }
 
 function ReplyCard({ reply }: { reply: Reply }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Card style={[styles.replyCard, !reply.unread && { opacity: 0.75 }]}>
       <Avatar name={reply.authorName} accent={reply.accent} size={42} radius={radius.button} />
@@ -197,58 +204,91 @@ function ReplyCard({ reply }: { reply: Reply }) {
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    backgroundColor: color.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border,
-    paddingHorizontal: space.gutter,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingBottom: 14,
-  },
-  tabRow: { flexDirection: 'row', gap: 22 },
-  tab: { paddingBottom: 12, borderBottomWidth: 2.5 },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    /** Default body ink. Text does not inherit colour from a parent View. */
+    ink: { color: color.ink },
+    header: {
+      backgroundColor: color.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: color.border,
+      paddingHorizontal: space.gutter,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingBottom: 14,
+    },
+    tabRow: { flexDirection: 'row', gap: 22 },
+    tab: { paddingBottom: 12, borderBottomWidth: 2.5 },
 
-  sentCard: { paddingHorizontal: 16, paddingVertical: 15 },
-  sentHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 9 },
-  audienceText: { fontFamily: body[600] },
-  sentTime: { marginLeft: 'auto', fontFamily: body[400], fontSize: 11.5, color: color.faint },
-  sentBody: {
-    fontFamily: body[400],
-    fontSize: 14.5,
-    lineHeight: 22.5,
-    color: color.ink,
-    marginTop: 11,
-  },
-  sentFoot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginTop: 12,
-    paddingTop: 11,
-    borderTopWidth: 1,
-    borderTopColor: color.divider,
-  },
-  deliveryRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  deliveryLabel: { fontFamily: body[600], fontSize: 12 },
-  channels: { fontFamily: body[600], fontSize: 12, color: color.mutedLight },
+    sentCard: { paddingHorizontal: 16, paddingVertical: 15 },
+    sentHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 9,
+    },
+    audienceText: { fontFamily: body[600] },
+    sentTime: {
+      marginLeft: 'auto',
+      fontFamily: body[400],
+      fontSize: 11.5,
+      color: color.faint,
+    },
+    sentBody: {
+      fontFamily: body[400],
+      fontSize: 14.5,
+      lineHeight: 22.5,
+      color: color.ink,
+      marginTop: 11,
+    },
+    sentFoot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      marginTop: 12,
+      paddingTop: 11,
+      borderTopWidth: 1,
+      borderTopColor: color.divider,
+    },
+    deliveryRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    deliveryLabel: { fontFamily: body[600], fontSize: 12 },
+    channels: { fontFamily: body[600], fontSize: 12, color: color.mutedLight },
 
-  replyCard: { flexDirection: 'row', gap: 12, paddingHorizontal: 15, paddingVertical: 14 },
-  replyHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  replyName: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
-  replyContext: { flex: 1, fontFamily: body[600], fontSize: 11, color: color.mutedLight },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.primary },
-  replyBody: {
-    fontFamily: body[400],
-    fontSize: 13.5,
-    lineHeight: 20.25,
-    color: color.inkSoft,
-    marginTop: 5,
-  },
-  replyTime: { fontFamily: body[400], fontSize: 11.5, color: color.faint, marginTop: 7 },
-});
+    replyCard: {
+      flexDirection: 'row',
+      gap: 12,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
+    },
+    replyHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    replyName: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    replyContext: {
+      flex: 1,
+      fontFamily: body[600],
+      fontSize: 11,
+      color: color.mutedLight,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: color.primary,
+    },
+    replyBody: {
+      fontFamily: body[400],
+      fontSize: 13.5,
+      lineHeight: 20.25,
+      color: color.inkSoft,
+      marginTop: 5,
+    },
+    replyTime: {
+      fontFamily: body[400],
+      fontSize: 11.5,
+      color: color.faint,
+      marginTop: 7,
+    },
+  });

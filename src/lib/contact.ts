@@ -31,7 +31,4 @@ export const smsNumber = (phone: string, body?: string) => {
 };
 
 export const emailAddress = (email: string, subject?: string) =>
-  open(
-    `mailto:${email}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`,
-    'email',
-  );
+  open(`mailto:${email}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`, 'email');

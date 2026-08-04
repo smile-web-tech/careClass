@@ -31,7 +31,7 @@ import { messageTemplates } from '@/data/seed';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Audience, Channel } from '@/data/types';
 import { hasSupabase } from '@/lib/supabase';
-import { accents, color, radius, space } from '@/theme/tokens';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
 const CHANNELS: { key: Channel; label: string; icon: IconName }[] = [
@@ -49,6 +49,8 @@ const AUDIENCES: { key: Audience; label: string }[] = [
 const PLACEHOLDERS = ['{name}', '{group}', '{time}'];
 
 export default function Compose() {
+  const { accents, color, scheme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{
     group?: string;
     audience?: Audience;
@@ -83,7 +85,9 @@ export default function Compose() {
   });
   const [draft, setDraft] = useState(() => {
     const t = messageTemplates.find((x) => x.id === `t-${params.template}`);
-    return t?.body ?? 'Hi {name}, reminder: {group} meets today at {time}. Please bring your workbook.';
+    return (
+      t?.body ?? 'Hi {name}, reminder: {group} meets today at {time}. Please bring your workbook.'
+    );
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -128,7 +132,10 @@ export default function Compose() {
 
     setSending(true);
     try {
-      await apiSendMessage({ ...payload, studentIds: focusIds.length ? focusIds : undefined });
+      await apiSendMessage({
+        ...payload,
+        studentIds: focusIds.length ? focusIds : undefined,
+      });
       useStore.setState({ messages: await fetchMessages() });
       router.replace('/(tabs)/messages');
     } catch (e) {
@@ -233,10 +240,7 @@ export default function Compose() {
                     color={on ? color.primaryInk : color.inkSoft}
                   />
                   <Text
-                    style={[
-                      styles.channelLabel,
-                      { color: on ? color.primaryInk : color.inkSoft },
-                    ]}>
+                    style={[styles.channelLabel, { color: on ? color.primaryInk : color.inkSoft }]}>
                     {c.label}
                   </Text>
                 </Press>
@@ -254,6 +258,8 @@ export default function Compose() {
               placeholderTextColor={color.mutedLight}
               style={styles.editorInput}
               textAlignVertical="top"
+              selectionColor={color.primary}
+              keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
             />
             <View style={styles.editorFoot}>
               <View style={styles.placeholderRow}>
@@ -306,7 +312,7 @@ export default function Compose() {
         <Press style={styles.scrim} onPress={() => setTemplatesOpen(false)} />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
           <View style={styles.grabber} />
-          <Text style={[text.sheetTitle, { marginBottom: 4 }]}>Templates</Text>
+          <Text style={[text.sheetTitle, styles.ink, { marginBottom: 4 }]}>Templates</Text>
           <Txt style={styles.sheetHint}>
             Placeholders stay intact — they fill per recipient when you send.
           </Txt>
@@ -335,111 +341,137 @@ export default function Compose() {
   );
 }
 
-const styles = StyleSheet.create({
-  templatesLink: { fontFamily: body[700], fontSize: 13, color: color.primary },
-  label: { marginBottom: 10 },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    /** Default body ink. Text does not inherit colour from a parent View. */
+    ink: { color: color.ink },
+    templatesLink: {
+      fontFamily: body[700],
+      fontSize: 13,
+      color: color.primary,
+    },
+    label: { marginBottom: 10 },
 
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+    chipWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 20,
+    },
 
-  focusCard: { padding: 14, marginBottom: 20, gap: 10 },
-  focusHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  focusTitle: { fontFamily: body[700], fontSize: 13.5, color: color.ink },
-  focusList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  focusChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    backgroundColor: color.bg,
-    borderRadius: radius.lg,
-    paddingLeft: 5,
-    paddingRight: 10,
-    paddingVertical: 5,
-  },
-  focusName: { fontFamily: body[600], fontSize: 12.5, color: color.inkSoft },
+    focusCard: { padding: 14, marginBottom: 20, gap: 10 },
+    focusHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    focusTitle: { fontFamily: body[700], fontSize: 13.5, color: color.ink },
+    focusList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    focusChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      backgroundColor: color.fill,
+      borderRadius: radius.lg,
+      paddingLeft: 5,
+      paddingRight: 10,
+      paddingVertical: 5,
+    },
+    focusName: { fontFamily: body[600], fontSize: 12.5, color: color.inkSoft },
 
-  channelRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  channel: {
-    flex: 1,
-    height: 74,
-    borderRadius: radius.button,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  channelLabel: { fontFamily: body[600], fontSize: 12.5 },
+    channelRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+    channel: {
+      flex: 1,
+      height: 74,
+      borderRadius: radius.button,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    channelLabel: { fontFamily: body[600], fontSize: 12.5 },
 
-  editor: { paddingHorizontal: 15, paddingTop: 14, paddingBottom: 11 },
-  editorInput: {
-    fontFamily: body[400],
-    fontSize: 14.5,
-    lineHeight: 22.5,
-    color: color.ink,
-    minHeight: 112,
-    padding: 0,
-  },
-  editorFoot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 8,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: color.divider,
-  },
-  placeholderRow: { flexDirection: 'row', gap: 7 },
-  placeholderChip: {
-    height: 30,
-    paddingHorizontal: 10,
-    borderRadius: radius.md,
-    backgroundColor: color.bg,
-    justifyContent: 'center',
-  },
-  placeholderLabel: { fontFamily: body[600], fontSize: 12, color: color.inkSoft },
-  charCount: {
-    fontFamily: body[600],
-    fontSize: 11.5,
-    color: color.mutedLight,
-    ...text.tabular,
-  },
+    editor: { paddingHorizontal: 15, paddingTop: 14, paddingBottom: 11 },
+    editorInput: {
+      fontFamily: body[400],
+      fontSize: 14.5,
+      lineHeight: 22.5,
+      color: color.ink,
+      minHeight: 112,
+      padding: 0,
+    },
+    editorFoot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginTop: 8,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: color.divider,
+    },
+    placeholderRow: { flexDirection: 'row', gap: 7 },
+    placeholderChip: {
+      height: 30,
+      paddingHorizontal: 10,
+      borderRadius: radius.md,
+      backgroundColor: color.fill,
+      justifyContent: 'center',
+    },
+    placeholderLabel: {
+      fontFamily: body[600],
+      fontSize: 12,
+      color: color.inkSoft,
+    },
+    charCount: {
+      fontFamily: body[600],
+      fontSize: 11.5,
+      color: color.mutedLight,
+      ...text.tabular,
+    },
 
-  info: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: color.primaryTint,
-    borderRadius: radius.button,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    marginTop: 14,
-  },
-  infoText: {
-    flex: 1,
-    fontFamily: body[400],
-    fontSize: 12.5,
-    lineHeight: 18.1,
-    color: color.primaryInk,
-  },
+    info: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: color.primaryTint,
+      borderRadius: radius.button,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+      marginTop: 14,
+    },
+    infoText: {
+      flex: 1,
+      fontFamily: body[400],
+      fontSize: 12.5,
+      lineHeight: 18.1,
+      color: color.primaryInk,
+    },
 
-  scrim: { flex: 1, backgroundColor: 'rgba(12,23,41,0.35)' },
-  sheet: {
-    backgroundColor: color.bg,
-    borderTopLeftRadius: radius.sheet,
-    borderTopRightRadius: radius.sheet,
-    paddingHorizontal: space.gutter,
-    paddingTop: 10,
-  },
-  grabber: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: color.dashed,
-    marginBottom: 14,
-  },
-  sheetHint: { fontSize: 13, color: color.muted, marginBottom: 8 },
-  templateRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14 },
-  templateTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
-  templateBody: { fontFamily: body[400], fontSize: 12.5, color: color.muted, marginTop: 3 },
-});
+    scrim: { flex: 1, backgroundColor: color.scrim },
+    sheet: {
+      backgroundColor: color.sheet,
+      borderTopLeftRadius: radius.sheet,
+      borderTopRightRadius: radius.sheet,
+      paddingHorizontal: space.gutter,
+      paddingTop: 10,
+    },
+    grabber: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: color.dashed,
+      marginBottom: 14,
+    },
+    sheetHint: { fontSize: 13, color: color.muted, marginBottom: 8 },
+    templateRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 14,
+    },
+    templateTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    templateBody: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.muted,
+      marginTop: 3,
+    },
+  });

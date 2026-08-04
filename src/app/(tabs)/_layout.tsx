@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/Icon';
 import { Press } from '@/components/ui';
 import { useUnreadReplies } from '@/data/store';
-import { color, radius } from '@/theme/tokens';
+import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
 const TABS: { name: string; label: string; icon: IconName }[] = [
@@ -20,9 +20,13 @@ const TABS: { name: string; label: string; icon: IconName }[] = [
 ];
 
 export default function TabsLayout() {
+  const { color } = useTheme();
   return (
     <Tabs
-      screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: color.bg } }}
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: color.bg },
+      }}
       tabBar={(props) => <ClassCareTabBar {...props} />}>
       {TABS.map((t) => (
         <Tabs.Screen key={t.name} name={t.name} />
@@ -36,6 +40,8 @@ export default function TabsLayout() {
  * bar over the scrolling content, with the active item on a blue tint chip.
  */
 function ClassCareTabBar({ state, navigation }: BottomTabBarProps) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const unread = useUnreadReplies();
 
@@ -61,11 +67,7 @@ function ClassCareTabBar({ state, navigation }: BottomTabBarProps) {
               if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
             }}
             style={[styles.item, focused && styles.itemActive]}>
-            <Icon
-              name={tab.icon}
-              size={20}
-              color={focused ? color.primary : color.mutedLight}
-            />
+            <Icon name={tab.icon} size={20} color={focused ? color.primary : color.mutedLight} />
             <Text
               style={[
                 styles.label,
@@ -88,40 +90,41 @@ function ClassCareTabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  bar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderTopWidth: 1,
-    borderTopColor: color.border,
-    paddingHorizontal: 12,
-    paddingTop: 9,
-  },
-  item: {
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: radius.field,
-  },
-  itemActive: { backgroundColor: color.primaryTint },
-  label: { fontSize: 10.5 },
-  badge: {
-    position: 'absolute',
-    top: 4,
-    right: 9,
-    minWidth: 16,
-    height: 16,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: color.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: { fontFamily: body[700], fontSize: 9.5, color: '#fff' },
-});
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    bar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      backgroundColor: color.barTint,
+      borderTopWidth: 1,
+      borderTopColor: color.border,
+      paddingHorizontal: 12,
+      paddingTop: 9,
+    },
+    item: {
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: radius.field,
+    },
+    itemActive: { backgroundColor: color.primaryTint },
+    label: { fontSize: 10.5 },
+    badge: {
+      position: 'absolute',
+      top: 4,
+      right: 9,
+      minWidth: 16,
+      height: 16,
+      paddingHorizontal: 4,
+      borderRadius: 8,
+      backgroundColor: color.danger,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    badgeText: { fontFamily: body[700], fontSize: 9.5, color: '#fff' },
+  });

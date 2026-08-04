@@ -3,13 +3,7 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import {
-  seedGroups,
-  seedMessages,
-  seedReplies,
-  seedStudents,
-  teacher,
-} from '@/data/seed';
+import { seedGroups, seedMessages, seedReplies, seedStudents, teacher } from '@/data/seed';
 import type {
   AttendanceRecord,
   AttendanceStatus,
@@ -23,7 +17,7 @@ import type {
 } from '@/data/types';
 import { at, toKey } from '@/lib/date';
 import { hasSupabase } from '@/lib/supabase';
-import { accentNames } from '@/theme/tokens';
+import { accentNames } from '@/theme';
 
 /**
  * Attendance is stored sparsely: only sessions the teacher has actually saved
@@ -153,8 +147,7 @@ export const useStore = create<State>()(
       messages: seedMessages,
       replies: seedReplies,
 
-      signIn: (name) =>
-        set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
+      signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
       signOut: () => set({ signedIn: false, demo: false }),
       enterDemoMode: () => set({ signedIn: true, demo: true }),
 
@@ -218,11 +211,19 @@ export const useStore = create<State>()(
             ...s.messages,
           ],
         }));
-        mirror.sendMessage?.({ groupIds, audience, channels, body, announcement });
+        mirror.sendMessage?.({
+          groupIds,
+          audience,
+          channels,
+          body,
+          announcement,
+        });
       },
 
       markRepliesRead: () => {
-        set((s) => ({ replies: s.replies.map((r) => ({ ...r, unread: false })) }));
+        set((s) => ({
+          replies: s.replies.map((r) => ({ ...r, unread: false })),
+        }));
         mirror.markRepliesRead?.();
       },
     }),
@@ -254,11 +255,9 @@ export const useStore = create<State>()(
 export const useGroups = () => useStore((s) => s.groups);
 export const useStudents = () => useStore((s) => s.students);
 
-export const useGroup = (id?: string) =>
-  useStore((s) => s.groups.find((g) => g.id === id));
+export const useGroup = (id?: string) => useStore((s) => s.groups.find((g) => g.id === id));
 
-export const useStudent = (id?: string) =>
-  useStore((s) => s.students.find((x) => x.id === id));
+export const useStudent = (id?: string) => useStore((s) => s.students.find((x) => x.id === id));
 
 /**
  * Roster for one group, in seed order.
@@ -275,8 +274,7 @@ export const useRoster = (groupId?: string) => {
   );
 };
 
-export const useUnreadReplies = () =>
-  useStore((s) => s.replies.filter((r) => r.unread).length);
+export const useUnreadReplies = () => useStore((s) => s.replies.filter((r) => r.unread).length);
 
 /**
  * True only when the app is running on seed data. Real accounts must never see
@@ -358,7 +356,12 @@ export function recentSessionsFor(student: Student, limit = 3) {
   const { groups, attendance } = useStore.getState();
   const invent = synthesiseHistory();
   const now = new Date();
-  const out: { key: string; date: Date; group: Group; mark: AttendanceStatus }[] = [];
+  const out: {
+    key: string;
+    date: Date;
+    group: Group;
+    mark: AttendanceStatus;
+  }[] = [];
 
   for (let d = 0; d < 60 && out.length < limit * 4; d++) {
     const day = new Date(now);

@@ -6,26 +6,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AngledGradient, Ring } from '@/components/decor';
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
-import {
-  Avatar,
-  Badge,
-  Button,
-  IconButton,
-  Press,
-  StatTile,
-  Txt,
-} from '@/components/ui';
+import { Avatar, Badge, Button, IconButton, Press, StatTile, Txt } from '@/components/ui';
 import { absenceCount, attendanceRate, useGroup, useRoster } from '@/data/store';
 import type { Student } from '@/data/types';
 import { callNumber, smsNumber } from '@/lib/contact';
 import { toKey } from '@/lib/date';
 import { nextSessionForGroup, slotDaysLabel, slotTimeLabel } from '@/lib/schedule';
-import { accents, color, radius, space } from '@/theme/tokens';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
 const PAGE = 4;
 
 export default function GroupDetail() {
+  const { accents, color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -94,18 +88,8 @@ export default function GroupDetail() {
               onPress={() => router.back()}
             />
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <IconButton
-                name="pencil"
-                iconSize={18}
-                tint="rgba(255,255,255,0.14)"
-                fg="#fff"
-              />
-              <IconButton
-                name="more"
-                iconSize={18}
-                tint="rgba(255,255,255,0.14)"
-                fg="#fff"
-              />
+              <IconButton name="pencil" iconSize={18} tint="rgba(255,255,255,0.14)" fg="#fff" />
+              <IconButton name="more" iconSize={18} tint="rgba(255,255,255,0.14)" fg="#fff" />
             </View>
           </View>
 
@@ -130,10 +114,7 @@ export default function GroupDetail() {
             label="Attendance"
             tone={stats?.rate != null ? color.success : color.mutedLight}
           />
-          <StatTile
-            value={stats?.avg != null ? stats.avg.toFixed(1) : '—'}
-            label="Avg. score"
-          />
+          <StatTile value={stats?.avg != null ? stats.avg.toFixed(1) : '—'} label="Avg. score" />
         </View>
 
         <View style={styles.actionRow}>
@@ -141,17 +122,20 @@ export default function GroupDetail() {
             grow
             icon="chat"
             label="Message all"
-            onPress={() =>
-              router.push({ pathname: '/compose', params: { group: group.id } })
-            }
+            onPress={() => router.push({ pathname: '/compose', params: { group: group.id } })}
           />
           <Button grow variant="outline" icon="check" label="Attendance" onPress={openAttendance} />
         </View>
 
         <View style={styles.rosterHead}>
-          <Text style={text.section}>Students</Text>
+          <Text style={[text.section, styles.ink]}>Students</Text>
           <Press
-            onPress={() => router.push({ pathname: '/student/new', params: { group: group.id } })}
+            onPress={() =>
+              router.push({
+                pathname: '/student/new',
+                params: { group: group.id },
+              })
+            }
             style={styles.addLink}>
             <Icon name="plus" size={14} color={color.primary} strokeWidth={2} />
             <Text style={styles.addLabel}>Add</Text>
@@ -186,6 +170,7 @@ export default function GroupDetail() {
 }
 
 function MetaChip({ label }: { label: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.metaChip}>
       <Text style={styles.metaChipLabel}>{label}</Text>
@@ -202,6 +187,8 @@ function RosterRow({
   groupId: string;
   onPress: () => void;
 }) {
+  const { accents, color, status } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const absences = absenceCount(student.id, groupId);
 
   return (
@@ -210,14 +197,14 @@ function RosterRow({
 
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.nameRow}>
-          <Text style={[text.rowTitleSm, { flexShrink: 1 }]} numberOfLines={1}>
+          <Text style={[text.rowTitleSm, styles.ink, { flexShrink: 1 }]} numberOfLines={1}>
             {student.name}
           </Text>
           {absences >= 2 ? (
             <Badge
               label={`${absences} absences`}
               bg={accents.amber.tint}
-              fg="#B4610A"
+              fg={status.late.ink}
               style={styles.absenceBadge}
               textStyle={styles.absenceBadgeText}
             />
@@ -232,7 +219,7 @@ function RosterRow({
           size={40}
           iconSize={15}
           radius={radius.control}
-          tint="#EAF6F1"
+          tint={status.present.tint}
           fg={color.success}
           onPress={() => callNumber(student.phone)}
         />
@@ -250,105 +237,122 @@ function RosterRow({
   );
 }
 
-const styles = StyleSheet.create({
-  missing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    /** Default body ink. Text does not inherit colour from a parent View. */
+    ink: { color: color.ink },
+    missing: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+    },
 
-  header: {
-    overflow: 'hidden',
-    backgroundColor: color.navy,
-    paddingHorizontal: space.gutter,
-    paddingBottom: 22,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  subjectRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  subjectDot: { width: 7, height: 7, borderRadius: 2 },
-  subjectLabel: {
-    fontFamily: body[700],
-    fontSize: 11,
-    letterSpacing: 1.32,
-    textTransform: 'uppercase',
-  },
-  title: { ...text.screenTitle, color: '#fff', marginTop: 9 },
-  metaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
-  metaChip: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: radius.md,
-  },
-  metaChipLabel: {
-    fontFamily: body[600],
-    fontSize: 12.5,
-    color: 'rgba(255,255,255,0.85)',
-  },
+    header: {
+      overflow: 'hidden',
+      backgroundColor: color.navy,
+      paddingHorizontal: space.gutter,
+      paddingBottom: 22,
+      borderBottomLeftRadius: 24,
+      borderBottomRightRadius: 24,
+    },
+    headerBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    subjectRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    subjectDot: { width: 7, height: 7, borderRadius: 2 },
+    subjectLabel: {
+      fontFamily: body[700],
+      fontSize: 11,
+      letterSpacing: 1.32,
+      textTransform: 'uppercase',
+    },
+    title: { ...text.screenTitle, color: '#fff', marginTop: 9 },
+    metaChips: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 14,
+    },
+    metaChip: {
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      paddingHorizontal: 11,
+      paddingVertical: 6,
+      borderRadius: radius.md,
+    },
+    metaChipLabel: {
+      fontFamily: body[600],
+      fontSize: 12.5,
+      color: 'rgba(255,255,255,0.85)',
+    },
 
-  statRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: space.gutter,
-    paddingTop: 16,
-    paddingBottom: 6,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 9,
-    paddingHorizontal: space.gutter,
-    paddingTop: 12,
-    paddingBottom: 20,
-  },
+    statRow: {
+      flexDirection: 'row',
+      gap: 10,
+      paddingHorizontal: space.gutter,
+      paddingTop: 16,
+      paddingBottom: 6,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      gap: 9,
+      paddingHorizontal: space.gutter,
+      paddingTop: 12,
+      paddingBottom: 20,
+    },
 
-  rosterHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space.gutter,
-    paddingBottom: 12,
-  },
-  addLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  addLabel: { fontFamily: body[700], fontSize: 13, color: color.primary },
+    rosterHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: space.gutter,
+      paddingBottom: 12,
+    },
+    addLink: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    addLabel: { fontFamily: body[700], fontSize: 13, color: color.primary },
 
-  roster: { gap: 8, paddingHorizontal: space.gutter },
-  rosterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    borderRadius: radius.tile,
-    paddingVertical: 11,
-    paddingLeft: 13,
-    paddingRight: 12,
-  },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  absenceBadge: {
-    flexShrink: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: radius.xs,
-  },
-  absenceBadgeText: {
-    fontFamily: body[700],
-    fontSize: 10,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  phone: {
-    fontFamily: body[400],
-    fontSize: 12.5,
-    color: color.muted,
-    marginTop: 3,
-    ...text.tabular,
-  },
+    roster: { gap: 8, paddingHorizontal: space.gutter },
+    rosterRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+      borderRadius: radius.tile,
+      paddingVertical: 11,
+      paddingLeft: 13,
+      paddingRight: 12,
+    },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    absenceBadge: {
+      flexShrink: 0,
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: radius.xs,
+    },
+    absenceBadgeText: {
+      fontFamily: body[700],
+      fontSize: 10,
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+    },
+    phone: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.muted,
+      marginTop: 3,
+      ...text.tabular,
+    },
 
-  showMore: { height: 46, alignItems: 'center', justifyContent: 'center' },
-  showMoreLabel: { fontFamily: body[600], fontSize: 14, color: color.muted },
-  emptyRoster: { fontSize: 13.5, color: color.mutedLight, paddingVertical: 12 },
-});
+    showMore: { height: 46, alignItems: 'center', justifyContent: 'center' },
+    showMoreLabel: { fontFamily: body[600], fontSize: 14, color: color.muted },
+    emptyRoster: {
+      fontSize: 13.5,
+      color: color.mutedLight,
+      paddingVertical: 12,
+    },
+  });

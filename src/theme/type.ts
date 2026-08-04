@@ -1,7 +1,5 @@
 import type { TextStyle } from 'react-native';
 
-import { color } from './tokens';
-
 /**
  * React Native cannot synthesise weights for custom fonts — each weight is a
  * separate family. These maps turn a CSS-ish weight into the right family name.
@@ -24,8 +22,7 @@ export const body = {
  * converts at a given size — keeps the numbers in screens readable as the
  * original `-.03em` etc.
  */
-export const tracking = (fontSize: number, em: number) =>
-  Math.round(fontSize * em * 100) / 100;
+export const tracking = (fontSize: number, em: number) => Math.round(fontSize * em * 100) / 100;
 
 const tabular: TextStyle = { fontVariant: ['tabular-nums'] };
 
@@ -108,7 +105,6 @@ export const text = {
     fontSize: 11.5,
     letterSpacing: tracking(11.5, 0.12),
     textTransform: 'uppercase',
-    color: color.mutedLight,
   } as TextStyle,
 
   /** 16/700 — list row primary (group name). */
@@ -156,7 +152,6 @@ export const text = {
   meta: {
     fontFamily: body[400],
     fontSize: 12.5,
-    color: color.muted,
   } as TextStyle,
 
   /** 12.5/600 — emphasised meta. */

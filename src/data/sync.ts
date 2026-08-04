@@ -67,7 +67,10 @@ export const remote: StoreMirror = {
         groups: s.groups.map((g) => (g.id === localId ? { ...g, id: saved.id } : g)),
         students: s.students.map((st) =>
           st.groupIds.includes(localId)
-            ? { ...st, groupIds: st.groupIds.map((id) => (id === localId ? saved.id : id)) }
+            ? {
+                ...st,
+                groupIds: st.groupIds.map((id) => (id === localId ? saved.id : id)),
+              }
             : st,
         ),
       }));

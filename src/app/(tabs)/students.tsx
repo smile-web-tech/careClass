@@ -9,7 +9,7 @@ import { Avatar, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStudents } from '@/data/store';
 import type { Student } from '@/data/types';
 import { callNumber, smsNumber } from '@/lib/contact';
-import { accents, color, radius, space } from '@/theme/tokens';
+import { radius, space, useTheme, useThemedStyles, type AccentName, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
 /**
@@ -18,6 +18,8 @@ import { body, text } from '@/theme/type';
  * roster, with an A–Z grouping since this list is long.
  */
 export default function Students() {
+  const { color, scheme } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const bottomInset = useTabInset(24);
   const router = useRouter();
@@ -51,7 +53,7 @@ export default function Students() {
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={text.pageTitle}>Students</Text>
+            <Text style={[text.pageTitle, styles.ink]}>Students</Text>
             <Text style={styles.count}>
               {students.length} across {groups.length} groups
             </Text>
@@ -75,6 +77,8 @@ export default function Students() {
             style={styles.searchInput}
             autoCorrect={false}
             clearButtonMode="while-editing"
+            selectionColor={color.primary}
+            keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
           />
         </View>
       </View>
@@ -90,9 +94,7 @@ export default function Students() {
           paddingBottom: bottomInset,
         }}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <EmptyState title="No students" hint="Try another name or number" />
-        }
+        ListEmptyComponent={<EmptyState title="No students" hint="Try another name or number" />}
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionLetter}>{section.title}</Text>
         )}
@@ -116,14 +118,16 @@ function StudentRow({
   onPress,
 }: {
   student: Student;
-  groupNames: { name: string; accent: keyof typeof accents }[];
+  groupNames: { name: string; accent: AccentName }[];
   onPress: () => void;
 }) {
+  const { accents, color, status } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <Press onPress={onPress} style={styles.row}>
       <Avatar name={student.name} accent={student.accent} size={42} radius={radius.button} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={text.rowTitleSm} numberOfLines={1}>
+        <Text style={[text.rowTitleSm, styles.ink]} numberOfLines={1}>
           {student.name}
         </Text>
         <View style={styles.tagRow}>
@@ -146,7 +150,7 @@ function StudentRow({
           size={40}
           iconSize={15}
           radius={radius.control}
-          tint="#EAF6F1"
+          tint={status.present.tint}
           fg={color.success}
           onPress={() => callNumber(student.phone)}
         />
@@ -164,66 +168,78 @@ function StudentRow({
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    backgroundColor: color.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border,
-    paddingHorizontal: space.gutter,
-    paddingBottom: 14,
-    boxShadow: '0 6px 18px rgba(12,23,41,0.03)',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingBottom: 14,
-  },
-  count: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight, marginTop: 3 },
-  search: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: radius.field,
-    backgroundColor: color.bg,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    fontFamily: body[400],
-    fontSize: 15,
-    color: color.ink,
-    padding: 0,
-  },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    /** Default body ink. Text does not inherit colour from a parent View. */
+    ink: { color: color.ink },
+    header: {
+      backgroundColor: color.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: color.border,
+      paddingHorizontal: space.gutter,
+      paddingBottom: 14,
+      boxShadow: '0 6px 18px rgba(12,23,41,0.03)',
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingBottom: 14,
+    },
+    count: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      marginTop: 3,
+    },
+    search: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      height: 44,
+      paddingHorizontal: 14,
+      borderRadius: radius.field,
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      fontFamily: body[400],
+      fontSize: 15,
+      color: color.ink,
+      padding: 0,
+    },
 
-  sectionLetter: {
-    fontFamily: body[700],
-    fontSize: 11.5,
-    letterSpacing: 1.38,
-    color: color.mutedLight,
-    marginTop: 14,
-    marginBottom: 8,
-    marginLeft: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    borderRadius: radius.tile,
-    paddingVertical: 11,
-    paddingLeft: 13,
-    paddingRight: 12,
-    marginBottom: 8,
-  },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 },
-  tag: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.xs + 1 },
-  tagLabel: { fontFamily: body[600], fontSize: 10.5 },
-  noGroup: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight },
-});
+    sectionLetter: {
+      fontFamily: body[700],
+      fontSize: 11.5,
+      letterSpacing: 1.38,
+      color: color.mutedLight,
+      marginTop: 14,
+      marginBottom: 8,
+      marginLeft: 2,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
+      borderRadius: radius.tile,
+      paddingVertical: 11,
+      paddingLeft: 13,
+      paddingRight: 12,
+      marginBottom: 8,
+    },
+    tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 },
+    tag: {
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: radius.xs + 1,
+    },
+    tagLabel: { fontFamily: body[600], fontSize: 10.5 },
+    noGroup: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight },
+  });

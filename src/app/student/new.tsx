@@ -27,7 +27,7 @@ import {
 import { useGroups, useStore } from '@/data/store';
 import { smsNumber } from '@/lib/contact';
 import { slotDaysLabel, slotTimeLabel } from '@/lib/schedule';
-import { accents, color, radius, space } from '@/theme/tokens';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
 const blank = {
@@ -39,6 +39,8 @@ const blank = {
 };
 
 export default function NewStudent() {
+  const { accents, color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{ group?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -227,49 +229,69 @@ export default function NewStudent() {
   );
 }
 
-const styles = StyleSheet.create({
-  label: { marginBottom: 10 },
+const makeStyles = ({ color }: Theme) =>
+  StyleSheet.create({
+    label: { marginBottom: 10 },
 
-  importCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-    marginBottom: 22,
-  },
-  importIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.button,
-    backgroundColor: color.primaryTint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  importTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
-  importHint: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight, marginTop: 2 },
+    importCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+      marginBottom: 22,
+    },
+    importIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.button,
+      backgroundColor: color.primaryTint,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    importTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    importHint: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      marginTop: 2,
+    },
 
-  group: { overflow: 'hidden', marginBottom: 22 },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 22 },
+    group: { overflow: 'hidden', marginBottom: 22 },
+    chipWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 22,
+    },
 
-  welcomeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 13,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-  },
-  welcomeTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
-  welcomeHint: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight, marginTop: 2 },
+    welcomeCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 13,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
+    },
+    welcomeTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    welcomeHint: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      marginTop: 2,
+    },
 
-  secondarySave: {
-    height: 50,
-    paddingHorizontal: 20,
-    borderRadius: radius.button,
-    backgroundColor: color.bg,
-    borderWidth: 1,
-    borderColor: color.border,
-    justifyContent: 'center',
-  },
-  secondarySaveLabel: { fontFamily: body[600], fontSize: 14.5, color: color.inkSoft },
-});
+    secondarySave: {
+      height: 50,
+      paddingHorizontal: 20,
+      borderRadius: radius.button,
+      backgroundColor: color.fill,
+      borderWidth: 1,
+      borderColor: color.border,
+      justifyContent: 'center',
+    },
+    secondarySaveLabel: {
+      fontFamily: body[600],
+      fontSize: 14.5,
+      color: color.inkSoft,
+    },
+  });
