@@ -72,7 +72,7 @@ export default function GroupDetail() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
-          <AngledGradient colors={[a.headerFrom, color.navy]} angle={155} />
+          <AngledGradient colors={[a.headerFrom, a.headerTo]} angle={155} />
           <Ring
             size={210}
             width={28}

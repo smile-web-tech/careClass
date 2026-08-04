@@ -168,7 +168,7 @@ function StudentRow({
   );
 }
 
-const makeStyles = ({ color }: Theme) =>
+const makeStyles = ({ color, shadow }: Theme) =>
   StyleSheet.create({
     /** Default body ink. Text does not inherit colour from a parent View. */
     ink: { color: color.ink },
@@ -178,7 +178,7 @@ const makeStyles = ({ color }: Theme) =>
       borderBottomColor: color.border,
       paddingHorizontal: space.gutter,
       paddingBottom: 14,
-      boxShadow: '0 6px 18px rgba(12,23,41,0.03)',
+      ...shadow.card,
     },
     headerRow: {
       flexDirection: 'row',

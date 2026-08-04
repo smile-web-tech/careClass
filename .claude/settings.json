@@ -66,7 +66,8 @@
       "Bash(npx --yes eas-cli@latest build -p android --profile development --non-interactive --no-wait)",
       "Bash(npx --yes eas-cli@latest build:wait --id 38e6cb8f-19e4-4b09-b756-31718d2b5f7e)",
       "Bash(npx --yes eas-cli@latest build:view 38e6cb8f-19e4-4b09-b756-31718d2b5f7e)",
-      "Bash(npx --yes prettier@3 --write \"src/**/*.{ts,tsx}\")"
+      "Bash(npx --yes prettier@3 --write \"src/**/*.{ts,tsx}\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('status  :',d.get\\('status'\\)\\);print\\('apk     :',d.get\\('artifacts',{}\\).get\\('buildUrl'\\) or d.get\\('artifacts',{}\\).get\\('applicationArchiveUrl'\\)\\)\")"
     ]
   }
 }

@@ -167,7 +167,7 @@ const makeStyles = ({ color }: Theme) =>
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(255,255,255,0.96)',
+      backgroundColor: color.barTint,
       borderTopWidth: 1,
       borderTopColor: color.border,
       paddingHorizontal: space.gutter,
