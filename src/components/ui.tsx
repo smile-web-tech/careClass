@@ -177,6 +177,7 @@ export function IconButton({
   strokeWidth,
   radius: r = radius.control,
   style,
+  accessibilityLabel,
 }: {
   name: IconName;
   onPress?: () => void;
@@ -187,6 +188,8 @@ export function IconButton({
   strokeWidth?: number;
   radius?: number;
   style?: ViewStyle;
+  /** An icon on its own says nothing to a screen reader. Name what it does. */
+  accessibilityLabel?: string;
 }) {
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -195,6 +198,8 @@ export function IconButton({
   return (
     <Press
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={[
         styles.center,
         { width: size, height: size, borderRadius: r, backgroundColor: tint },

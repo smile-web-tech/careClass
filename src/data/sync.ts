@@ -71,36 +71,16 @@ export async function hydrate() {
 }
 
 export const remote: StoreMirror = {
-  createGroup: (group, localId: string) =>
-    enqueue(async () => {
-      const saved = await api.createGroup(group);
-      // Swap the optimistic local id for the server's so later writes address
-      // the right row.
-      useStore.setState((s) => ({
-        groups: s.groups.map((g) => (g.id === localId ? { ...g, id: saved.id } : g)),
-        students: s.students.map((st) =>
-          st.groupIds.includes(localId)
-            ? {
-                ...st,
-                groupIds: st.groupIds.map((id) => (id === localId ? saved.id : id)),
-              }
-            : st,
-        ),
-      }));
-    }),
+  // No id rewriting here any more: the store mints a UUID and the row is
+  // inserted under it, so the id the UI already holds is the real one.
+  createGroup: (group: Group) => enqueue(() => api.createGroup(group)),
 
   updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) =>
     enqueue(() => api.updateGroup(id, patch)),
 
   deleteGroup: (id: string) => enqueue(() => api.deleteGroup(id)),
 
-  createStudent: (student: Omit<Student, 'id'>, localId: string): void =>
-    enqueue(async () => {
-      const saved = await api.createStudent(student);
-      useStore.setState((s) => ({
-        students: s.students.map((x) => (x.id === localId ? { ...x, id: saved.id } : x)),
-      }));
-    }),
+  createStudent: (student: Student) => enqueue(() => api.createStudent(student)),
 
   updateStudent: (id: string, patch: Partial<Student>) =>
     enqueue(() => api.updateStudent(id, patch)),
@@ -125,15 +105,7 @@ export const remote: StoreMirror = {
 
   markRepliesRead: () => enqueue(() => api.markRepliesRead()),
 
-  createEvent: (event: Omit<CalendarEvent, 'id'>, localId: string) =>
-    enqueue(async () => {
-      const saved = await api.createEvent(event);
-      // Swap the optimistic local id for the server's, so a later edit or
-      // delete addresses the real row rather than a id that never existed.
-      useStore.setState((s) => ({
-        events: s.events.map((e) => (e.id === localId ? { ...e, id: saved.id } : e)),
-      }));
-    }),
+  createEvent: (event: CalendarEvent) => enqueue(() => api.createEvent(event)),
 
   updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) =>
     enqueue(() => api.updateEvent(id, patch)),

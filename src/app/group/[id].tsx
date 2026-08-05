@@ -87,22 +87,14 @@ export default function GroupDetail() {
               fg="#fff"
               onPress={() => router.back()}
             />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <IconButton
-                name="pencil"
-                iconSize={18}
-                tint="rgba(255,255,255,0.14)"
-                fg="#fff"
-                onPress={() => router.push(`/group/edit?id=${group.id}`)}
-              />
-              <IconButton
-                name="more"
-                iconSize={18}
-                tint="rgba(255,255,255,0.14)"
-                fg="#fff"
-                onPress={() => router.push(`/group/edit?id=${group.id}`)}
-              />
-            </View>
+            <IconButton
+              name="pencil"
+              iconSize={18}
+              tint="rgba(255,255,255,0.14)"
+              fg="#fff"
+              onPress={() => router.push(`/group/edit?id=${group.id}`)}
+              accessibilityLabel="Edit group"
+            />
           </View>
 
           <View style={{ marginTop: 20 }}>
@@ -142,12 +134,7 @@ export default function GroupDetail() {
         <View style={styles.rosterHead}>
           <Text style={[text.section, styles.ink]}>Students</Text>
           <Press
-            onPress={() =>
-              router.push({
-                pathname: '/student/new',
-                params: { group: group.id },
-              })
-            }
+            onPress={() => router.push({ pathname: '/group/roster', params: { id: group.id } })}
             style={styles.addLink}>
             <Icon name="plus" size={14} color={color.primary} strokeWidth={2} />
             <Text style={styles.addLabel}>Add</Text>
@@ -173,7 +160,12 @@ export default function GroupDetail() {
           ) : null}
 
           {roster.length === 0 ? (
-            <Txt style={styles.emptyRoster}>No students in this group yet.</Txt>
+            <Press
+              onPress={() => router.push({ pathname: '/group/roster', params: { id: group.id } })}
+              style={styles.emptyRoster}>
+              <Txt style={styles.emptyRosterTitle}>No students in this group yet.</Txt>
+              <Text style={styles.emptyRosterLink}>Choose from your students</Text>
+            </Press>
           ) : null}
         </View>
       </ScrollView>
@@ -363,8 +355,14 @@ const makeStyles = ({ color }: Theme) =>
     showMore: { height: 46, alignItems: 'center', justifyContent: 'center' },
     showMoreLabel: { fontFamily: body[600], fontSize: 14, color: color.muted },
     emptyRoster: {
-      fontSize: 13.5,
-      color: color.mutedLight,
-      paddingVertical: 12,
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 22,
+      borderRadius: radius.tile,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: color.dashed,
     },
+    emptyRosterTitle: { fontSize: 13.5, color: color.mutedLight },
+    emptyRosterLink: { fontFamily: body[700], fontSize: 13.5, color: color.primary },
   });

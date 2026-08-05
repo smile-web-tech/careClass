@@ -269,13 +269,22 @@ export async function deleteAccountData() {
 /* Writes                                                                     */
 /* -------------------------------------------------------------------------- */
 
-export async function createGroup(group: Omit<Group, 'id'>): Promise<Group> {
+/**
+ * Insert a group under the id the store already minted.
+ *
+ * The id is supplied rather than left to `gen_random_uuid()` so that the value
+ * the UI navigated to is the value in the database. Letting Postgres choose
+ * meant the client had to swap ids afterwards, and anything still holding the
+ * old one — a route, a screen on the back stack — broke.
+ */
+export async function createGroup(group: Group): Promise<Group> {
   const teacherId = await requireUser();
 
   const row = unwrap(
     await supabase
       .from('groups')
       .insert({
+        id: group.id,
         teacher_id: teacherId,
         name: group.name,
         subject: group.subject,
@@ -328,12 +337,14 @@ export async function fetchEvents(): Promise<CalendarEvent[]> {
   return rows.map(toEvent);
 }
 
-export async function createEvent(event: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent> {
+/** Insert under the store's id — see `createGroup` for why. */
+export async function createEvent(event: CalendarEvent): Promise<CalendarEvent> {
   const teacherId = await requireUser();
   const row = unwrap(
     await supabase
       .from('calendar_events')
       .insert({
+        id: event.id,
         teacher_id: teacherId,
         title: event.title,
         note: event.note ?? null,
@@ -439,13 +450,15 @@ export async function deleteGroup(id: string) {
   unwrap(await supabase.from('groups').delete().eq('id', id).eq('teacher_id', teacherId));
 }
 
-export async function createStudent(student: Omit<Student, 'id'>): Promise<Student> {
+/** Insert under the store's id — see `createGroup` for why. */
+export async function createStudent(student: Student): Promise<Student> {
   const teacherId = await requireUser();
 
   const row = unwrap(
     await supabase
       .from('students')
       .insert({
+        id: student.id,
         teacher_id: teacherId,
         name: student.name,
         phone: student.phone,
@@ -665,9 +678,7 @@ export function subscribeToInbox(onChange: () => void) {
     timer = null;
   };
 
-  const sub = AppState.addEventListener('change', (s) =>
-    s === 'active' ? start() : stop(),
-  );
+  const sub = AppState.addEventListener('change', (s) => (s === 'active' ? start() : stop()));
   if (AppState.currentState === 'active') start();
 
   return () => {
