@@ -211,116 +211,210 @@ export async function signInWithApple() {
 
 const cleanEmail = (email: string) => email.trim().toLowerCase();
 
+const deviceTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+/* -------------------------------------------------------------------------- */
+/* Email + password                                                           */
+/* -------------------------------------------------------------------------- */
+
+export type RegisterInput = {
+  name: string;
+  email: string;
+  phone?: string;
+  password: string;
+};
+
 /**
- * Email sign-in, step 1 — mail a 6-digit code.
- *
- * A code rather than a magic link: a link has to bounce out to the mail app and
- * deep-link back into a specific build, which breaks constantly on Android. A
- * code the teacher can read and type works the first time, every time.
- *
- * Requires `{{ .Token }}` in the Magic Link email template
- * (Supabase → Authentication → Email Templates); the stock template only
- * contains the link.
+ * `already-registered` means the caller should send the teacher to the login
+ * screen instead. It is *not* an error — it is the ordinary outcome of someone
+ * forgetting they already have an account.
  */
+export type RegisterOutcome = 'code-sent' | 'already-registered';
+
 /**
- * Email sign-in, step 1 — send a one-time code.
+ * Registration, step 1 — create the account and mail a confirmation code.
  *
- * `shouldCreateUser: true` covers both signing in and signing up, and the app
- * deliberately does not check first whether the address is already registered.
- * An endpoint that answers "does this email have an account?" is an account
- * enumeration oracle: anyone could test a list of addresses against it and
- * learn which of your teachers use the app. Instead the same code is sent
- * either way, and whether this is a new account is discovered *after* the code
- * is verified — at which point the person has proved they own the mailbox.
+ * The user exists in `auth.users` immediately but unconfirmed, and migration
+ * 0003 withholds the `teachers` profile until the email is confirmed. So an
+ * abandoned signup — app closed at the code screen, code never opened — leaves
+ * nothing usable behind, and starting again behaves exactly like a first
+ * attempt.
  *
- * A signup abandoned at the code screen leaves only an unconfirmed
- * `auth.users` row and no profile at all (migration 0003), so nothing is
- * half-created and retrying behaves exactly like a first attempt.
+ * On telling the teacher their address is taken: with email confirmation on,
+ * GoTrue answers a signup for an already-confirmed address with a decoy — a
+ * user-shaped object carrying no identities, and no mail sent — precisely so
+ * this endpoint cannot be used to test a list of addresses for accounts. That
+ * decoy is the only signal available, and it is used for one thing: routing
+ * the person in front of us to the login screen. Nothing is displayed that
+ * they did not already type.
  */
-export async function sendEmailCode(email: string) {
-  const { error } = await supabase.auth.signInWithOtp({
-    email: cleanEmail(email),
+export async function registerWithPassword(input: RegisterInput): Promise<RegisterOutcome> {
+  const email = cleanEmail(input.email);
+  const name = input.name.trim();
+  const phone = input.phone?.trim() || null;
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: input.password,
     options: {
-      shouldCreateUser: true,
-      // Included so a teacher who taps the link instead of typing the code
-      // still lands back in the app.
+      // Read by `handle_new_user` when the confirmation lands, so the profile
+      // is right even if the app is killed before it can write one itself.
+      data: { full_name: name, phone },
       emailRedirectTo: Platform.OS === 'web' ? undefined : redirectTo,
     },
   });
-  if (error) throw error;
+
+  if (error) {
+    const code = (error as { code?: string }).code;
+    if (code === 'user_already_exists' || /already\s+(registered|exists)/i.test(error.message)) {
+      return 'already-registered';
+    }
+    throw error;
+  }
+
+  if (data.user && (data.user.identities?.length ?? 0) === 0) return 'already-registered';
+
+  return 'code-sent';
 }
 
 /**
- * Email sign-in, step 2 — exchange the code for a session.
+ * Mail the confirmation code again.
  *
- * Returns whether this account still needs a profile. The `teachers` row is
- * created by a trigger the moment the email is confirmed, so a brand-new
- * account has a row with an empty name; an existing one has a real name and
- * goes straight into the app.
+ * `resend` rather than another `signUp`: repeating the signup would rewrite the
+ * stored password with whatever is in the form at that moment, which is not
+ * what "I didn't get the email" should do.
  */
-export async function verifyEmailCode(
-  email: string,
-  code: string,
-): Promise<{ isNewAccount: boolean }> {
-  const { data, error } = await supabase.auth.verifyOtp({
+export async function resendSignupCode(email: string) {
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
     email: cleanEmail(email),
-    token: code.trim(),
-    type: 'email',
+    options: { emailRedirectTo: Platform.OS === 'web' ? undefined : redirectTo },
   });
   if (error) throw error;
-  if (!data.user) throw new Error('That code did not produce a session.');
-
-  const { data: profile } = await supabase
-    .from('teachers')
-    .select('name')
-    .eq('id', data.user.id)
-    .maybeSingle();
-
-  return { isNewAccount: !profile?.name?.trim() };
 }
 
 /**
- * Finish a new registration.
+ * Registration, step 2 — confirm the address and write the profile.
  *
- * Runs only after the code is verified, so the session already exists and RLS
- * scopes the write to this teacher. The name also goes onto the auth user so
- * it survives if the profile row is ever rebuilt.
+ * Verifying the code confirms the email *and* returns a session, so the profile
+ * write below runs as the teacher and RLS scopes it to their own row.
  */
-export async function completeRegistration(input: { name: string; phone?: string }) {
+export async function confirmRegistration(input: {
+  email: string;
+  code: string;
+  name: string;
+  phone?: string;
+}) {
+  const email = cleanEmail(input.email);
+  const token = input.code.trim();
+
+  // A signup confirmation is minted under type `signup`. Projects created
+  // before that split still issue the generic `email` type, and a mismatch is
+  // rejected without consuming the token — so trying the other costs nothing.
+  let result = await supabase.auth.verifyOtp({ email, token, type: 'signup' });
+  if (result.error) result = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  if (result.error) throw result.error;
+
+  const user = result.data.user;
+  if (!user) throw new Error('That code did not produce a session.');
+
+  await writeProfile({
+    id: user.id,
+    email,
+    name: input.name,
+    phone: input.phone,
+  });
+}
+
+/**
+ * Upsert rather than update: the trigger normally has the row in place by now,
+ * but a project that has not run migration 0003 yet would otherwise silently
+ * update nothing and leave a nameless teacher.
+ */
+async function writeProfile(input: {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string | null;
+}) {
   const name = input.name.trim();
   const phone = input.phone?.trim() || null;
-  if (name.length < 2) throw new Error('Please enter your full name.');
 
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) throw new Error('Your session expired. Please sign in again.');
-
-  const { error } = await supabase
-    .from('teachers')
-    .update({
+  const { error } = await supabase.from('teachers').upsert(
+    {
+      id: input.id,
+      email: input.email,
       name,
       phone,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
-    })
-    .eq('id', auth.user.id);
+      // Schedules are stored as wall-clock time, so the zone is what turns a
+      // slot into a real instant — and only the device knows it.
+      timezone: deviceTimezone(),
+    },
+    { onConflict: 'id' },
+  );
   if (error) throw error;
 
+  // Mirrored onto the auth user so the name survives a profile rebuild and is
+  // available to the root layout before the first hydrate finishes.
   await supabase.auth.updateUser({ data: { full_name: name } });
+}
+
+export async function signInWithPassword(email: string, password: string) {
+  const { error } = await supabase.auth.signInWithPassword({
+    email: cleanEmail(email),
+    password,
+  });
+  if (error) throw error;
 }
 
 /**
  * Abandon a half-finished registration.
  *
- * Called when the teacher backs out of the profile step. Signing out drops the
- * session; the unconfirmed-or-nameless profile is cleaned up server-side, and
- * starting again behaves like a fresh signup.
+ * Signing out drops any session the code step created. The server never made a
+ * profile for an unconfirmed user (migration 0003), so nothing is left
+ * half-built and the next attempt is a clean one.
  */
 export async function abandonRegistration() {
   try {
     await supabase.auth.signOut();
   } catch {
     // Losing the local session is what matters; a failed network call here
-    // must not strand the user on the profile step.
+    // must not strand the teacher mid-form.
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Password reset                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Mail a recovery code.
+ *
+ * Always resolves, even for an address with no account: answering differently
+ * would turn this screen into the account-existence oracle that registration
+ * deliberately avoids being. The caller says "if that address has an account,
+ * a code is on its way" either way.
+ */
+export async function requestPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail(email), {
+    redirectTo: Platform.OS === 'web' ? undefined : redirectTo,
+  });
+  // A rate-limit is worth surfacing; "no such user" is not, and GoTrue does not
+  // report it anyway.
+  if (error && /rate|too many/i.test(error.message)) throw error;
+}
+
+/** Verify the recovery code, then set the new password on the session it opens. */
+export async function resetPassword(email: string, code: string, password: string) {
+  const { error: verifyError } = await supabase.auth.verifyOtp({
+    email: cleanEmail(email),
+    token: code.trim(),
+    type: 'recovery',
+  });
+  if (verifyError) throw verifyError;
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
 }
 
 export async function signOut() {

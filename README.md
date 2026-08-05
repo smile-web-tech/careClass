@@ -49,18 +49,36 @@ can only ever read or write their own rows.
 Dashboard → Authentication → Providers → Google and Apple. Add the redirect URL
 `classcare://auth/callback` for native, plus your web origin.
 
-**3. Deploy the message fan-out**
+**3. Push the auth settings and email templates**
+
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_… node scripts/apply-auth-config.mjs
+```
+
+Not optional. Registration and password reset both ask for a six-digit code,
+and Supabase's stock emails contain a link and no code at all — so without this
+step the teacher gets mail they cannot use. The script installs a code-bearing
+template for confirmation, recovery and magic link, sets the code to six digits
+over ten minutes, and raises the server's minimum password length to match
+`MIN_LENGTH` in `src/lib/password.ts`. It prints `has code ✓` per template.
+
+Generate the token at <https://supabase.com/dashboard/account/tokens> and revoke
+it afterwards; it is read from the environment and never written to disk.
+
+**4. Deploy the message fan-out**
 
 ```bash
 npx supabase functions deploy send-message
 npx supabase secrets set \
-  SUPABASE_SECRET_KEY=sb_secret_... \
   ESKIZ_EMAIL=... ESKIZ_PASSWORD=... ESKIZ_SENDER=... \
   RESEND_API_KEY=re_... RESEND_FROM="ClassCare <no-reply@yourdomain>"
 ```
 
-The secret key bypasses row level security. It belongs in function secrets and
-nowhere else — never in `.env`, never under `src/`.
+The function reads `SUPABASE_SERVICE_ROLE_KEY`, which Supabase injects into every
+function at runtime — do not try to set it yourself, as the `SUPABASE_` prefix is
+reserved and `secrets set` will reject it. That key bypasses row level security,
+so it belongs in the function's environment and nowhere else: never in `.env`,
+never under `src/`.
 
 ## Why bulk sending is server-side
 

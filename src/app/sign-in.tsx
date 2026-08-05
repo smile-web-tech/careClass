@@ -1,34 +1,18 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Glow, AngledGradient, Ring } from '@/components/decor';
+import { AngledGradient, Glow, Ring } from '@/components/decor';
 import { GoogleMark, Icon } from '@/components/Icon';
-import { OtpInput } from '@/components/OtpInput';
 import { Logo, Press } from '@/components/ui';
 import { useStore } from '@/data/store';
 import {
   AuthCancelled,
   isAppleSignInAvailable,
   redirectTo,
-  abandonRegistration,
-  completeRegistration,
-  sendEmailCode,
   signInWithApple,
   signInWithGoogle,
-  verifyEmailCode,
 } from '@/lib/auth';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -36,10 +20,18 @@ import { body, display, text } from '@/theme/type';
 
 const ON_DARK = 'rgba(234,240,251,';
 
-type Provider = 'google' | 'apple' | 'email';
+type Provider = 'google' | 'apple';
 
+/**
+ * The front door.
+ *
+ * Providers live here because they are one tap and cannot fail halfway. Email
+ * does not: signing in and registering ask for different things and deserve
+ * their own screens, so both are links out of this one rather than a sheet that
+ * has to be three forms at once.
+ */
 export default function SignIn() {
-  const { color, scheme } = useTheme();
+  const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -49,44 +41,19 @@ export default function SignIn() {
   const [busy, setBusy] = useState<Provider | null>(null);
   const [appleReady, setAppleReady] = useState(false);
 
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [step, setStep] = useState<'email' | 'code' | 'profile'>('email');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [codeError, setCodeError] = useState<string | null>(null);
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  /** Seconds until "Resend code" becomes tappable again. */
-  const [cooldown, setCooldown] = useState(0);
-
-  // Rejects "a@b" and trailing-dot addresses without pretending to be RFC 5322.
-  const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
-
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setTimeout(() => setCooldown((n) => n - 1), 1000);
-    return () => clearTimeout(t);
-  }, [cooldown]);
-
   useEffect(() => {
     isAppleSignInAvailable().then(setAppleReady);
   }, []);
 
   /**
-   * With a project configured this runs the real OAuth flow and the root
-   * layout's session listener does the navigating. Without one it flips the
-   * local flag so the app is still walkable on seed data.
+   * With a project configured this runs the real flow and the root layout's
+   * session listener does the navigating. Without one it flips the local flag
+   * so the app is still walkable on seed data.
    */
   const enter = async (provider: Provider) => {
     if (!hasSupabase) {
       signIn();
       router.replace('/(tabs)');
-      return;
-    }
-
-    // Email is a two-step flow of its own, not a one-shot provider handoff.
-    if (provider === 'email') {
-      setEmailOpen(true);
       return;
     }
 
@@ -104,6 +71,16 @@ export default function SignIn() {
     }
   };
 
+  /** Email is two screens, and which one depends on whether they have an account. */
+  const goEmail = (route: '/login' | '/register') => {
+    if (!hasSupabase) {
+      signIn();
+      router.replace('/(tabs)');
+      return;
+    }
+    router.push(route);
+  };
+
   /**
    * Straight into the app on seed data — no account, no network. Writes stay
    * local (see `demo` in the store), so nothing here can touch real rows.
@@ -111,97 +88,6 @@ export default function SignIn() {
   const skipToDemo = () => {
     enterDemoMode();
     router.replace('/(tabs)');
-  };
-
-  const sendCode = async () => {
-    setBusy('email');
-    setCodeError(null);
-    try {
-      await sendEmailCode(email);
-      setStep('code');
-      setCooldown(30);
-    } catch (e) {
-      Alert.alert('Could not send the code', e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const resend = async () => {
-    if (cooldown > 0) return;
-    setBusy('email');
-    setCode('');
-    setCodeError(null);
-    try {
-      await sendEmailCode(email);
-      setCooldown(30);
-    } catch (e) {
-      Alert.alert('Could not resend', e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /**
-   * A correct code either lands the teacher in the app, or — for a brand-new
-   * account — moves on to collect their name. Which of the two is only known
-   * after the code is verified, deliberately: checking up front whether an
-   * email is registered would answer that question for anyone who asked.
-   */
-  const verifyCode = async (candidate: string) => {
-    if (candidate.length < 6 || busy) return;
-    setBusy('email');
-    setCodeError(null);
-    try {
-      const { isNewAccount } = await verifyEmailCode(email, candidate);
-      if (isNewAccount) {
-        setStep('profile');
-      } else {
-        setEmailOpen(false);
-        router.replace('/(tabs)');
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setCode('');
-      setCodeError(
-        /expired/i.test(msg)
-          ? 'That code has expired. Send a new one.'
-          : /invalid|token/i.test(msg)
-            ? 'That code is not right. Check and try again.'
-            : msg,
-      );
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const finishRegistration = async () => {
-    setBusy('email');
-    try {
-      await completeRegistration({ name: fullName, phone });
-      setEmailOpen(false);
-      router.replace('/(tabs)');
-    } catch (e) {
-      Alert.alert('Could not finish signing up', e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /**
-   * Closing the sheet mid-registration must not leave a usable half-account.
-   * Backing out of the profile step signs the new session out; the server only
-   * creates a profile once the email is confirmed (migration 0003), so the next
-   * attempt behaves exactly like a first one.
-   */
-  const closeEmail = () => {
-    if (step === 'profile') void abandonRegistration();
-    setEmailOpen(false);
-    setStep('email');
-    setCode('');
-    setCodeError(null);
-    setFullName('');
-    setPhone('');
   };
 
   return (
@@ -232,7 +118,7 @@ export default function SignIn() {
         </View>
       </View>
 
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) + 16 }]}>
+      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) + 12 }]}>
         <Text style={[text.sheetTitle, styles.ink]}>Get started</Text>
         <Text style={styles.sheetHint}>Your data stays in your own account.</Text>
 
@@ -271,8 +157,25 @@ export default function SignIn() {
             </Press>
           ) : null}
 
-          <Press onPress={() => enter('email')} disabled={busy !== null} style={styles.emailButton}>
-            <Text style={styles.emailLabel}>Use email instead</Text>
+          <View style={styles.orRow}>
+            <View style={styles.orRule} />
+            <Text style={styles.orLabel}>or</Text>
+            <View style={styles.orRule} />
+          </View>
+
+          <Press
+            onPress={() => goEmail('/register')}
+            disabled={busy !== null}
+            style={styles.emailButton}>
+            <Icon name="mail" size={16} color={color.ink} />
+            <Text style={styles.providerLabel}>Sign up with email</Text>
+          </Press>
+        </View>
+
+        <View style={styles.signInRow}>
+          <Text style={styles.signInPrompt}>Already have an account? </Text>
+          <Press onPress={() => goEmail('/login')} accessibilityRole="link" hitSlop={8}>
+            <Text style={styles.signInLabel}>Sign in</Text>
           </Press>
         </View>
 
@@ -294,175 +197,6 @@ export default function SignIn() {
           </>
         ) : null}
       </View>
-
-      <Modal
-        visible={emailOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={closeEmail}>
-        <Press style={styles.scrim} onPress={closeEmail} accessibilityLabel="Dismiss" />
-        {/*
-          The sheet is bottom-anchored, so the keyboard would cover the input
-          and the button entirely. `padding` lifts it on iOS; on Android the
-          manifest's adjustResize does it, and adding `height` here as well
-          would double-count and leave a gap.
-        */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <ScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
-            <View style={[styles.emailSheet, { paddingBottom: Math.max(insets.bottom, 18) + 16 }]}>
-              <View style={styles.grabber} />
-
-              {step === 'email' ? (
-                <>
-                  <Text style={[text.sheetTitle, styles.ink]}>What&rsquo;s your email?</Text>
-                  <Text style={styles.sheetHint}>
-                    We&rsquo;ll send a six-digit code. No password to remember.
-                  </Text>
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="you@example.com"
-                    placeholderTextColor={color.mutedLight}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    autoFocus
-                    returnKeyType="send"
-                    onSubmitEditing={() => void sendCode()}
-                    style={styles.emailInput}
-                    selectionColor={color.primary}
-                    keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
-                  />
-                  <Press
-                    onPress={() => void sendCode()}
-                    disabled={busy !== null || !emailLooksValid}
-                    style={[
-                      styles.sheetButton,
-                      (busy !== null || !emailLooksValid) && styles.sheetButtonOff,
-                    ]}>
-                    {busy ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.sheetButtonLabel}>Send code</Text>
-                    )}
-                  </Press>
-                </>
-              ) : step === 'code' ? (
-                <>
-                  <Text style={[text.sheetTitle, styles.ink]}>Enter the code</Text>
-                  <Text style={styles.sheetHint}>
-                    Sent to {email.trim().toLowerCase()} · expires in 10 minutes
-                  </Text>
-
-                  <View style={{ marginTop: 18, marginBottom: 6 }}>
-                    <OtpInput
-                      value={code}
-                      onChange={(v) => {
-                        setCode(v);
-                        if (codeError) setCodeError(null);
-                      }}
-                      invalid={!!codeError}
-                      editable={busy === null}
-                      onComplete={(c) => void verifyCode(c)}
-                    />
-                  </View>
-
-                  {codeError ? <Text style={styles.codeError}>{codeError}</Text> : null}
-
-                  <Press
-                    onPress={() => void verifyCode(code)}
-                    disabled={busy !== null || code.length < 6}
-                    style={[
-                      styles.sheetButton,
-                      (busy !== null || code.length < 6) && styles.sheetButtonOff,
-                    ]}>
-                    {busy ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.sheetButtonLabel}>Continue</Text>
-                    )}
-                  </Press>
-
-                  <View style={styles.codeFooter}>
-                    <Press onPress={() => void resend()} disabled={cooldown > 0 || busy !== null}>
-                      <Text
-                        style={[
-                          styles.sheetLinkLabel,
-                          (cooldown > 0 || busy !== null) && { color: color.mutedLight },
-                        ]}>
-                        {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
-                      </Text>
-                    </Press>
-                    <Press
-                      onPress={() => {
-                        setStep('email');
-                        setCode('');
-                        setCodeError(null);
-                      }}>
-                      <Text style={styles.sheetLinkLabel}>Change email</Text>
-                    </Press>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={[text.sheetTitle, styles.ink]}>Nearly there</Text>
-                  <Text style={styles.sheetHint}>
-                    Your students will see this name on messages you send.
-                  </Text>
-
-                  <TextInput
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Full name"
-                    placeholderTextColor={color.mutedLight}
-                    autoCapitalize="words"
-                    autoComplete="name"
-                    textContentType="name"
-                    autoFocus
-                    returnKeyType="next"
-                    style={styles.emailInput}
-                    selectionColor={color.primary}
-                    keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
-                  />
-                  <TextInput
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="Phone (optional)"
-                    placeholderTextColor={color.mutedLight}
-                    keyboardType="phone-pad"
-                    autoComplete="tel"
-                    textContentType="telephoneNumber"
-                    returnKeyType="done"
-                    onSubmitEditing={() => void finishRegistration()}
-                    style={[styles.emailInput, { marginTop: 10 }]}
-                    selectionColor={color.primary}
-                    keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
-                  />
-
-                  <Press
-                    onPress={() => void finishRegistration()}
-                    disabled={busy !== null || fullName.trim().length < 2}
-                    style={[
-                      styles.sheetButton,
-                      (busy !== null || fullName.trim().length < 2) && styles.sheetButtonOff,
-                    ]}>
-                    {busy ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.sheetButtonLabel}>Create my account</Text>
-                    )}
-                  </Press>
-                </>
-              )}
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
@@ -564,13 +298,30 @@ const makeStyles = ({ color }: Theme) =>
     },
     providerLabel: { fontFamily: body[600], fontSize: 15.5, color: color.ink },
 
+    orRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 2 },
+    orRule: { flex: 1, height: 1, backgroundColor: color.border },
+    orLabel: { fontFamily: body[500], fontSize: 12, color: color.mutedLight },
+
     emailButton: {
-      height: 50,
+      flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 10,
+      height: 54,
       borderRadius: radius.button,
+      backgroundColor: color.surface,
+      borderWidth: 1,
+      borderColor: color.border,
     },
-    emailLabel: { fontFamily: body[600], fontSize: 15, color: color.primary },
+
+    signInRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 16,
+    },
+    signInPrompt: { fontFamily: body[400], fontSize: 14, color: color.muted },
+    signInLabel: { fontFamily: body[700], fontSize: 14, color: color.primary },
 
     terms: {
       fontFamily: body[400],
@@ -578,7 +329,7 @@ const makeStyles = ({ color }: Theme) =>
       lineHeight: 17.25,
       color: color.mutedLight,
       textAlign: 'center',
-      marginTop: 12,
+      marginTop: 10,
     },
 
     redirectHint: {
@@ -599,76 +350,5 @@ const makeStyles = ({ color }: Theme) =>
       fontSize: 12.5,
       color: color.mutedLight,
       textDecorationLine: 'underline',
-    },
-
-    scrim: { flex: 1, backgroundColor: color.scrim },
-    emailSheet: {
-      backgroundColor: color.sheet,
-      borderTopLeftRadius: radius.sheet,
-      borderTopRightRadius: radius.sheet,
-      paddingHorizontal: 24,
-      paddingTop: 10,
-    },
-    grabber: {
-      alignSelf: 'center',
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: color.dashed,
-      marginBottom: 16,
-    },
-    emailInput: {
-      height: 54,
-      marginTop: 18,
-      paddingHorizontal: 16,
-      borderRadius: radius.button,
-      backgroundColor: color.surface,
-      borderWidth: 1,
-      borderColor: color.border,
-      fontFamily: body[600],
-      fontSize: 16,
-      color: color.ink,
-    },
-    codeInput: {
-      textAlign: 'center',
-      fontFamily: display[600],
-      fontSize: 26,
-      letterSpacing: 8,
-    },
-    sheetButton: {
-      height: 54,
-      marginTop: 10,
-      borderRadius: radius.button,
-      backgroundColor: color.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    sheetButtonOff: { backgroundColor: color.borderStrong },
-    sheetButtonLabel: { fontFamily: body[700], fontSize: 15.5, color: '#fff' },
-    codeError: {
-      fontFamily: body[600],
-      fontSize: 13,
-      color: color.dangerDeep,
-      textAlign: 'center',
-      marginTop: 10,
-      marginBottom: -4,
-    },
-    codeFooter: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 14,
-      paddingHorizontal: 4,
-    },
-    sheetLink: {
-      height: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginTop: 4,
-    },
-    sheetLinkLabel: {
-      fontFamily: body[600],
-      fontSize: 14,
-      color: color.primary,
     },
   });

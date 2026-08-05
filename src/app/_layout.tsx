@@ -120,6 +120,9 @@ function RootNavigator() {
         }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="forgot-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="group/[id]" />
