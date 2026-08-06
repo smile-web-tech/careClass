@@ -15,12 +15,13 @@ import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { DialogHost } from '@/components/Dialog';
+import { Intro } from '@/components/Intro';
 import { SyncBanner } from '@/components/SyncBanner';
 import { updateTeacher } from '@/data/api';
 import { useGroups, useStore } from '@/data/store';
@@ -152,6 +153,7 @@ function useNotificationRouting() {
 /** The app proper. Split out so it can consume the theme context above it. */
 function RootNavigator() {
   const { color, scheme } = useTheme();
+  const [introDone, setIntroDone] = useState(false);
   useClassReminders();
   useNotificationRouting();
   useFlushOnForeground();
@@ -207,6 +209,13 @@ function RootNavigator() {
       */}
       <SyncBanner />
       <DialogHost />
+
+      {/*
+        Last, so it paints over everything while the first screen mounts behind
+        it. Unmounts itself when the fade finishes and never returns — the app
+        is entered once per launch.
+      */}
+      {!introDone ? <Intro onDone={() => setIntroDone(true)} /> : null}
     </>
   );
 }

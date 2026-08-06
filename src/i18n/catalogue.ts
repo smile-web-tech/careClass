@@ -73,6 +73,11 @@ const tk = {
   'auth.resendCode': 'Kody gaýtadan ugrat',
   'auth.badCredentials': 'E-poçta bilen parol gabat gelmedi.',
   'auth.needsConfirm': 'Bu hasap entek tassyklanmadyk. Täze kod üçin gaýtadan hasaba dur.',
+  'auth.tooManyAttempts': 'Örän köp synanyşyk. {time} garaşyp, gaýtadan synanyş.',
+  'auth.lockedButton': 'Garaş: {time}',
+  'auth.attemptsLeft': 'Ýene {count} synanyşyk galdy.',
+  'auth.alreadyRegistered':
+    'Bu e-poçta eýýäm ClassCare hasaby bar. Aşakdan gir, ýa-da paroly ýatdan çykaran bolsaň, täzele.',
   'messages.noChannel': 'Usul ýok',
 
   'auth.heroTitle': 'Ähli synplaryň\nbir ýerde.',
@@ -544,6 +549,11 @@ const ru: Record<TranslationKey, string> = {
   'auth.resendCode': 'Отправить код снова',
   'auth.badCredentials': 'Почта и пароль не совпадают.',
   'auth.needsConfirm': 'Аккаунт ещё не подтверждён. Зарегистрируйтесь снова, чтобы получить новый код.',
+  'auth.tooManyAttempts': 'Слишком много попыток. Подождите {time} и попробуйте снова.',
+  'auth.lockedButton': 'Подождите {time}',
+  'auth.attemptsLeft': 'Осталось попыток: {count}.',
+  'auth.alreadyRegistered':
+    'На эту почту уже есть аккаунт ClassCare. Войдите ниже или восстановите пароль, если забыли его.',
   'messages.noChannel': 'Способ не выбран',
 
   'auth.heroTitle': 'Все ваши классы\nв одном месте.',
@@ -1010,6 +1020,11 @@ const en: Record<TranslationKey, string> = {
   'auth.resendCode': 'Resend code',
   'auth.badCredentials': 'That email and password do not match.',
   'auth.needsConfirm': 'This account still needs confirming. Register again to get a fresh code.',
+  'auth.tooManyAttempts': 'Too many attempts. Wait {time} and try again.',
+  'auth.lockedButton': 'Wait {time}',
+  'auth.attemptsLeft': '{count} attempts left.',
+  'auth.alreadyRegistered':
+    'That email already has a ClassCare account. Sign in below, or reset your password if you have forgotten it.',
   'messages.noChannel': 'No channel',
 
   'auth.heroTitle': 'Your classes,\nall in one place.',
