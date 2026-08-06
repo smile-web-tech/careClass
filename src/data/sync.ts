@@ -298,6 +298,20 @@ export async function refreshInbox() {
   useStore.setState({ messages, replies });
 }
 
+/**
+ * Re-read grades after the server has changed them behind the app's back.
+ *
+ * `send-grades` stamps `notified_at` on the rows it managed to send, and the
+ * store has no way to know which those were — a partial send stamps some and
+ * not others. Without this the grading screen keeps saying "unreported" about
+ * marks the student has already been told, which is worse than saying nothing:
+ * it invites the teacher to send the same result twice.
+ */
+export async function refreshGrades() {
+  if (!hasSupabase || useStore.getState().demo) return;
+  useStore.setState({ grades: await api.fetchGrades() });
+}
+
 /** Keep the inbox badge honest — replies arrive from webhooks, not from us. */
 export function watchInbox() {
   if (!hasSupabase) return () => {};

@@ -15,7 +15,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { confirm, showAlert, showError } from '@/components/Dialog';
+import { confirm, showAlert, showDialog, showError } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
 import {
@@ -31,6 +31,7 @@ import {
   StatTile,
 } from '@/components/ui';
 import { sendGrades } from '@/data/api';
+import { refreshGrades } from '@/data/sync';
 import {
   averagePercent,
   standingOf,
@@ -39,7 +40,7 @@ import {
   useStudents,
   type GradeStanding,
 } from '@/data/store';
-import type { Assessment } from '@/data/types';
+import type { Assessment, Audience } from '@/data/types';
 import { shortDate, fromKey } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
@@ -122,25 +123,39 @@ export default function Grades() {
   );
 
   const notify = async (assessment: Assessment) => {
-    const audience = await confirm({
+    // Who hears about a mark is the teacher's call every time, not a setting
+    // buried somewhere: a result a 17-year-old wants sent to them alone and one
+    // a parent expects to see are the same feature with different consequences.
+    const choice = await showDialog({
       title: `Send "${assessment.title}" results?`,
-      message:
-        'Each student gets an email with their own mark only. Nobody sees anyone else’s.',
-      confirmLabel: 'Send to students',
-      cancelLabel: 'Not now',
+      message: 'Each recipient sees only that student’s own mark. Nobody sees anyone else’s.',
       tone: 'info',
+      actions: [
+        { label: 'Students', value: 'students', intent: 'primary' },
+        { label: 'Parents', value: 'parents', intent: 'primary' },
+        { label: 'Students + parents', value: 'both', intent: 'primary' },
+        { label: 'Not now', value: 'cancel', intent: 'quiet' },
+      ],
     });
-    if (!audience) return;
+    if (!choice || choice === 'cancel') return;
+
+    const audience = choice as Audience;
+    const missing =
+      audience === 'parents' ? 'no parent email address on file' : 'no email address on file';
 
     setSending(assessment.id);
     try {
-      const report = await sendGrades({ assessmentId: assessment.id, audience: 'students' });
+      const report = await sendGrades({ assessmentId: assessment.id, audience });
       const lines = [
         `${report.notified} sent.`,
-        report.skipped ? `${report.skipped} skipped — no email address on file.` : '',
+        report.skipped ? `${report.skipped} skipped — ${missing}.` : '',
         report.failed ? `${report.failed} failed.` : '',
         ...report.errors,
       ].filter(Boolean);
+
+      // The server stamped `notified_at` on whatever actually went. Re-read it,
+      // or the screen keeps calling those marks unreported.
+      await refreshGrades().catch(() => {});
 
       await showAlert(
         report.notified ? 'Results sent' : 'Nothing was sent',
