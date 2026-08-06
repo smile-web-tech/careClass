@@ -31,6 +31,13 @@ type Row<T> = {
   Relationships: [];
 };
 
+export type EmailTemplateOverrides = {
+  messageSignature?: string;
+  gradeSubject?: string;
+  gradeBody?: string;
+  gradeSignature?: string;
+};
+
 export type TeacherRow = {
   id: string;
   name: string;
@@ -39,6 +46,10 @@ export type TeacherRow = {
   timezone: string;
   push_token: string | null;
   phone: string | null;
+  /** 'tk' | 'ru' — the app's language and the language students are written in. */
+  language: string;
+  /** The teacher's overrides only; null means use the built-in wording. */
+  email_templates: EmailTemplateOverrides | null;
   created_at: string;
 };
 

@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { showAlert } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { Button, Card, Divider, FieldRow, Overline, Press, SelectChip } from '@/components/ui';
@@ -84,6 +85,7 @@ export function StudentForm({
 }) {
   const { accents, color } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   const insets = useSafeAreaInsets();
 
   const groups = useGroups();
@@ -114,10 +116,7 @@ export function StudentForm({
   const importFromContacts = async () => {
     const { granted } = await Contacts.requestPermissionsAsync();
     if (!granted) {
-      showAlert(
-        'Contacts access needed',
-        'Allow ClassCare to read your contacts to fill this form automatically.',
-      );
+      showAlert(t('students.contactsNeeded'), t('students.contactsNeededMessage'));
       return;
     }
 
@@ -154,18 +153,18 @@ export function StudentForm({
                 <Icon name="contacts" size={19} color={color.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.importTitle}>Import from contacts</Text>
-                <Text style={styles.importHint}>Fill the form from your address book</Text>
+                <Text style={styles.importTitle}>{t('students.importContacts')}</Text>
+                <Text style={styles.importHint}>{t('students.importHint')}</Text>
               </View>
               <Icon name="disclosure" size={16} color={color.chevron} />
             </Card>
           </Press>
 
-          <Overline style={styles.label}>Student</Overline>
+          <Overline style={styles.label}>{t('nav.students')}</Overline>
           <Card style={styles.group}>
             <FieldRow
-              label="Name"
-              placeholder="Full name"
+              label={t('students.name')}
+              placeholder={t('auth.fullName')}
               value={form.name}
               onChangeText={set('name')}
               autoCapitalize="words"
@@ -173,7 +172,7 @@ export function StudentForm({
             />
             <Divider inset={15} />
             <FieldRow
-              label="Phone"
+              label={t('students.phone')}
               placeholder="+993 65 000000"
               value={form.phone}
               onChangeText={set('phone')}
@@ -181,8 +180,8 @@ export function StudentForm({
             />
             <Divider inset={15} />
             <FieldRow
-              label="Email"
-              placeholder="Needed to email this student"
+              label={t('students.email')}
+              placeholder={t('students.studentEmailHint')}
               value={form.email}
               onChangeText={set('email')}
               keyboardType="email-address"
@@ -191,18 +190,18 @@ export function StudentForm({
             />
           </Card>
 
-          <Overline style={styles.label}>Parent / guardian</Overline>
+          <Overline style={styles.label}>{t('students.parentSection')}</Overline>
           <Card style={styles.group}>
             <FieldRow
-              label="Name"
-              placeholder="Optional"
+              label={t('students.name')}
+              placeholder={t('common.optional')}
               value={form.parentName}
               onChangeText={set('parentName')}
               autoCapitalize="words"
             />
             <Divider inset={15} />
             <FieldRow
-              label="Phone"
+              label={t('students.phone')}
               placeholder="+993 65 000000"
               value={form.parentPhone}
               onChangeText={set('parentPhone')}
@@ -210,8 +209,8 @@ export function StudentForm({
             />
             <Divider inset={15} />
             <FieldRow
-              label="Email"
-              placeholder="Needed to email this parent"
+              label={t('students.email')}
+              placeholder={t('students.parentEmailHint')}
               value={form.parentEmail}
               onChangeText={set('parentEmail')}
               keyboardType="email-address"
@@ -220,7 +219,7 @@ export function StudentForm({
             />
           </Card>
 
-          <Overline style={styles.label}>Add to groups</Overline>
+          <Overline style={styles.label}>{t('students.addToGroups')}</Overline>
           <View style={styles.chipWrap}>
             {groups.map((g) => (
               <SelectChip

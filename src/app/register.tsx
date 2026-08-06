@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BackHandler, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { confirm as askConfirm } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { AuthButton, AuthField, AuthLink, AuthNotice, AuthScreen } from '@/components/AuthForm';
 import { OtpInput } from '@/components/OtpInput';
 import { PasswordField } from '@/components/PasswordField';
@@ -39,6 +40,7 @@ const PHONE_RE = /^[+()\d][\d\s()-]{3,31}$/;
 type Step = 1 | 2 | 3;
 
 export default function Register() {
+  const t = useT();
   const router = useRouter();
   const { email: prefill } = useLocalSearchParams<{ email?: string }>();
   const styles = useThemedStyles(makeStyles);
@@ -97,11 +99,10 @@ export default function Register() {
       // The account already exists but is unconfirmed; sending them back to the
       // password step would silently re-register with a different one.
       void askConfirm({
-        title: 'Leave without confirming?',
-        message:
-          'Your account is not active until you enter the code. You can start again from scratch.',
-        confirmLabel: 'Leave',
-        cancelLabel: 'Keep going',
+        title: t('auth.leaveTitle'),
+        message: t('auth.leaveMessage'),
+        confirmLabel: t('common.back'),
+        cancelLabel: t('common.continue'),
       }).then((yes) => yes && leave());
       return;
     }
@@ -176,9 +177,9 @@ export default function Register() {
       setCode('');
       setCodeError(
         /expired/i.test(msg)
-          ? 'That code has expired. Send yourself a new one.'
+          ? t('auth.codeExpired')
           : /invalid|token|otp/i.test(msg)
-            ? 'That code is not right. Check it and try again.'
+            ? t('auth.codeWrong')
             : msg,
       );
     } finally {
@@ -206,27 +207,27 @@ export default function Register() {
   if (step === 1) {
     return (
       <AuthScreen
-        title="Create your account"
-        subtitle="Your students will see this name on the messages you send."
+        title={t('auth.createYourAccount')}
+        subtitle={t('auth.nameShownToStudents')}
         step={1}
         steps={3}
         onBack={back}
         footer={
           <AuthLink
-            prompt="Already have an account?"
-            label="Sign in"
+            prompt={t('auth.haveAccount')}
+            label={t('auth.signIn')}
             onPress={() => router.replace({ pathname: '/login', params: { email: email.trim() } })}
           />
         }>
         {formError ? <AuthNotice>{formError}</AuthNotice> : null}
 
         <AuthField
-          label="Full name"
+          label={t('auth.fullName')}
           value={name}
           onChangeText={setName}
           onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-          error={touched.name && !nameOk ? 'Please enter your full name.' : null}
-          placeholder="Aýgül Berdiýewa"
+          error={touched.name && !nameOk ? t('auth.enterFullName') : null}
+          placeholder={t('auth.namePlaceholder')}
           autoCapitalize="words"
           autoComplete="name"
           textContentType="name"
@@ -238,12 +239,12 @@ export default function Register() {
 
         <AuthField
           ref={emailRef}
-          label="Email"
+          label={t('auth.email')}
           value={email}
           onChangeText={setEmail}
           onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-          error={touched.email && !emailOk ? 'That does not look like an email address.' : null}
-          hint="We send a confirmation code here."
+          error={touched.email && !emailOk ? t('auth.badEmail') : null}
+          hint={t('auth.codeSentHere')}
           placeholder="you@example.com"
           keyboardType="email-address"
           autoCapitalize="none"
@@ -257,13 +258,13 @@ export default function Register() {
 
         <AuthField
           ref={phoneRef}
-          label="Phone"
+          label={t('auth.phone')}
           optional
           value={phone}
           onChangeText={setPhone}
           onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
-          error={touched.phone && !phoneOk ? 'Use digits, spaces and + only.' : null}
-          hint="Only so students can reach you. Never shown to anyone else."
+          error={touched.phone && !phoneOk ? t('auth.badPhone') : null}
+          hint={t('auth.phoneWhy')}
           placeholder="+993 6X XX XX XX"
           keyboardType="phone-pad"
           autoComplete="tel"
@@ -272,7 +273,7 @@ export default function Register() {
           onSubmitEditing={submitDetails}
         />
 
-        <AuthButton label="Continue" onPress={submitDetails} disabled={!stepOneOk} />
+        <AuthButton label={t('common.continue')} onPress={submitDetails} disabled={!stepOneOk} />
       </AuthScreen>
     );
   }
@@ -280,7 +281,7 @@ export default function Register() {
   if (step === 2) {
     return (
       <AuthScreen
-        title="Choose a password"
+        title={t('auth.choosePassword')}
         subtitle={`This is what you will sign in with, alongside ${email.trim().toLowerCase()}.`}
         step={2}
         steps={3}
@@ -288,7 +289,7 @@ export default function Register() {
         {formError ? <AuthNotice>{formError}</AuthNotice> : null}
 
         <PasswordField
-          label="Password"
+          label={t('auth.password')}
           value={password}
           onChangeText={setPassword}
           onBlur={() => setTouched((t) => ({ ...t, password: true }))}
@@ -306,12 +307,12 @@ export default function Register() {
 
         <PasswordField
           ref={confirmRef}
-          label="Confirm password"
+          label={t('auth.confirmPassword')}
           value={confirm}
           onChangeText={setConfirm}
           onBlur={() => setTouched((t) => ({ ...t, confirm: true }))}
-          error={touched.confirm && !confirmOk ? 'The two passwords do not match.' : null}
-          placeholder="Type it once more"
+          error={touched.confirm && !confirmOk ? t('auth.passwordsDiffer') : null}
+          placeholder={t('auth.typeOnceMore')}
           autoComplete="new-password"
           textContentType="newPassword"
           returnKeyType="done"
@@ -319,7 +320,7 @@ export default function Register() {
         />
 
         <AuthButton
-          label="Create account"
+          label={t('auth.createAccount')}
           onPress={() => void createAccount()}
           disabled={!stepTwoOk}
           busy={busy}
@@ -334,7 +335,7 @@ export default function Register() {
 
   return (
     <AuthScreen
-      title="Confirm your email"
+      title={t('auth.confirmEmail')}
       subtitle={`We sent a six-digit code to ${email.trim().toLowerCase()}. It expires in 10 minutes.`}
       step={3}
       steps={3}
@@ -355,7 +356,7 @@ export default function Register() {
       {codeError ? <Text style={styles.codeError}>{codeError}</Text> : null}
 
       <AuthButton
-        label="Confirm and finish"
+        label={t('auth.confirmAndFinish')}
         onPress={() => void verify(code)}
         disabled={code.length < 6}
         busy={busy}
@@ -364,16 +365,16 @@ export default function Register() {
       <View style={styles.codeFooter}>
         <Press onPress={() => void resend()} disabled={cooldown > 0 || busy} hitSlop={8}>
           <Text style={[styles.footerLink, cooldown > 0 && { color: color.mutedLight }]}>
-            {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+            {cooldown > 0 ? t('auth.resendIn', { count: cooldown }) : t('auth.resendCode')}
           </Text>
         </Press>
         <Press onPress={back} hitSlop={8}>
-          <Text style={styles.footerLink}>Wrong email?</Text>
+          <Text style={styles.footerLink}>{t('auth.wrongEmail')}</Text>
         </Press>
       </View>
 
       <Text style={styles.spamHint}>
-        Not there? Check your spam folder — the sender is notifications@smiletech.dev.
+        Not there? Check your spam folder. The sender is notifications@smiletech.dev.
       </Text>
     </AuthScreen>
   );

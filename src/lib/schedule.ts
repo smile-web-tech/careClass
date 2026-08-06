@@ -93,3 +93,15 @@ export function sessionPhase(s: Session, now = new Date()): 'done' | 'live' | 'n
   if (start.getTime() <= now.getTime()) return 'live';
   return startOfDay(start).getTime() === startOfDay(now).getTime() ? 'next' : 'later';
 }
+
+/**
+ * A room to show, given one that may be blank.
+ *
+ * Older groups have the literal string "No room" saved in the database, from
+ * back when the form wrote that instead of leaving the field empty. Both are
+ * treated as absence here so the label translates either way.
+ */
+export function roomLabel(room: string, t: (key: 'groups.noRoom') => string) {
+  const value = room?.trim();
+  return !value || value === 'No room' ? t('groups.noRoom') : value;
+}

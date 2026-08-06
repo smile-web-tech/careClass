@@ -14,6 +14,7 @@ import type {
 } from '@/data/types';
 import type {
   AssessmentRow,
+  EmailTemplateOverrides,
   AttendanceRow,
   CalendarEventRow,
   GradeRow,
@@ -265,6 +266,8 @@ export async function updateTeacher(patch: {
   name?: string;
   timezone?: string;
   pushToken?: string;
+  language?: string;
+  emailTemplates?: EmailTemplateOverrides | null;
 }) {
   const teacherId = await requireUser();
   unwrap(
@@ -274,6 +277,8 @@ export async function updateTeacher(patch: {
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.timezone !== undefined && { timezone: patch.timezone }),
         ...(patch.pushToken !== undefined && { push_token: patch.pushToken }),
+        ...(patch.language !== undefined && { language: patch.language }),
+        ...(patch.emailTemplates !== undefined && { email_templates: patch.emailTemplates }),
       })
       .eq('id', teacherId)
       .select(),

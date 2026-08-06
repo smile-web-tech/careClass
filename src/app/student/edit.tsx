@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { StudentForm } from '@/components/StudentForm';
+import { useT } from '@/i18n/useT';
 import { useStore, useStudent } from '@/data/store';
 
 /**
@@ -12,13 +13,14 @@ import { useStore, useStudent } from '@/data/store';
 export default function EditStudent() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const t = useT();
   const student = useStudent(id);
   const updateStudent = useStore((s) => s.updateStudent);
 
   return (
     <StudentForm
-      title="Edit student"
-      submitLabel="Save changes"
+      title={t('students.edit')}
+      submitLabel={t('common.saveChanges')}
       initial={student}
       onSubmit={(draft) => {
         if (student) updateStudent(student.id, draft);

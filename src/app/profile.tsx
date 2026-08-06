@@ -5,12 +5,15 @@ import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { confirm, showAlert, showError } from '@/components/Dialog';
+import { LanguagePicker } from '@/components/LanguagePicker';
 import { Icon, type IconName } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
-import { Button, Card, Divider, Overline, Press, StatTile, Toggle, Txt } from '@/components/ui';
+import { Button, Card, Divider, Overline, Press, StatTile, Toggle } from '@/components/ui';
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import { hydrate } from '@/data/sync';
+import type { TranslationKey } from '@/i18n';
+import { useT } from '@/i18n/useT';
 import {
   cancelClassReminders,
   requestNotificationPermission,
@@ -29,7 +32,6 @@ const PROVIDER_LABEL: Record<string, string> = {
   google: 'Signed in with Google',
   apple: 'Signed in with Apple',
   email: 'Signed in with email',
-  demo: 'Demo mode — nothing is saved to an account',
 };
 
 export default function Profile() {
@@ -41,7 +43,6 @@ export default function Profile() {
   const groups = useGroups();
   const students = useStudents();
   const messages = useStore((s) => s.messages);
-  const demo = useStore((s) => s.demo);
   const name = useStore((s) => s.teacherName);
   const email = useStore((s) => s.teacherEmail);
   const avatarUrl = useStore((s) => s.teacherAvatarUrl);
@@ -52,7 +53,8 @@ export default function Profile() {
   const [draftName, setDraftName] = useState(name);
   const [busy, setBusy] = useState(false);
 
-  const live = hasSupabase && !demo;
+  const t = useT();
+  const live = hasSupabase;
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', []);
 
   const sessionsThisWeek = useMemo(() => {
@@ -71,15 +73,15 @@ export default function Profile() {
     try {
       await updateTeacher({ name: next, timezone });
     } catch (e) {
-      showError(e, 'Could not save');
+      showError(e, t('profile.couldNotSave'));
     }
   };
 
   const confirmSignOut = async () => {
     const yes = await confirm({
-      title: 'Sign out?',
-      message: 'Your groups and students stay in your account.',
-      confirmLabel: 'Sign out',
+      title: t('auth.signOutTitle'),
+      message: t('auth.signOutMessage'),
+      confirmLabel: t('auth.signOut'),
     });
     if (!yes) return;
 
@@ -101,17 +103,20 @@ export default function Profile() {
    */
   const confirmDelete = async () => {
     const first = await confirm({
-      title: 'Delete all your data?',
-      message: `This removes ${groups.length} groups, ${students.length} students and every attendance record and message. It cannot be undone.`,
-      confirmLabel: 'Delete everything',
+      title: t('profile.deleteAllTitle'),
+      message: t('profile.deleteAllMessage', {
+        groups: groups.length,
+        students: students.length,
+      }),
+      confirmLabel: t('profile.deleteAllConfirm'),
     });
     if (!first) return;
 
     const sure = await confirm({
-      title: 'Are you certain?',
-      message: 'There is no undo and no backup.',
-      confirmLabel: 'Delete',
-      cancelLabel: 'Keep my data',
+      title: t('profile.deleteAllSure'),
+      message: t('profile.deleteAllSureMessage'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('profile.keepMyData'),
     });
     if (!sure) return;
 
@@ -122,7 +127,7 @@ export default function Profile() {
       doSignOut();
       router.replace('/sign-in');
     } catch (e) {
-      showError(e, 'Could not delete');
+      showError(e, t('profile.couldNotDelete'));
     } finally {
       setBusy(false);
     }
@@ -130,7 +135,7 @@ export default function Profile() {
 
   return (
     <Screen>
-      <TopBar title="Profile" />
+      <TopBar title={t('profile.title')} />
 
       <ScrollView
         automaticallyAdjustKeyboardInsets
@@ -171,7 +176,7 @@ export default function Profile() {
                 keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
               />
               <Button
-                label="Save"
+                label={t('common.save')}
                 height={40}
                 onPress={saveName}
                 style={{ paddingHorizontal: 16 }}
@@ -190,68 +195,73 @@ export default function Profile() {
           )}
 
           <Text style={styles.email}>{email ?? 'No email on file'}</Text>
-          <View style={[styles.providerPill, demo && styles.providerPillDemo]}>
-            <Text style={[styles.providerLabel, demo && { color: color.warningDeep }]}>
-              {PROVIDER_LABEL[provider] ?? 'Signed in'}
+          <View style={styles.providerPill}>
+            <Text style={styles.providerLabel}>
+              {PROVIDER_LABEL[provider] ?? t('auth.signIn')}
             </Text>
           </View>
         </View>
 
         <View style={styles.statRow}>
-          <StatTile value={String(groups.length)} label="Groups" fontSize={21} />
-          <StatTile value={String(students.length)} label="Students" fontSize={21} />
-          <StatTile value={String(sessionsThisWeek)} label="This week" fontSize={21} />
+          <StatTile value={String(groups.length)} label={t('profile.groups')} fontSize={21} />
+          <StatTile value={String(students.length)} label={t('profile.students')} fontSize={21} />
+          <StatTile value={String(sessionsThisWeek)} label={t('profile.thisWeek')} fontSize={21} />
         </View>
 
-        <Overline style={styles.label}>Account</Overline>
+        <Overline style={styles.label}>{t('profile.account')}</Overline>
         <Card style={styles.group}>
-          <InfoRow icon="person" label="Name" value={name || '—'} />
+          <InfoRow icon="person" label={t('profile.name')} value={name || '.'} />
           <Divider inset={58} />
-          <InfoRow icon="mail" label="Email" value={email ?? '—'} />
+          <InfoRow icon="mail" label={t('profile.email')} value={email ?? '.'} />
           <Divider inset={58} />
-          <InfoRow icon="tabCalendar" label="Time zone" value={timezone} />
+          <InfoRow icon="tabCalendar" label={t('profile.timezone')} value={timezone} />
           <Divider inset={58} />
-          <InfoRow icon="chat" label="Messages sent" value={`${messages.length} in your history`} />
+          <InfoRow
+            icon="chat"
+            label={t('profile.messagesSent')}
+            value={t('profile.messagesSentValue', { count: messages.length })}
+          />
         </Card>
 
-        <Overline style={styles.label}>Reminders</Overline>
+        <Overline style={styles.label}>{t('profile.reminders')}</Overline>
         <ReminderSettings />
 
-        <Overline style={styles.label}>Appearance</Overline>
+        <Overline style={styles.label}>{t('profile.language')}</Overline>
+        <Card style={styles.group}>
+          <LanguagePicker />
+        </Card>
+        <Text style={styles.languageHint}>{t('profile.languageHint')}</Text>
+
+        <Overline style={styles.label}>{t('profile.appearance')}</Overline>
         <ThemePicker />
 
-        <Overline style={styles.label}>Data</Overline>
+        <Overline style={styles.label}>{t('profile.data')}</Overline>
         <Card style={styles.group}>
           <ActionRow
             icon="tabStudents"
-            label="Your students"
-            hint={`${students.length} across ${groups.length} groups`}
+            label={t('profile.students')}
+            hint={`${students.length} / ${groups.length}`}
             onPress={() => router.push('/(tabs)/students')}
           />
           <Divider inset={58} />
           <ActionRow
             icon="info"
-            label="Privacy"
-            hint="What ClassCare stores and why"
+            label={t('profile.privacy')}
+            hint={t('profile.privacyHint')}
             onPress={() =>
-              showAlert(
-                'Your data',
-                live
-                  ? 'Your groups, students and attendance live in your own Supabase account, behind row level security — no other teacher can read them.\n\nStudent phone numbers are only sent to an SMS gateway at the moment you send a message.'
-                  : 'Demo mode keeps everything on this device. Nothing is uploaded anywhere.',
-              )
+              showAlert(t('profile.yourData'), t('profile.privacyBody'))
             }
           />
         </Card>
 
         {live ? (
           <>
-            <Overline style={styles.label}>Danger zone</Overline>
+            <Overline style={styles.label}>{t('groups.dangerZone')}</Overline>
             <Card style={styles.group}>
               <ActionRow
                 icon="close"
-                label="Sign out"
-                hint="Your data stays in your account"
+                label={t('auth.signOut')}
+                hint={t('profile.dataStays')}
                 tint={color.bg}
                 fg={color.inkSoft}
                 onPress={confirmSignOut}
@@ -259,8 +269,8 @@ export default function Profile() {
               <Divider inset={58} />
               <ActionRow
                 icon="warning"
-                label={busy ? 'Deleting…' : 'Delete all my data'}
-                hint="Groups, students, attendance, messages — permanently"
+                label={busy ? t('common.sending') : t('profile.deleteAll')}
+                hint={t('profile.deleteAllHint')}
                 tint={status.absent.tint}
                 fg={color.danger}
                 labelColor={color.dangerDeep}
@@ -268,26 +278,11 @@ export default function Profile() {
               />
             </Card>
           </>
-        ) : (
-          <Card style={styles.demoCard}>
-            <Text style={styles.demoTitle}>You&rsquo;re exploring with demo data</Text>
-            <Txt style={styles.demoHint}>
-              Nothing here is saved to an account. Sign in to keep your own groups and students.
-            </Txt>
-            <Button
-              label="Sign in"
-              onPress={() => {
-                doSignOut();
-                router.replace('/sign-in');
-              }}
-              style={{ marginTop: 14 }}
-            />
-          </Card>
-        )}
+        ) : null}
 
         {live ? (
           <Press onPress={() => hydrate().catch(() => {})} style={styles.refresh}>
-            <Text style={styles.refreshLabel}>Refresh from server</Text>
+            <Text style={styles.refreshLabel}>{t('profile.refreshFromServer')}</Text>
           </Press>
         ) : null}
 
@@ -323,6 +318,7 @@ const LEADS: ReminderLead[] = [5, 15, 30, 60];
  * network being up. See `lib/notifications.ts`.
  */
 function ReminderSettings() {
+  const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const groups = useGroups();
@@ -367,13 +363,13 @@ function ReminderSettings() {
       <Card style={styles.group}>
         <View style={styles.toggleRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.actionLabel}>Remind me before class</Text>
+            <Text style={styles.actionLabel}>{t('profile.remindBeforeClass')}</Text>
             <Text style={styles.actionHint} numberOfLines={2}>
               {on
                 ? count
-                  ? `${count} reminder${count === 1 ? '' : 's'} queued`
-                  : 'No upcoming classes to remind about'
-                : 'A notification shortly before each class starts'}
+                  ? t('profile.remindersQueued', { count })
+                  : t('profile.noUpcoming')
+                : t('profile.reminderHint')}
             </Text>
           </View>
           <Toggle value={on} onChange={(v) => void apply(v, lead)} />
@@ -404,7 +400,7 @@ function ReminderSettings() {
                         styles.leadLabel,
                         { color: active ? color.primaryInk : color.inkSoft },
                       ]}>
-                      {m} min
+                      {t('profile.minutes', { count: m })}
                     </Text>
                   </Press>
                 );
@@ -428,13 +424,12 @@ function ReminderSettings() {
 
 const THEME_OPTIONS: {
   key: ThemePref;
-  label: string;
+  labelKey: TranslationKey;
   icon: IconName;
-  hint: string;
 }[] = [
-  { key: 'light', label: 'Light', icon: 'sun', hint: 'Always light' },
-  { key: 'dark', label: 'Dark', icon: 'moon', hint: 'Always dark' },
-  { key: 'system', label: 'System', icon: 'phone', hint: 'Match the phone' },
+  { key: 'light', labelKey: 'profile.themeLight', icon: 'sun' },
+  { key: 'dark', labelKey: 'profile.themeDark', icon: 'moon' },
+  { key: 'system', labelKey: 'profile.themeSystem', icon: 'phone' },
 ];
 
 /**
@@ -442,6 +437,7 @@ const THEME_OPTIONS: {
  * phone on auto-dark flips this app with it at sunset without a second tap.
  */
 function ThemePicker() {
+  const t = useT();
   const { color, pref, scheme, setPref } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -457,14 +453,13 @@ function ThemePicker() {
               onPress={() => setPref(opt.key)}
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
-              accessibilityLabel={`${opt.label} theme`}
+              accessibilityLabel={t(opt.labelKey)}
               style={[styles.themeCard, on && styles.themeCardOn]}>
               <View style={[styles.themeIcon, on && styles.themeIconOn]}>
                 <Icon name={opt.icon} size={18} color={on ? color.primaryInk : color.mutedLight} />
               </View>
-              <Text style={[styles.themeLabel, on && styles.themeLabelOn]}>{opt.label}</Text>
-              <Text style={styles.themeHint} numberOfLines={1}>
-                {opt.hint}
+              <Text style={[styles.themeLabel, on && styles.themeLabelOn]}>
+                {t(opt.labelKey)}
               </Text>
             </Press>
           );
@@ -472,7 +467,7 @@ function ThemePicker() {
       </View>
       {/* Only meaningful under `system` — otherwise the chosen card says it. */}
       {pref === 'system' ? (
-        <Text style={styles.themeFootnote}>Following your phone, currently {scheme}.</Text>
+        <Text style={styles.themeFootnote}>{scheme}</Text>
       ) : null}
     </>
   );
@@ -679,7 +674,19 @@ const makeStyles = ({ color, status }: Theme) =>
       color: color.ink,
       marginTop: 2,
     },
-    actionLabel: { fontFamily: body[700], fontSize: 14.5 },
+    // `Text` does not inherit colour from its parent View, and the default is
+    // black — which is invisible on a dark card. Every other caller passed a
+    // colour explicitly, so only the reminder row showed the bug.
+    actionLabel: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    languageHint: {
+      fontFamily: body[400],
+      fontSize: 12,
+      lineHeight: 17,
+      color: color.mutedLight,
+      marginTop: -12,
+      marginBottom: 22,
+      paddingHorizontal: 4,
+    },
     actionHint: {
       fontFamily: body[400],
       fontSize: 12.5,

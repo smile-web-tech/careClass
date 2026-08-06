@@ -41,24 +41,27 @@ import {
   type GradeStanding,
 } from '@/data/store';
 import type { Assessment, Audience } from '@/data/types';
+import { useT } from '@/i18n/useT';
+import type { TranslationKey } from '@/i18n';
 import { shortDate, fromKey } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
-const KIND_LABEL: Record<Assessment['kind'], string> = {
-  quiz: 'Quiz',
-  exam: 'Exam',
-  final: 'Final',
+const KIND_KEY: Record<Assessment['kind'], TranslationKey> = {
+  quiz: 'grades.kindQuiz',
+  exam: 'grades.kindExam',
+  final: 'grades.kindFinal',
 };
 
-const STANDING_LABEL: Record<GradeStanding, string> = {
-  excellent: 'Excellent',
-  good: 'On track',
-  watch: 'Needs watching',
-  atRisk: 'At risk',
+const STANDING_KEY: Record<GradeStanding, TranslationKey> = {
+  excellent: 'grades.standingExcellent',
+  good: 'grades.standingGood',
+  watch: 'grades.standingWatch',
+  atRisk: 'grades.standingAtRisk',
 };
 
 export default function Grades() {
+  const t = useT();
   const { accents, color, status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -127,29 +130,32 @@ export default function Grades() {
     // buried somewhere: a result a 17-year-old wants sent to them alone and one
     // a parent expects to see are the same feature with different consequences.
     const choice = await showDialog({
-      title: `Send "${assessment.title}" results?`,
-      message: 'Each recipient sees only that student’s own mark. Nobody sees anyone else’s.',
+      title: t('grades.sendTitle', { title: assessment.title }),
+      message: t('grades.sendMessage'),
       tone: 'info',
       actions: [
-        { label: 'Students', value: 'students', intent: 'primary' },
-        { label: 'Parents', value: 'parents', intent: 'primary' },
-        { label: 'Students + parents', value: 'both', intent: 'primary' },
-        { label: 'Not now', value: 'cancel', intent: 'quiet' },
+        { label: t('messages.audienceStudents'), value: 'students', intent: 'primary' },
+        { label: t('messages.audienceParents'), value: 'parents', intent: 'primary' },
+        { label: t('messages.audienceBoth'), value: 'both', intent: 'primary' },
+        { label: t('common.notNow'), value: 'cancel', intent: 'quiet' },
       ],
     });
     if (!choice || choice === 'cancel') return;
 
     const audience = choice as Audience;
-    const missing =
-      audience === 'parents' ? 'no parent email address on file' : 'no email address on file';
 
     setSending(assessment.id);
     try {
       const report = await sendGrades({ assessmentId: assessment.id, audience });
       const lines = [
-        `${report.notified} sent.`,
-        report.skipped ? `${report.skipped} skipped — ${missing}.` : '',
-        report.failed ? `${report.failed} failed.` : '',
+        t('grades.notifiedCount', { count: report.notified }),
+        report.skipped
+          ? t(
+              audience === 'parents' ? 'grades.skippedNoParentEmail' : 'grades.skippedNoEmail',
+              { count: report.skipped },
+            )
+          : '',
+        report.failed ? t('grades.failedCount', { count: report.failed }) : '',
         ...report.errors,
       ].filter(Boolean);
 
@@ -158,12 +164,12 @@ export default function Grades() {
       await refreshGrades().catch(() => {});
 
       await showAlert(
-        report.notified ? 'Results sent' : 'Nothing was sent',
+        report.notified ? t('grades.resultsSent') : t('messages.nothingSentTitle'),
         lines.join('\n\n'),
         report.notified ? 'success' : 'danger',
       );
     } catch (e) {
-      showError(e, 'Could not send results');
+      showError(e, t('grades.couldNotSend'));
     } finally {
       setSending(null);
     }
@@ -171,9 +177,9 @@ export default function Grades() {
 
   const removeWithConfirm = async (assessment: Assessment) => {
     const yes = await confirm({
-      title: `Delete "${assessment.title}"?`,
-      message: 'Every mark recorded against it goes too. This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: t('grades.deleteAssessment', { title: assessment.title }),
+      message: t('grades.deleteAssessmentMessage'),
+      confirmLabel: t('common.delete'),
     });
     if (yes) removeAssessment(assessment.id);
   };
@@ -188,7 +194,7 @@ export default function Grades() {
 
   return (
     <Screen>
-      <TopBar title="Grades" />
+      <TopBar title={t('nav.grades')} />
 
       <ScrollView
         contentContainerStyle={{
@@ -198,10 +204,10 @@ export default function Grades() {
         }}
         showsVerticalScrollIndicator={false}>
         {groups.length === 0 ? (
-          <EmptyState title="No groups yet" hint="Create a group before recording marks" />
+          <EmptyState title={t('groups.noneYet')} hint={t('grades.addStudentsFirst', { name: '' })} />
         ) : (
           <>
-            <Overline style={styles.label}>Group</Overline>
+            <Overline style={styles.label}>{t('grades.group')}</Overline>
             <View style={styles.chipWrap}>
               {groups.map((g) => (
                 <SelectChip
@@ -217,15 +223,19 @@ export default function Grades() {
 
             <View style={styles.statRow}>
               <StatTile
-                value={classAverage !== null ? `${classAverage}%` : '—'}
-                label="Class average"
+                value={classAverage !== null ? `${classAverage}%` : '·'}
+                label={t('grades.classAverage')}
                 tone={classAverage !== null ? color.primary : color.mutedLight}
                 fontSize={21}
               />
-              <StatTile value={String(groupAssessments.length)} label="Assessments" fontSize={21} />
+              <StatTile
+                value={String(groupAssessments.length)}
+                label={t('grades.assessments')}
+                fontSize={21}
+              />
               <StatTile
                 value={String(atRisk)}
-                label="At risk"
+                label={t('grades.atRisk')}
                 tone={atRisk ? color.dangerDeep : color.mutedLight}
                 fontSize={21}
               />
@@ -234,14 +244,14 @@ export default function Grades() {
             <Button
               grow
               icon="plus"
-              label="Record marks"
+              label={t('grades.recordMarks')}
               height={50}
               style={{ marginTop: 16 }}
               onPress={() => router.push(`/grades/new?group=${groupId}`)}
               disabled={!groupId || roster.length === 0}
             />
             {roster.length === 0 && groupId ? (
-              <Text style={styles.hint}>Add students to {group?.name} first.</Text>
+              <Text style={styles.hint}>{t('grades.addStudentsFirst', { name: group?.name ?? '' })}</Text>
             ) : null}
 
             {unreported.length ? (
@@ -249,17 +259,17 @@ export default function Grades() {
                 <Icon name="info" size={17} color={accents.amber.ink} />
                 <Text style={styles.noticeText}>
                   {unreported.length === 1
-                    ? '1 assessment has marks the students have not been told about.'
-                    : `${unreported.length} assessments have marks the students have not been told about.`}
+                    ? t('grades.unreportedOne')
+                    : t('grades.unreportedMany', { count: unreported.length })}
                 </Text>
               </Card>
             ) : null}
 
             {/* ------------------------------------------------ Standings */}
 
-            <Overline style={[styles.label, { marginTop: 24 }]}>Students</Overline>
+            <Overline style={[styles.label, { marginTop: 24 }]}>{t('nav.students')}</Overline>
             {ranked.length === 0 ? (
-              <EmptyState title="No students" hint="This group has nobody in it yet" />
+              <EmptyState title={t('students.noMatches')} hint={t('grades.noStudentsInGroup')} />
             ) : (
               <Card style={{ overflow: 'hidden' }}>
                 {ranked.map((row, i) => {
@@ -284,8 +294,8 @@ export default function Grades() {
                           </Text>
                           <Text style={styles.studentMeta}>
                             {row.marked
-                              ? `${row.marked} mark${row.marked > 1 ? 's' : ''} recorded`
-                              : 'Not graded yet'}
+                              ? t('grades.marksRecorded', { count: row.marked })
+                              : t('grades.notGradedYet')}
                           </Text>
                         </View>
                         {row.average !== null && skin && standing ? (
@@ -294,14 +304,14 @@ export default function Grades() {
                               {row.average}%
                             </Text>
                             <Badge
-                              label={STANDING_LABEL[standing]}
+                              label={t(STANDING_KEY[standing])}
                               bg={skin.bg}
                               fg={skin.fg}
                               textStyle={styles.standingText}
                             />
                           </View>
                         ) : (
-                          <Text style={styles.noAverage}>—</Text>
+                          <Text style={styles.noAverage}>·</Text>
                         )}
                       </Press>
                     </View>
@@ -314,7 +324,7 @@ export default function Grades() {
 
             {groupAssessments.length ? (
               <>
-                <Overline style={[styles.label, { marginTop: 24 }]}>Assessments</Overline>
+                <Overline style={[styles.label, { marginTop: 24 }]}>{t('grades.assessments')}</Overline>
                 <Card style={{ overflow: 'hidden' }}>
                   {groupAssessments.map((a, i) => {
                     const marks = grades.filter((g) => g.assessmentId === a.id);
@@ -326,7 +336,7 @@ export default function Grades() {
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <View style={styles.assessmentHead}>
                               <Badge
-                                label={KIND_LABEL[a.kind]}
+                                label={t(KIND_KEY[a.kind])}
                                 bg={color.bg}
                                 fg={color.muted}
                                 textStyle={styles.standingText}
@@ -336,9 +346,8 @@ export default function Grades() {
                               </Text>
                             </View>
                             <Text style={styles.assessmentMeta}>
-                              {shortDate(fromKey(a.takenOn))} · out of {a.maxScore} ·{' '}
-                              {marks.length} marked
-                              {pending ? ` · ${pending} unreported` : ''}
+                              {shortDate(fromKey(a.takenOn))} · {a.maxScore} ·{' '}
+                              {t('grades.marked', { count: marks.length, total: roster.length })}
                             </Text>
                           </View>
 
@@ -360,10 +369,10 @@ export default function Grades() {
                           <Button
                             label={
                               sending === a.id
-                                ? 'Sending…'
+                                ? t('common.sending')
                                 : pending
-                                  ? `Send results to ${pending} student${pending > 1 ? 's' : ''}`
-                                  : 'Send results again'
+                                  ? t('grades.sendResultsTo', { count: pending })
+                                  : t('grades.sendAgain')
                             }
                             variant={pending ? 'tonal' : 'ghost'}
                             height={40}

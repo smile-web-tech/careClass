@@ -4,6 +4,7 @@ import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { showError } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { AngledGradient, Glow, Ring } from '@/components/decor';
 import { GoogleMark, Icon } from '@/components/Icon';
 import { Logo, Press } from '@/components/ui';
@@ -11,7 +12,6 @@ import { useStore } from '@/data/store';
 import {
   AuthCancelled,
   isAppleSignInAvailable,
-  redirectTo,
   signInWithApple,
   signInWithGoogle,
 } from '@/lib/auth';
@@ -32,12 +32,12 @@ type Provider = 'google' | 'apple';
  * has to be three forms at once.
  */
 export default function SignIn() {
+  const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const signIn = useStore((s) => s.signIn);
-  const enterDemoMode = useStore((s) => s.enterDemoMode);
 
   const [busy, setBusy] = useState<Provider | null>(null);
   const [appleReady, setAppleReady] = useState(false);
@@ -65,7 +65,7 @@ export default function SignIn() {
       router.replace('/(tabs)');
     } catch (e) {
       if (!(e instanceof AuthCancelled)) {
-        showError(e, 'Could not sign in');
+        showError(e, t('auth.couldNotSignIn'));
       }
     } finally {
       setBusy(null);
@@ -80,15 +80,6 @@ export default function SignIn() {
       return;
     }
     router.push(route);
-  };
-
-  /**
-   * Straight into the app on seed data — no account, no network. Writes stay
-   * local (see `demo` in the store), so nothing here can touch real rows.
-   */
-  const skipToDemo = () => {
-    enterDemoMode();
-    router.replace('/(tabs)');
   };
 
   return (
@@ -108,20 +99,18 @@ export default function SignIn() {
           <Text style={styles.brandName}>ClassCare</Text>
         </View>
 
-        <Text style={styles.title}>Your classes,{'\n'}all in one place.</Text>
-        <Text style={styles.subtitle}>
-          Groups, students, attendance and messages — built for teachers, not for schools.
-        </Text>
+        <Text style={styles.title}>{t('auth.heroTitle')}</Text>
+        <Text style={styles.subtitle}>{t('auth.heroSubtitle')}</Text>
 
         <View style={styles.chipRow}>
-          <Chip label="Bulk SMS & email" />
-          <Chip label="Attendance in 30s" />
+          <Chip label={t('auth.chipSms')} />
+          <Chip label={t('auth.chipAttendance')} />
         </View>
       </View>
 
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 18) + 12 }]}>
-        <Text style={[text.sheetTitle, styles.ink]}>Get started</Text>
-        <Text style={styles.sheetHint}>Your data stays in your own account.</Text>
+        <Text style={[text.sheetTitle, styles.ink]}>{t('auth.getStarted')}</Text>
+        <Text style={styles.sheetHint}>{t('auth.dataStays')}</Text>
 
         <View style={styles.actions}>
           <Press
@@ -133,7 +122,7 @@ export default function SignIn() {
             ) : (
               <>
                 <GoogleMark size={19} />
-                <Text style={styles.providerLabel}>Continue with Google</Text>
+                <Text style={styles.providerLabel}>{t('auth.continueWithGoogle')}</Text>
               </>
             )}
           </Press>
@@ -169,34 +158,20 @@ export default function SignIn() {
             disabled={busy !== null}
             style={styles.emailButton}>
             <Icon name="mail" size={16} color={color.ink} />
-            <Text style={styles.providerLabel}>Sign up with email</Text>
+            <Text style={styles.providerLabel}>{t('auth.signUpWithEmail')}</Text>
           </Press>
         </View>
 
         <View style={styles.signInRow}>
-          <Text style={styles.signInPrompt}>Already have an account? </Text>
+          <Text style={styles.signInPrompt}>{t('auth.haveAccount')}</Text>
           <Press onPress={() => goEmail('/login')} accessibilityRole="link" hitSlop={8}>
-            <Text style={styles.signInLabel}>Sign in</Text>
+            <Text style={styles.signInLabel}>{t('auth.signIn')}</Text>
           </Press>
         </View>
 
-        <Text style={styles.terms}>By continuing you agree to the Terms and Privacy Policy.</Text>
+        <Text style={styles.terms}>{t('auth.terms')}</Text>
 
-        {/* Dev builds only — __DEV__ is false in preview and production, so
-            this cannot ship as an auth bypass. */}
-        {__DEV__ ? (
-          <>
-            <Press onPress={skipToDemo} style={styles.skip}>
-              <Text style={styles.skipLabel}>Skip · explore with demo data</Text>
-            </Press>
-            {/* The OAuth return URL this build actually generates. It has to be
-                on Supabase's redirect allow-list verbatim, and a dev client does
-                not always produce the plain `classcare://` form. */}
-            <Text style={styles.redirectHint} selectable>
-              redirect: {redirectTo}
-            </Text>
-          </>
-        ) : null}
+
       </View>
     </View>
   );

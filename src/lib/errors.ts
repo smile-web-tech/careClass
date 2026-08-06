@@ -11,6 +11,8 @@
  * what to do about it. Nothing is phrased as the teacher's fault when it isn't.
  */
 
+import { translateNow } from '@/i18n/useT';
+
 export type ErrorKind =
   | 'offline'
   | 'auth'
@@ -83,8 +85,8 @@ export function describeError(e: unknown): AppError {
   if (isOfflineError(e)) {
     return {
       kind: 'offline',
-      title: 'No connection',
-      message: 'Check your internet and try again.',
+      title: translateNow('error.offlineTitle'),
+      message: translateNow('error.offlineMessage'),
       retryable: true,
       detail,
     };
@@ -98,8 +100,8 @@ export function describeError(e: unknown): AppError {
   ) {
     return {
       kind: 'auth',
-      title: 'Signed out',
-      message: 'Your session expired. Sign in again to continue.',
+      title: translateNow('error.authTitle'),
+      message: translateNow('error.authMessage'),
       retryable: false,
       detail,
     };
@@ -108,8 +110,8 @@ export function describeError(e: unknown): AppError {
   if (status === 403 || code === '42501' || text.includes('row level security')) {
     return {
       kind: 'permission',
-      title: 'Not allowed',
-      message: 'This account cannot make that change.',
+      title: translateNow('error.permissionTitle'),
+      message: translateNow('error.permissionMessage'),
       retryable: false,
       detail,
     };
@@ -118,8 +120,8 @@ export function describeError(e: unknown): AppError {
   if (status === 404 || text.includes('not found')) {
     return {
       kind: 'notFound',
-      title: 'Not found',
-      message: 'That item no longer exists. Refresh and try again.',
+      title: translateNow('error.notFoundTitle'),
+      message: translateNow('error.notFoundMessage'),
       retryable: false,
       detail,
     };
@@ -128,8 +130,8 @@ export function describeError(e: unknown): AppError {
   if (code === '23505' || text.includes('duplicate key')) {
     return {
       kind: 'conflict',
-      title: 'Already exists',
-      message: 'Something with those details is already saved.',
+      title: translateNow('error.conflictTitle'),
+      message: translateNow('error.conflictMessage'),
       retryable: false,
       detail,
     };
@@ -142,8 +144,8 @@ export function describeError(e: unknown): AppError {
   if (code === '23503' || text.includes('violates foreign key')) {
     return {
       kind: 'conflict',
-      title: 'Could not save',
-      message: 'Something it links to is missing. Sign out, sign back in, then try again.',
+      title: translateNow('error.linkTitle'),
+      message: translateNow('error.linkMessage'),
       retryable: false,
       detail,
     };
@@ -152,8 +154,8 @@ export function describeError(e: unknown): AppError {
   if (status !== null && status >= 500) {
     return {
       kind: 'server',
-      title: 'Server problem',
-      message: 'The server had trouble with that. Try again in a moment.',
+      title: translateNow('error.serverTitle'),
+      message: translateNow('error.serverMessage'),
       retryable: true,
       detail,
     };
@@ -168,8 +170,8 @@ export function describeError(e: unknown): AppError {
 
   return {
     kind: 'unknown',
-    title: 'Something went wrong',
-    message: looksHuman ? detail : 'Please try again. If it keeps happening, restart the app.',
+    title: translateNow('error.unknownTitle'),
+    message: looksHuman ? detail : translateNow('error.unknownMessage'),
     retryable: true,
     detail,
   };

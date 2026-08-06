@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AuthButton, AuthField, AuthLink, AuthNotice, AuthScreen } from '@/components/AuthForm';
+import { useT } from '@/i18n/useT';
 import { PasswordField } from '@/components/PasswordField';
 import { Press } from '@/components/ui';
 import { signInWithPassword } from '@/lib/auth';
@@ -20,6 +21,7 @@ import { body } from '@/theme/type';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export default function Login() {
+  const t = useT();
   const router = useRouter();
   const { email: prefill, reason } = useLocalSearchParams<{ email?: string; reason?: string }>();
   const styles = useThemedStyles(makeStyles);
@@ -47,9 +49,9 @@ export default function Login() {
         // with no account: telling them apart would let anyone test a list of
         // emails for accounts.
         /invalid login|invalid credentials/i.test(msg)
-          ? 'That email and password do not match.'
+          ? t('auth.badCredentials')
           : /not confirmed|confirm/i.test(msg)
-            ? 'This account still needs confirming. Register again to get a fresh code.'
+            ? t('auth.needsConfirm')
             : msg,
       );
     } finally {
@@ -59,12 +61,12 @@ export default function Login() {
 
   return (
     <AuthScreen
-      title="Welcome back"
-      subtitle="Sign in to pick up where you left off."
+      title={t('auth.welcomeBack')}
+      subtitle={t('auth.signInSubtitle')}
       footer={
         <AuthLink
-          prompt="New to ClassCare?"
-          label="Create an account"
+          prompt={t('auth.newHere')}
+          label={t('auth.createAccount')}
           onPress={() => router.replace({ pathname: '/register', params: { email: email.trim() } })}
         />
       }>
@@ -78,7 +80,7 @@ export default function Login() {
       {error ? <AuthNotice>{error}</AuthNotice> : null}
 
       <AuthField
-        label="Email"
+        label={t('auth.email')}
         value={email}
         onChangeText={setEmail}
         placeholder="you@example.com"
@@ -95,10 +97,10 @@ export default function Login() {
 
       <PasswordField
         ref={passwordRef}
-        label="Password"
+        label={t('auth.password')}
         value={password}
         onChangeText={setPassword}
-        placeholder="Your password"
+        placeholder={t('auth.yourPassword')}
         autoComplete="current-password"
         textContentType="password"
         returnKeyType="go"
@@ -112,11 +114,11 @@ export default function Login() {
             router.push({ pathname: '/forgot-password', params: { email: email.trim() } })
           }
           hitSlop={8}>
-          <Text style={styles.forgot}>Forgot password?</Text>
+          <Text style={styles.forgot}>{t('auth.forgotPassword')}</Text>
         </Press>
       </View>
 
-      <AuthButton label="Sign in" onPress={() => void submit()} disabled={!ready} busy={busy} />
+      <AuthButton label={t('auth.signIn')} onPress={() => void submit()} disabled={!ready} busy={busy} />
     </AuthScreen>
   );
 }

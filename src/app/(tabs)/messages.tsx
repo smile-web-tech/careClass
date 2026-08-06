@@ -9,6 +9,7 @@ import { SwipeToDelete } from '@/components/SwipeToDelete';
 import { Avatar, Badge, Card, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
 import { refreshInbox } from '@/data/sync';
+import { useT } from '@/i18n/useT';
 import type { Message, Reply } from '@/data/types';
 import { timeAgo } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -23,6 +24,7 @@ const AUDIENCE_LABEL = {
 const CHANNEL_LABEL = { sms: 'SMS', email: 'Email', push: 'Push' } as const;
 
 export default function Messages() {
+  const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -62,7 +64,7 @@ export default function Messages() {
     <Screen>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headerRow}>
-          <Text style={[text.pageTitle, styles.ink]}>Messages</Text>
+          <Text style={[text.pageTitle, styles.ink]}>{t('messages.title')}</Text>
           <IconButton
             name="plusLarge"
             iconSize={19}
@@ -73,9 +75,9 @@ export default function Messages() {
         </View>
 
         <View style={styles.tabRow}>
-          <TabLink label="Sent" active={tab === 'sent'} onPress={() => setTab('sent')} />
+          <TabLink label={t('messages.sent')} active={tab === 'sent'} onPress={() => setTab('sent')} />
           <TabLink
-            label={unread ? `Replies · ${unread}` : 'Replies'}
+            label={unread ? `${t('messages.replies')} · ${unread}` : t('messages.replies')}
             active={tab === 'replies'}
             onPress={() => setTab('replies')}
           />
@@ -113,7 +115,7 @@ export default function Messages() {
               </SwipeToDelete>
             ))
           ) : (
-            <EmptyState title="Nothing sent yet" hint="Your outbox will show up here" />
+            <EmptyState title={t('messages.nothingSent')} hint={t('messages.outboxHint')} />
           )
         ) : replies.length ? (
           replies.map((r) => (
@@ -127,7 +129,7 @@ export default function Messages() {
             </SwipeToDelete>
           ))
         ) : (
-          <EmptyState title="No replies" hint="Answers land here as they arrive" />
+          <EmptyState title={t('messages.noReplies')} hint={t('messages.repliesHint')} />
         )}
       </ScrollView>
     </Screen>
@@ -162,6 +164,7 @@ function TabLink({
 }
 
 function SentCard({ message }: { message: Message }) {
+  const t = useT();
   const { accents, color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const groups = useGroups();
@@ -173,7 +176,7 @@ function SentCard({ message }: { message: Message }) {
       <View style={styles.sentHead}>
         {message.announcement || targets.length === 0 ? (
           <Badge
-            label="Announcement"
+            label={t('messages.announcement')}
             icon="megaphone"
             bg={accents.amber.tint}
             fg={color.warningDeep}

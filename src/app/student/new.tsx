@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { showAlert } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { StudentForm, type StudentDraft } from '@/components/StudentForm';
 import { Card, Toggle } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
@@ -14,6 +15,7 @@ import { body } from '@/theme/type';
 
 export default function NewStudent() {
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   const params = useLocalSearchParams<{ group?: string }>();
   const router = useRouter();
 
@@ -35,11 +37,7 @@ export default function NewStudent() {
     setChecking(false);
 
     if (!online) {
-      await showAlert(
-        'No internet',
-        'A new student has to reach the server. Connect and try again.',
-        'danger',
-      );
+      await showAlert(t('common.noInternet'), t('students.noInternetCreate'), 'danger');
       return false;
     }
     commit(draft);
@@ -60,24 +58,27 @@ export default function NewStudent() {
       smsNumber(
         draft.phone,
         `Welcome to ClassCare, ${draft.name.split(' ')[0]}! ${
-          schedule || 'Your schedule follows shortly.'
-        } — ${useStore.getState().teacherName}`,
+          schedule || t('students.welcomeSms')
+        }. ${useStore.getState().teacherName}`,
       );
     }
   };
 
   return (
     <StudentForm
-      title="New student"
-      submitLabel={checking ? 'Checking…' : 'Save'}
+      title={t('students.new')}
+      submitLabel={checking ? t('common.checking') : t('common.save')}
       busy={checking}
       preselectGroups={params.group ? [params.group] : []}
-      secondary={{ label: 'Save & add another', onPress: (draft) => guarded(draft, () => {}) }}
+      secondary={{
+        label: t('students.saveAndAddAnother'),
+        onPress: (draft) => guarded(draft, () => {}),
+      }}
       extra={
         <Card style={styles.welcomeCard}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.welcomeTitle}>Send welcome SMS</Text>
-            <Text style={styles.welcomeHint}>Schedule and your contact details</Text>
+            <Text style={styles.welcomeTitle}>{t('students.sendWelcome')}</Text>
+            <Text style={styles.welcomeHint}>{t('students.sendWelcomeHint')}</Text>
           </View>
           <Toggle value={welcome} onChange={setWelcome} />
         </Card>

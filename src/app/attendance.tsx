@@ -20,11 +20,21 @@ import {
   type Theme,
 } from '@/theme';
 import { body, display, text } from '@/theme/type';
+import type { TranslationKey } from '@/i18n';
+import { useT } from '@/i18n/useT';
+
+/** Attendance status labels live in the catalogue, not in the theme tokens. */
+export const STATUS_KEY: Record<AttendanceStatus, TranslationKey> = {
+  present: 'attendance.present',
+  late: 'attendance.late',
+  absent: 'attendance.absent',
+};
 
 const GRID_GAP = 12;
 const COLUMNS = 3;
 
 export default function Attendance() {
+  const t = useT();
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{
     group: string;
@@ -59,8 +69,8 @@ export default function Attendance() {
   if (!group) {
     return (
       <Screen>
-        <TopBar title="Attendance" />
-        <Txt style={styles.missing}>That session is no longer on the schedule.</Txt>
+        <TopBar title={t('attendance.title')} />
+        <Txt style={styles.missing}>{t('groups.gone')}</Txt>
       </Screen>
     );
   }
@@ -108,7 +118,7 @@ export default function Attendance() {
         subtitle={`${shortDate(fromKey(params.date))} · ${params.start}`}
         trailing={
           <Press onPress={markAllPresent} style={styles.allIn}>
-            <Text style={styles.allInLabel}>All in</Text>
+            <Text style={styles.allInLabel}>{t('attendance.allIn')}</Text>
           </Press>
         }>
         <View style={styles.tallyRow}>
@@ -125,7 +135,7 @@ export default function Attendance() {
           paddingBottom: insets.bottom + 130,
         }}
         showsVerticalScrollIndicator={false}>
-        <Text style={styles.hint}>Tap a student to cycle present → late → absent.</Text>
+        <Text style={styles.hint}>{t('attendance.cycleHint')}</Text>
 
         <View style={styles.grid}>
           {roster.map((s) => (
@@ -140,26 +150,27 @@ export default function Attendance() {
         </View>
 
         {roster.length === 0 ? (
-          <Txt style={styles.missing}>Add students to this group to take attendance.</Txt>
+          <Txt style={styles.missing}>{t('attendance.addStudentsFirst')}</Txt>
         ) : null}
       </ScrollView>
 
       <StickyFooter>
         <FooterSummary
-          title={`${counts.present} of ${roster.length} present`}
+          title={t('attendance.summary', { present: counts.present, total: roster.length })}
           hint={
             counts.absent > 0
               ? `Parents of ${counts.absent} absentee${counts.absent > 1 ? 's' : ''} will be notified`
-              : 'Full attendance — no notifications'
+              : t('attendance.fullAttendance')
           }
         />
-        <Button label="Save" onPress={save} style={styles.saveButton} />
+        <Button label={t('common.save')} onPress={save} style={styles.saveButton} />
       </StickyFooter>
     </Screen>
   );
 }
 
 function Tally({ kind, value }: { kind: AttendanceStatus; value: number }) {
+  const t = useT();
   const { status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const s = status[kind];
@@ -167,7 +178,7 @@ function Tally({ kind, value }: { kind: AttendanceStatus; value: number }) {
     <View style={[styles.tally, { backgroundColor: s.tint }]}>
       <View style={[styles.tallyDot, { backgroundColor: s.dot }]} />
       <Text style={[styles.tallyValue, { color: s.ink }]}>{value}</Text>
-      <Text style={[styles.tallyLabel, { color: s.sub }]}>{kind}</Text>
+      <Text style={[styles.tallyLabel, { color: s.sub }]}>{t(STATUS_KEY[kind])}</Text>
     </View>
   );
 }
@@ -183,6 +194,7 @@ function FaceCell({
   width: number;
   onPress: () => void;
 }) {
+  const t = useT();
   const { accents, status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const s = status[mark];
@@ -193,7 +205,7 @@ function FaceCell({
       haptic
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${student.name}, ${statusMeta[mark].label}`}
+      accessibilityLabel={`${student.name}, ${t(STATUS_KEY[mark])}`}
       style={[styles.cell, { width, borderColor: s.border, boxShadow: s.glow }]}>
       <View>
         <View style={[styles.face, { backgroundColor: a.tint }]}>

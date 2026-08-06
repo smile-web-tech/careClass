@@ -8,6 +8,7 @@ import { Screen, useTabInset } from '@/components/layout';
 import { Avatar, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStudents } from '@/data/store';
 import type { Student } from '@/data/types';
+import { useT } from '@/i18n/useT';
 import { callNumber, smsNumber } from '@/lib/contact';
 import { radius, space, useTheme, useThemedStyles, type AccentName, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
@@ -18,6 +19,7 @@ import { body, text } from '@/theme/type';
  * roster, with an A–Z grouping since this list is long.
  */
 export default function Students() {
+  const t = useT();
   const { color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -53,7 +55,7 @@ export default function Students() {
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={[text.pageTitle, styles.ink]}>Students</Text>
+            <Text style={[text.pageTitle, styles.ink]}>{t('nav.students')}</Text>
             <Text style={styles.count}>
               {students.length} across {groups.length} groups
             </Text>
@@ -62,7 +64,7 @@ export default function Students() {
             name="check"
             iconSize={18}
             fg={color.inkSoft}
-            accessibilityLabel="Grades"
+            accessibilityLabel={t('nav.grades')}
             onPress={() => router.push('/grades')}
             style={{ marginRight: 8 }}
           />
@@ -80,7 +82,7 @@ export default function Students() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search by name or number"
+            placeholder={t('students.searchPlaceholder')}
             placeholderTextColor={color.mutedLight}
             style={styles.searchInput}
             autoCorrect={false}
@@ -102,7 +104,9 @@ export default function Students() {
           paddingBottom: bottomInset,
         }}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={<EmptyState title="No students" hint="Try another name or number" />}
+        ListEmptyComponent={
+          <EmptyState title={t('students.noMatches')} hint={t('students.tryAnother')} />
+        }
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionLetter}>{section.title}</Text>
         )}
@@ -129,6 +133,7 @@ function StudentRow({
   groupNames: { name: string; accent: AccentName }[];
   onPress: () => void;
 }) {
+  const t = useT();
   const { accents, color, status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   return (
@@ -148,7 +153,7 @@ function StudentRow({
               </View>
             ))
           ) : (
-            <Text style={styles.noGroup}>No group</Text>
+            <Text style={styles.noGroup}>{t('messages.noGroupSelected')}</Text>
           )}
         </View>
       </View>

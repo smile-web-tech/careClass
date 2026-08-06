@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { seedGroups, seedMessages, seedReplies, seedStudents, teacher } from '@/data/seed';
 import type {
   Assessment,
   AttendanceRecord,
@@ -19,8 +18,9 @@ import type {
   Session,
   Student,
 } from '@/data/types';
+import type { Language } from '@/i18n';
+import { DEFAULT_LANGUAGE, setActiveLanguage } from '@/i18n';
 import { at, toKey } from '@/lib/date';
-import { hasSupabase } from '@/lib/supabase';
 import { accentNames } from '@/theme';
 import type { ReminderLead } from '@/lib/notifications';
 
@@ -66,16 +66,10 @@ type NewStudent = {
 
 type State = {
   signedIn: boolean;
-  /**
-   * Explore-without-an-account mode. Everything works against the seed data and
-   * nothing is mirrored to Supabase — see `enqueue` in `data/sync.ts`. Entered
-   * from the sign-in screen's skip button, which only renders in dev builds.
-   */
-  demo: boolean;
   teacherName: string;
   teacherEmail: string | null;
   teacherAvatarUrl: string | null;
-  /** 'google' | 'apple' | 'email' | 'demo'. */
+  /** 'google' | 'apple' | 'email'. */
   teacherProvider: string;
   groups: Group[];
   students: Student[];
@@ -90,13 +84,23 @@ type State = {
   /** One mark per student per assessment. */
   grades: Grade[];
 
+  /**
+   * Interface language, and the language students' emails are written in.
+   *
+   * Turkmen by default rather than device locale: the app is for Turkmen
+   * teachers, and a phone set to Russian is a weaker signal about what a class
+   * should receive than the teacher's own explicit choice.
+   */
+  language: Language;
+  /** False until the teacher has been asked, which gates the welcome screen. */
+  languageChosen: boolean;
+
   /** Local class reminders: off, or how many minutes before the start. */
   remindersOn: boolean;
   reminderLead: ReminderLead;
 
   signIn: (name?: string) => void;
   signOut: () => void;
-  enterDemoMode: () => void;
 
   addGroup: (g: Omit<Group, 'id' | 'accent'> & { accent?: Group['accent'] }) => string;
   updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
@@ -128,6 +132,7 @@ type State = {
   ) => void;
   removeAssessment: (id: string) => void;
 
+  setLanguage: (language: Language) => void;
   setReminders: (on: boolean, lead?: ReminderLead) => void;
 
   addEvent: (e: Omit<CalendarEvent, 'id'>) => string;
@@ -175,6 +180,7 @@ export type StoreMirror = {
     body: string;
     announcement?: boolean;
   }) => void;
+  setLanguage: (language: Language) => void;
   markRepliesRead: () => void;
   markReplyRead: (id: string) => void;
   deleteReply: (id: string) => void;
@@ -198,25 +204,29 @@ export const useStore = create<State>()(
   persist(
     (set, get) => ({
       signedIn: false,
-      demo: false,
-      teacherName: teacher.name,
-      teacherEmail: teacher.email,
+      // Empty, not seeded. A public build must never show a new teacher a class
+      // of invented students — they look real, they are indistinguishable from
+      // a sync that half-worked, and one of them ending up in a message would
+      // be unforgivable.
+      teacherName: '',
+      teacherEmail: null,
       teacherAvatarUrl: null,
-      teacherProvider: 'demo',
-      groups: seedGroups,
-      students: seedStudents,
+      teacherProvider: 'email',
+      groups: [],
+      students: [],
       attendance: {},
-      messages: seedMessages,
-      replies: seedReplies,
+      messages: [],
+      replies: [],
       events: [],
       assessments: [],
       grades: [],
+      language: DEFAULT_LANGUAGE,
+      languageChosen: false,
       remindersOn: false,
       reminderLead: 15,
 
       signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
-      signOut: () => set({ signedIn: false, demo: false }),
-      enterDemoMode: () => set({ signedIn: true, demo: true }),
+      signOut: () => set({ signedIn: false }),
 
       addGroup: (g) => {
         const id = uid();
@@ -377,6 +387,14 @@ export const useStore = create<State>()(
         });
       },
 
+      setLanguage: (language) => {
+        setActiveLanguage(language);
+        set({ language, languageChosen: true });
+        // Mirrored so the Edge Functions can write a student's email in the same
+        // language the teacher reads the app in.
+        mirror.setLanguage?.(language);
+      },
+
       markRepliesRead: () => {
         set((s) => ({
           replies: s.replies.map((r) => ({ ...r, unread: false })),
@@ -456,10 +474,15 @@ export const useStore = create<State>()(
     {
       name: 'classcare-v1',
       storage: createJSONStorage(() => AsyncStorage),
+      // The persisted language has to reach the holder in `@/i18n` too, or
+      // month names stay Turkmen after a relaunch for a teacher who picked
+      // Russian: `setLanguage` is not called on rehydrate.
+      onRehydrateStorage: () => (state) => {
+        if (state?.language) setActiveLanguage(state.language);
+      },
       // Seeded collections are code, not user data — only persist what changed.
       partialize: (s) => ({
         signedIn: s.signedIn,
-        demo: s.demo,
         teacherName: s.teacherName,
         teacherEmail: s.teacherEmail,
         teacherAvatarUrl: s.teacherAvatarUrl,
@@ -470,6 +493,8 @@ export const useStore = create<State>()(
         messages: s.messages,
         replies: s.replies,
         events: s.events,
+        language: s.language,
+        languageChosen: s.languageChosen,
         assessments: s.assessments,
         grades: s.grades,
         remindersOn: s.remindersOn,
@@ -560,7 +585,15 @@ export const useUnreadReplies = () => useStore((s) => s.replies.filter((r) => r.
  * True only when the app is running on seed data. Real accounts must never see
  * invented attendance — an unmarked session is unmarked, not a guess.
  */
-export const synthesiseHistory = () => useStore.getState().demo || !hasSupabase;
+/**
+ * Whether past sessions may be back-filled with invented marks.
+ *
+ * Always false now. It existed for the seed data the app used to ship with, and
+ * a public build has none — inventing attendance for a real student is not a
+ * cosmetic problem, it would show a teacher absences that never happened and
+ * put them in front of a parent.
+ */
+export const synthesiseHistory = () => false;
 
 /**
  * Attendance for a session: the saved record if the teacher has touched it,
@@ -629,6 +662,70 @@ export function attendanceRate(
   }
 
   return { rate: total ? Math.round((hits / total) * 100) : null, sessions };
+}
+
+/**
+ * Attendance for one group on one day.
+ *
+ * Separate from `attendanceRate`, which averages eight weeks. A group screen
+ * opened on a teaching day should answer "who is here today", and an eight-week
+ * average cannot: it barely moves when someone is missing this morning, which
+ * is exactly the thing worth noticing.
+ *
+ * Returns null when there is no session that day or it has not been marked —
+ * both of which must read as "nothing to say", never as 0%.
+ */
+export function attendanceOnDay(
+  groupId: string,
+  date = new Date(),
+): { rate: number | null; present: number; total: number; today: boolean } {
+  const { groups, attendance, students } = useStore.getState();
+  const group = groups.find((g) => g.id === groupId);
+  const empty = { rate: null, present: 0, total: 0, today: false };
+  if (!group) return empty;
+
+  const dateKey = toKey(date);
+  const slot = group.slots.find((s) => s.day === date.getDay());
+  if (!slot) return empty;
+
+  const record = attendance[`${groupId}@${dateKey}#${slot.start}`];
+  if (!record) return empty;
+
+  const roster = students.filter((s) => s.groupIds.includes(groupId));
+  let present = 0;
+  let total = 0;
+  for (const s of roster) {
+    const mark = record[s.id];
+    if (!mark) continue;
+    total++;
+    if (mark !== 'absent') present++;
+  }
+
+  return {
+    rate: total ? Math.round((present / total) * 100) : null,
+    present,
+    total,
+    today: true,
+  };
+}
+
+/**
+ * A group's average, as a percentage, across every mark its students hold.
+ *
+ * Averages the students' own averages rather than every raw mark, so one
+ * student who sat six tests does not outweigh five who sat one each — the
+ * number is meant to describe the class, not the pile of paper.
+ */
+export function groupAveragePercent(groupId: string): number | null {
+  const { students, grades, assessments } = useStore.getState();
+  const roster = students.filter((s) => s.groupIds.includes(groupId));
+
+  const averages = roster
+    .map((s) => averagePercent(s.id, grades, assessments, { groupId }))
+    .filter((n): n is number => n !== null);
+
+  if (!averages.length) return null;
+  return Math.round((averages.reduce((a, b) => a + b, 0) / averages.length) * 10) / 10;
 }
 
 /** Recent past sessions for one student, newest first. */

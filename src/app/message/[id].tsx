@@ -20,6 +20,7 @@ import { Icon } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
 import { Avatar, Badge, Button, Card, Divider, Overline, Txt } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
+import { useT } from '@/i18n/useT';
 import { longDateTime } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
@@ -33,6 +34,7 @@ const AUDIENCE_LABEL = {
 const CHANNEL_LABEL = { sms: 'SMS', email: 'Email', push: 'Push' } as const;
 
 export default function MessageDetail() {
+  const t = useT();
   const { id, kind } = useLocalSearchParams<{ id: string; kind?: 'sent' | 'reply' }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -54,9 +56,9 @@ export default function MessageDetail() {
 
   const remove = async (what: string, run: () => void) => {
     const yes = await confirm({
-      title: `Delete ${what}?`,
-      message: 'This removes it from your history. It cannot be undone.',
-      confirmLabel: 'Delete',
+      title: t('calendar.deleteTitle', { title: what }),
+      message: t('messages.deleteMessageHint'),
+      confirmLabel: t('common.delete'),
     });
     if (!yes) return;
     run();
@@ -66,10 +68,10 @@ export default function MessageDetail() {
   if (!message && !reply) {
     return (
       <Screen>
-        <TopBar title="Message" dismiss />
+        <TopBar title={t('messages.message')} dismiss />
         <View style={styles.missing}>
-          <Txt>That message is no longer in your history.</Txt>
-          <Button label="Go back" variant="ghost" onPress={() => router.back()} />
+          <Txt>{t('messages.gone')}</Txt>
+          <Button label={t('common.goBack')} variant="ghost" onPress={() => router.back()} />
         </View>
       </Screen>
     );
@@ -80,7 +82,7 @@ export default function MessageDetail() {
   if (reply && kind !== 'sent') {
     return (
       <Screen>
-        <TopBar title="Reply" dismiss />
+        <TopBar title={t('messages.reply')} dismiss />
         <ScrollView
           contentContainerStyle={{ padding: space.gutter, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}>
@@ -100,11 +102,11 @@ export default function MessageDetail() {
           </Card>
 
           <Button
-            label="Delete this reply"
+            label={t('messages.deleteReply')}
             variant="outline"
             height={48}
             style={{ marginTop: 18 }}
-            onPress={() => remove("this reply", () => removeReply(reply.id))}
+            onPress={() => remove(t('messages.reply'), () => removeReply(reply.id))}
           />
         </ScrollView>
       </Screen>
@@ -120,14 +122,14 @@ export default function MessageDetail() {
 
   return (
     <Screen>
-      <TopBar title="Sent message" dismiss />
+      <TopBar title={t('messages.sentMessage')} dismiss />
       <ScrollView
         contentContainerStyle={{ padding: space.gutter, paddingBottom: insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}>
         <View style={styles.badgeRow}>
           {message.announcement || targets.length === 0 ? (
             <Badge
-              label="Announcement"
+              label={t('messages.announcement')}
               icon="megaphone"
               bg={accents.amber.tint}
               fg={color.warningDeep}
@@ -154,7 +156,7 @@ export default function MessageDetail() {
           </Text>
         </Card>
 
-        <Overline style={styles.label}>Delivery</Overline>
+        <Overline style={styles.label}>{t('messages.delivery')}</Overline>
         <Card style={{ overflow: 'hidden' }}>
           <View style={styles.row}>
             <View
@@ -169,7 +171,7 @@ export default function MessageDetail() {
               />
             </View>
             <Text style={styles.rowLabel}>
-              {message.delivered} of {message.total} delivered
+              {t('messages.deliveredOf', { delivered: message.delivered, total: message.total })}
             </Text>
           </View>
           <Divider inset={62} />
@@ -178,21 +180,19 @@ export default function MessageDetail() {
               <Icon name="send" size={15} color={color.inkSoft} />
             </View>
             <Text style={styles.rowLabel}>
-              {message.channels.map((c) => CHANNEL_LABEL[c]).join(' + ') || 'No channel'}
+              {message.channels.map((c) => CHANNEL_LABEL[c]).join(' + ') || t('messages.noChannel')}
             </Text>
           </View>
         </Card>
 
         <Button
-          label="Delete from history"
+          label={t('messages.deleteMessage')}
           variant="outline"
           height={48}
           style={{ marginTop: 18 }}
-          onPress={() => remove('this message', () => removeMessage(message.id))}
+          onPress={() => remove(t('messages.message'), () => removeMessage(message.id))}
         />
-        <Text style={styles.footnote}>
-          Deleting only clears your own record. Messages already sent cannot be recalled.
-        </Text>
+        <Text style={styles.footnote}>{t('messages.deleteMessageHint')}</Text>
       </ScrollView>
     </Screen>
   );

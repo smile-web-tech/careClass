@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { confirm } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { GroupForm } from '@/components/GroupForm';
 import { Icon } from '@/components/Icon';
 import { Card, Press } from '@/components/ui';
@@ -16,6 +17,7 @@ import { body } from '@/theme/type';
 export default function EditGroup() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const t = useT();
   const group = useStore((s) => s.groups.find((g) => g.id === id));
   const students = useStudents();
   const updateGroup = useStore((s) => s.updateGroup);
@@ -25,7 +27,7 @@ export default function EditGroup() {
 
   if (!group) {
     return (
-      <GroupForm title="Edit group" submitLabel="Save" onSubmit={() => router.back()} />
+      <GroupForm title={t('groups.edit')} submitLabel={t('common.save')} onSubmit={() => router.back()} />
     );
   }
 
@@ -36,19 +38,19 @@ export default function EditGroup() {
    */
   const confirmDelete = async () => {
     const first = await confirm({
-      title: `Delete ${group.name}?`,
+      title: t('groups.deleteTitle', { name: group.name }),
       message: memberCount
-        ? `Its schedule and attendance history are removed. The ${memberCount} student${memberCount > 1 ? 's' : ''} in it stay in your account, just no longer in this group.`
-        : 'Its schedule and attendance history are removed.',
-      confirmLabel: 'Delete group',
+        ? t('groups.deleteMessageWithStudents', { count: memberCount })
+        : t('groups.deleteMessage'),
+      confirmLabel: t('groups.deleteConfirm'),
     });
     if (!first) return;
 
     const sure = await confirm({
-      title: 'Are you certain?',
-      message: 'There is no undo.',
-      confirmLabel: 'Delete',
-      cancelLabel: 'Keep it',
+      title: t('groups.areYouSure'),
+      message: t('groups.noUndo'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('groups.keepIt'),
     });
     if (!sure) return;
 
@@ -58,8 +60,8 @@ export default function EditGroup() {
 
   return (
     <GroupForm
-      title="Edit group"
-      submitLabel="Save changes"
+      title={t('groups.edit')}
+      submitLabel={t('common.saveChanges')}
       initial={group}
       footer={<DangerZone onDelete={confirmDelete} />}
       onSubmit={(draft) => {
@@ -72,6 +74,7 @@ export default function EditGroup() {
 
 function DangerZone({ onDelete }: { onDelete: () => void }) {
   const { color, status } = useTheme();
+  const t = useT();
   const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.wrap}>
@@ -81,9 +84,9 @@ function DangerZone({ onDelete }: { onDelete: () => void }) {
             <Icon name="close" size={15} color={color.dangerDeep} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.label, { color: color.dangerDeep }]}>Delete this group</Text>
+            <Text style={[styles.label, { color: color.dangerDeep }]}>{t('groups.deleteThis')}</Text>
             <Text style={styles.hint} numberOfLines={2}>
-              Removes its schedule and attendance history
+              {t('groups.deleteHint')}
             </Text>
           </View>
           <Icon name="disclosure" size={16} color={color.chevron} />

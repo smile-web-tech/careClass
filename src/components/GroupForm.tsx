@@ -10,6 +10,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
+import { useT } from '@/i18n/useT';
 import { TimeField, TimePicker } from '@/components/TimePicker';
 import { Button, Card, Divider, FieldRow, Overline, Press } from '@/components/ui';
 import type { Group, Slot, Weekday } from '@/data/types';
@@ -47,6 +48,7 @@ export function GroupForm({
 }) {
   const { accents, color } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   const insets = useSafeAreaInsets();
 
   const [name, setName] = useState(initial?.name ?? '');
@@ -79,7 +81,10 @@ export function GroupForm({
     onSubmit({
       name: name.trim(),
       subject: subject.trim(),
-      room: room.trim() || 'No room',
+      // Empty, not the words "No room": that string was being written into the
+      // database and then shown verbatim, so it stayed English in every
+      // language. Absence is a state, not a value.
+      room: room.trim(),
       accent,
       slots,
     });
@@ -101,10 +106,10 @@ export function GroupForm({
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <Overline style={styles.label}>Group</Overline>
+          <Overline style={styles.label}>{t('grades.group')}</Overline>
           <Card style={styles.group}>
             <FieldRow
-              label="Name"
+              label={t('groups.name')}
               placeholder="e.g. IELTS Advanced"
               value={name}
               onChangeText={setName}
@@ -112,17 +117,22 @@ export function GroupForm({
             />
             <Divider inset={15} />
             <FieldRow
-              label="Subject"
+              label={t('groups.subject')}
               placeholder="e.g. English"
               value={subject}
               onChangeText={setSubject}
               autoCapitalize="words"
             />
             <Divider inset={15} />
-            <FieldRow label="Room" placeholder="Optional" value={room} onChangeText={setRoom} />
+            <FieldRow
+              label={t('groups.room')}
+              placeholder={t('common.optional')}
+              value={room}
+              onChangeText={setRoom}
+            />
           </Card>
 
-          <Overline style={styles.label}>Meets on</Overline>
+          <Overline style={styles.label}>{t('groups.meetsOn')}</Overline>
           <View style={styles.dayRow}>
             {DAYS.map((d) => {
               const on = !!days[d.day];
@@ -148,14 +158,14 @@ export function GroupForm({
             })}
           </View>
 
-          <Overline style={styles.label}>Time</Overline>
+          <Overline style={styles.label}>{t('calendar.when')}</Overline>
           <Card style={styles.group}>
-            <TimeField label="Starts" value={start} onPress={() => setPicking('start')} />
+            <TimeField label={t('groups.starts')} value={start} onPress={() => setPicking('start')} />
             <Divider inset={15} />
-            <TimeField label="Ends" value={end} onPress={() => setPicking('end')} />
+            <TimeField label={t('groups.ends')} value={end} onPress={() => setPicking('end')} />
           </Card>
 
-          <Overline style={styles.label}>Colour</Overline>
+          <Overline style={styles.label}>{t('groups.colour')}</Overline>
           <View style={styles.accentRow}>
             {accentNames.map((a) => {
               const on = a === accent;
@@ -192,7 +202,7 @@ export function GroupForm({
 
       <TimePicker
         visible={picking !== null}
-        title={picking === 'end' ? 'Ends at' : 'Starts at'}
+        title={t(picking === 'end' ? 'groups.endsAt' : 'groups.startsAt')}
         value={picking === 'end' ? end : start}
         // An end before its start is the one impossible combination; block it
         // in the picker rather than rejecting it after the fact.

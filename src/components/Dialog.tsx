@@ -21,6 +21,7 @@ import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'reac
 
 import { Icon, type IconName } from '@/components/Icon';
 import { Press } from '@/components/ui';
+import { translateNow } from '@/i18n/useT';
 import { describeError } from '@/lib/errors';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
@@ -67,7 +68,12 @@ export function showDialog(request: DialogRequest): Promise<string | null> {
 
 /** A dialog with one dismiss button. The replacement for `Alert.alert(a, b)`. */
 export function showAlert(title: string, message?: string, tone: DialogTone = 'info') {
-  return showDialog({ title, message, tone, actions: [{ label: 'OK', intent: 'primary' }] });
+  return showDialog({
+    title,
+    message,
+    tone,
+    actions: [{ label: translateNow('common.ok'), intent: 'primary' }],
+  });
 }
 
 /**
@@ -100,9 +106,9 @@ export async function confirm(opts: {
     tone: opts.tone ?? 'danger',
     dismissable: false,
     actions: [
-      { label: opts.cancelLabel ?? 'Cancel', value: 'cancel', intent: 'quiet' },
+      { label: opts.cancelLabel ?? translateNow('common.cancel'), value: 'cancel', intent: 'quiet' },
       {
-        label: opts.confirmLabel ?? 'Confirm',
+        label: opts.confirmLabel ?? translateNow('common.ok'),
         value: 'confirm',
         intent: opts.tone === 'danger' || opts.tone === undefined ? 'danger' : 'primary',
       },
@@ -180,7 +186,7 @@ export function DialogHost() {
   const { title, message, tone = 'info', dismissable = true } = current.request;
   const actions: DialogAction[] = current.request.actions?.length
     ? current.request.actions
-    : [{ label: 'OK', intent: 'primary' }];
+    : [{ label: translateNow('common.ok'), intent: 'primary' }];
 
   const toneSkin = {
     info: { tint: color.primaryTint, fg: color.primary },

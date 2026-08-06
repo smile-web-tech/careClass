@@ -42,10 +42,6 @@ function useSupabaseSession() {
     let stopWatching = () => {};
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
-      // Demo mode is a deliberate local session; the absence of a Supabase one
-      // must not sign the user back out.
-      if (useStore.getState().demo) return;
-
       const signedIn = !!session;
       useStore.setState({
         signedIn,
@@ -138,6 +134,7 @@ function RootNavigator() {
           contentStyle: { backgroundColor: color.bg },
         }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
         <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />

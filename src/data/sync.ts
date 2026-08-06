@@ -2,6 +2,7 @@ import * as api from '@/data/api';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
 import { useSyncStatus } from '@/data/syncStatus';
 import type { Assessment, AttendanceStatus, CalendarEvent, Group, Student } from '@/data/types';
+import type { Language } from '@/i18n';
 import { describeError, isOfflineError } from '@/lib/errors';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
@@ -107,9 +108,6 @@ async function drain(): Promise<void> {
  */
 function enqueue(work: () => Promise<unknown>, label: string) {
   if (!hasSupabase) return;
-  // Demo mode has no session; firing these would just log a wall of 401s.
-  if (useStore.getState().demo) return;
-
   queue.push({ run: work, label, attempts: 0 });
   publish();
   void drain();
@@ -129,8 +127,7 @@ function enqueue(work: () => Promise<unknown>, label: string) {
  * rather than the internet in general.
  */
 export async function isReachable(timeoutMs = 5000): Promise<boolean> {
-  // Nothing to reach in demo mode; refusing there would break the seed data.
-  if (!hasSupabase || useStore.getState().demo) return true;
+  if (!hasSupabase) return true;
 
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
@@ -259,6 +256,9 @@ export const remote: StoreMirror = {
       useStore.setState({ messages: await api.fetchMessages() });
     }, 'Your message'),
 
+  setLanguage: (language: Language) =>
+    enqueue(() => api.updateTeacher({ language }), 'Language'),
+
   markRepliesRead: () => enqueue(() => api.markRepliesRead(), 'Marking replies read'),
 
   markReplyRead: (id: string) => enqueue(() => api.markReplyRead(id), 'Marking a reply read'),
@@ -308,7 +308,7 @@ export async function refreshInbox() {
  * it invites the teacher to send the same result twice.
  */
 export async function refreshGrades() {
-  if (!hasSupabase || useStore.getState().demo) return;
+  if (!hasSupabase) return;
   useStore.setState({ grades: await api.fetchGrades() });
 }
 

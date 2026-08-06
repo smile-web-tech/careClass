@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
+import { useT } from '@/i18n/useT';
 import { Avatar, Button, EmptyState, Press } from '@/components/ui';
 import { useGroup, useStore, useStudents } from '@/data/store';
 import type { Student } from '@/data/types';
@@ -25,6 +26,7 @@ import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
 export default function GroupRoster() {
+  const t = useT();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -60,8 +62,8 @@ export default function GroupRoster() {
   if (!group) {
     return (
       <Screen>
-        <TopBar title="Students" dismiss />
-        <EmptyState title="That group no longer exists" hint="Go back and pick another." />
+        <TopBar title={t('nav.students')} dismiss />
+        <EmptyState title={t('groups.gone')} hint={t('common.goBack')} />
       </Screen>
     );
   }
@@ -93,7 +95,7 @@ export default function GroupRoster() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search by name or number"
+          placeholder={t('students.searchPlaceholder')}
           placeholderTextColor={color.mutedLight}
           style={styles.searchInput}
           autoCorrect={false}
@@ -116,11 +118,11 @@ export default function GroupRoster() {
         }}
         ListEmptyComponent={
           <EmptyState
-            title={students.length === 0 ? 'No students yet' : 'Nobody matches'}
+            title={t(students.length === 0 ? 'students.noneYet' : 'students.nobodyMatches')}
             hint={
               students.length === 0
-                ? 'Add your first student below.'
-                : 'Try another name or number.'
+                ? t('students.addFirst')
+                : t('students.tryAnother')
             }
           />
         }
@@ -134,7 +136,7 @@ export default function GroupRoster() {
             <View style={styles.newIcon}>
               <Icon name="plus" size={15} color={color.primary} strokeWidth={2} />
             </View>
-            <Text style={styles.newLabel}>Add someone new</Text>
+            <Text style={styles.newLabel}>{t('students.new')}</Text>
           </Press>
         }
       />

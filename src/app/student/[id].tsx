@@ -7,12 +7,15 @@ import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
 import { Button, Card, Divider, IconButton, Overline, Press, StatTile, Txt } from '@/components/ui';
 import { attendanceRate, recentSessionsFor, useGroups, useStudent } from '@/data/store';
+import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { shortDate } from '@/lib/date';
-import { radius, space, statusMeta, useTheme, useThemedStyles, type Theme } from '@/theme';
+import { STATUS_KEY } from '@/app/attendance';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
 export default function StudentProfile() {
+  const t = useT();
   const { accents, color, status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,8 +36,8 @@ export default function StudentProfile() {
     return (
       <Screen>
         <View style={styles.missing}>
-          <Txt>That student is no longer on your roster.</Txt>
-          <Button label="Go back" variant="ghost" onPress={() => router.back()} />
+          <Txt>{t('students.gone')}</Txt>
+          <Button label={t('common.goBack')} variant="ghost" onPress={() => router.back()} />
         </View>
       </Screen>
     );
@@ -96,10 +99,15 @@ export default function StudentProfile() {
               grow
               variant="success"
               icon="phone"
-              label="Call"
+              label={t('students.call')}
               onPress={() => callNumber(student.phone)}
             />
-            <Button grow icon="chat" label="Message" onPress={() => smsNumber(student.phone)} />
+            <Button
+              grow
+              icon="chat"
+              label={t('students.message')}
+              onPress={() => smsNumber(student.phone)}
+            />
             <Press
               onPress={() => student.email && emailAddress(student.email)}
               disabled={!student.email}
@@ -111,27 +119,27 @@ export default function StudentProfile() {
 
         <View style={styles.statRow}>
           <StatTile
-            value={stats?.rate != null ? `${stats.rate}%` : '—'}
-            label="Attendance"
+            value={stats?.rate != null ? `${stats.rate}%` : '·'}
+            label={t('home.attendance')}
             tone={stats?.rate != null ? color.success : color.mutedLight}
             fontSize={21}
           />
           <StatTile
-            value={student.avgScore != null ? student.avgScore.toFixed(1) : '—'}
-            label="Avg. score"
+            value={student.avgScore != null ? student.avgScore.toFixed(1) : '·'}
+            label={t('students.avgScore')}
             fontSize={21}
           />
-          <StatTile value={String(stats?.sessions ?? 0)} label="Sessions" fontSize={21} />
+          <StatTile value={String(stats?.sessions ?? 0)} label={t('students.sessions')} fontSize={21} />
         </View>
 
         <View style={styles.block}>
-          <Overline style={{ marginBottom: 10 }}>Contact</Overline>
+          <Overline style={{ marginBottom: 10 }}>{t('students.contact')}</Overline>
           <Card style={{ overflow: 'hidden' }}>
             <ContactRow
               icon="phone"
               tint={status.present.tint}
               fg={color.success}
-              label="Student"
+              label={t('nav.students')}
               value={student.phone}
               tabular
               onPress={() => callNumber(student.phone)}
@@ -143,7 +151,7 @@ export default function StudentProfile() {
                   icon="mail"
                   tint={color.bg}
                   fg={color.inkSoft}
-                  label="Email"
+                  label={t('students.email')}
                   value={student.email}
                   onPress={() => emailAddress(student.email!)}
                 />
@@ -181,14 +189,14 @@ export default function StudentProfile() {
 
         <View style={styles.block}>
           <View style={styles.blockHead}>
-            <Overline>Recent sessions</Overline>
+            <Overline>{t('students.recentSessions')}</Overline>
             <Press onPress={() => router.push('/(tabs)/calendar')}>
-              <Text style={styles.seeAll}>See all</Text>
+              <Text style={styles.seeAll}>{t('common.seeAll')}</Text>
             </Press>
           </View>
           <Card style={styles.sessionCard}>
             {recent.length === 0 ? (
-              <Txt style={styles.noSessions}>No sessions yet.</Txt>
+              <Txt style={styles.noSessions}>{t('students.noSessions')}</Txt>
             ) : (
               recent.map((r, i) => {
                 const s = status[r.mark];
@@ -201,7 +209,7 @@ export default function StudentProfile() {
                         {shortDate(r.date)} · {r.group.name}
                       </Text>
                       <Text style={[styles.sessionStatus, { color: s.ink }]}>
-                        {statusMeta[r.mark].label}
+                        {t(STATUS_KEY[r.mark])}
                       </Text>
                     </View>
                   </View>
@@ -213,7 +221,7 @@ export default function StudentProfile() {
 
         {student.note ? (
           <View style={styles.block}>
-            <Overline style={{ marginBottom: 10 }}>Note</Overline>
+            <Overline style={{ marginBottom: 10 }}>{t('students.note')}</Overline>
             <Card style={styles.noteCard}>
               <Text style={styles.noteText}>{student.note}</Text>
             </Card>

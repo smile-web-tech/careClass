@@ -89,6 +89,15 @@ export async function signInWithGoogle() {
 
   try {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+    // Forget whoever was chosen last, so the account picker actually appears.
+    // Without this the native SDK silently reuses the cached account: a teacher
+    // who signs out and back in lands straight in the same account, with no way
+    // to switch to a different one — which is exactly when someone signs out.
+    await GoogleSignin.signOut().catch(() => {
+      // Nobody was signed in. That is the state we wanted anyway.
+    });
+
     const response = await GoogleSignin.signIn();
 
     // v13+ returns a discriminated union; older shapes put the token at the top
@@ -418,6 +427,15 @@ export async function resetPassword(email: string, code: string, password: strin
 }
 
 export async function signOut() {
+  // Drop the Google session too. Supabase's sign-out ends our session but the
+  // Google SDK keeps its own, and that is the one that decides whether the
+  // account picker is shown next time.
+  if (Platform.OS !== 'web') {
+    await GoogleSignin.signOut().catch(() => {
+      // Signed in with email, or Play Services is unavailable. Neither matters.
+    });
+  }
+
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }

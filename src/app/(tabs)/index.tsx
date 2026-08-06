@@ -9,13 +9,15 @@ import { PageHeading, Screen, useTabInset } from '@/components/layout';
 import { Avatar, Card, EmptyState, IconButton, initialsOf, Press, Txt } from '@/components/ui';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Group, Student } from '@/data/types';
-import { callNumber, smsNumber } from '@/lib/contact';
+import { translateNow, useT } from '@/i18n/useT';
+import { smsNumber } from '@/lib/contact';
 import { at, countdownTo, longDate, relativeSlot } from '@/lib/date';
-import { nextSessionForGroup, nextSessionOverall } from '@/lib/schedule';
+import { nextSessionForGroup, nextSessionOverall, roomLabel } from '@/lib/schedule';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
 export default function Home() {
+  const t = useT();
   const { color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -71,7 +73,7 @@ export default function Home() {
           trailing={
             <Press
               onPress={() => router.push('/profile')}
-              accessibilityLabel="Your profile"
+              accessibilityLabel={t('home.yourProfile')}
               style={styles.teacherAvatar}>
               <Text style={styles.teacherInitials}>{initialsOf(teacherName)}</Text>
             </Press>
@@ -85,7 +87,7 @@ export default function Home() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search students or groups"
+              placeholder={t('home.searchPlaceholder')}
               placeholderTextColor={color.mutedLight}
               style={styles.searchInput}
               autoCorrect={false}
@@ -124,7 +126,7 @@ export default function Home() {
         ) : null}
 
         <View style={styles.sectionHead}>
-          <Text style={[text.section, styles.ink]}>Your groups</Text>
+          <Text style={[text.section, styles.ink]}>{t('home.yourGroups')}</Text>
           <Text style={styles.sectionCount}>
             {shown.length === groups.length
               ? `${groups.length} active`
@@ -144,12 +146,12 @@ export default function Home() {
           ))}
 
           {shown.length === 0 ? (
-            <EmptyState title="No matches" hint="Try another name, subject or group" />
+            <EmptyState title={t('home.noMatches')} hint={t('home.tryAnother')} />
           ) : null}
 
           <Press onPress={() => router.push('/group/new')} style={styles.newGroup}>
             <Icon name="plus" size={16} color={color.muted} />
-            <Text style={styles.newGroupLabel}>New group</Text>
+            <Text style={styles.newGroupLabel}>{t('groups.new')}</Text>
           </Press>
         </View>
 
@@ -157,7 +159,7 @@ export default function Home() {
           <View style={styles.matchedWrap}>
             <Text style={styles.matchedLabel}>
               {matchedStudents.length} matching{' '}
-              {matchedStudents.length === 1 ? 'student' : 'students'}
+              {t('students.count', { count: matchedStudents.length })}
             </Text>
             <View style={styles.matchedRow}>
               {matchedStudents.slice(0, 8).map((s) => (
@@ -174,7 +176,7 @@ export default function Home() {
 
       <Press
         onPress={() => router.push('/student/new')}
-        accessibilityLabel="Add student"
+        accessibilityLabel={t('home.addStudent')}
         style={[styles.fab, { bottom: bottomInset - 4 }]}>
         <Icon name="plusLarge" size={23} color="#fff" />
       </Press>
@@ -184,9 +186,9 @@ export default function Home() {
 
 function greetingFor(d: Date) {
   const h = d.getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return translateNow('home.goodMorning');
+  if (h < 18) return translateNow('home.goodAfternoon');
+  return translateNow('home.goodEvening');
 }
 
 /* -------------------------------------------------------------------------- */
@@ -208,6 +210,7 @@ function UpNextCard({
   onAttendance: () => void;
   onNotify: () => void;
 }) {
+  const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const startsAt = at(date, start);
@@ -228,10 +231,10 @@ function UpNextCard({
           <View style={styles.heroEyebrowRow}>
             <View style={styles.heroDot} />
             <Text style={styles.heroEyebrow}>
-              {live ? 'In progress' : `Up next · ${countdownTo(startsAt, now)}`}
+              {live ? t('time.now') : `${t('groups.upNext')} · ${countdownTo(startsAt, now)}`}
             </Text>
           </View>
-          <Text style={styles.heroRoom}>{group.room}</Text>
+          <Text style={styles.heroRoom}>{roomLabel(group.room, t)}</Text>
         </View>
 
         <View style={styles.heroMidRow}>
@@ -240,7 +243,7 @@ function UpNextCard({
               {group.name}
             </Text>
             <Text style={styles.heroMeta}>
-              {group.subject} · {studentCount} students
+              {group.subject} · {t('students.count', { count: studentCount })}
             </Text>
           </View>
           <Text style={styles.heroClock}>{start}</Text>
@@ -249,11 +252,11 @@ function UpNextCard({
         <View style={styles.heroActions}>
           <Press onPress={onAttendance} style={styles.heroPrimary}>
             <Icon name="check" size={15} color={color.heroActionInk} />
-            <Text style={styles.heroPrimaryLabel}>Attendance</Text>
+            <Text style={styles.heroPrimaryLabel}>{t('home.attendance')}</Text>
           </Press>
           <Press onPress={onNotify} style={styles.heroSecondary}>
             <Icon name="chat" size={16} color="#fff" strokeWidth={1.6} />
-            <Text style={styles.heroSecondaryLabel}>Notify</Text>
+            <Text style={styles.heroSecondaryLabel}>{t('home.notify')}</Text>
           </Press>
         </View>
       </View>
@@ -280,7 +283,6 @@ function GroupRow({
   const next = nextSessionForGroup(group, now);
   const slot = next ? relativeSlot(at(next.date, next.start), now) : null;
 
-  const firstStudent = useStudents().find((s) => s.groupIds.includes(group.id));
 
   return (
     <Press onPress={onPress} style={styles.groupRow}>
@@ -313,28 +315,13 @@ function GroupRow({
         </View>
       </View>
 
-      <View style={styles.groupActions}>
-        <IconButton
-          name="phone"
-          size={44}
-          iconSize={16}
-          strokeWidth={1.6}
-          radius={radius.field}
-          tint={color.bg}
-          fg={a.ink}
-          onPress={() => firstStudent && callNumber(firstStudent.phone)}
-        />
-        <IconButton
-          name="chat"
-          size={44}
-          iconSize={16}
-          strokeWidth={1.6}
-          radius={radius.field}
-          tint={color.bg}
-          fg={a.ink}
-          onPress={onPress}
-        />
-      </View>
+      {/*
+        No call or message button here. A group has no phone number — the call
+        dialled whichever student happened to be first in the roster, which is
+        nobody's intent — and the message button only repeated what tapping the
+        card already does. Messaging a whole group lives inside the group.
+      */}
+      <Icon name="disclosure" size={16} color={color.chevron} />
     </Press>
   );
 }

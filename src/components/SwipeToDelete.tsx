@@ -14,6 +14,7 @@ import { StyleSheet, Text } from 'react-native';
 import Animated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { confirm } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/ui';
 import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -35,13 +36,14 @@ export function SwipeToDelete({
 }) {
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   const row = useRef<SwipeableMethods>(null);
 
   const ask = async () => {
     const yes = await confirm({
-      title: `Delete ${what}?`,
-      message: message ?? 'This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: t('calendar.deleteTitle', { title: what }),
+      message: message ?? t('calendar.cannotUndo'),
+      confirmLabel: t('common.delete'),
     });
     // Closed either way: leaving the row hanging open after a cancel reads as
     // the tap having failed.
@@ -50,7 +52,7 @@ export function SwipeToDelete({
   };
 
   const renderActions = (_progress: SharedValue<number>, drag: SharedValue<number>) => (
-    <DeleteAction drag={drag} onPress={ask} background={color.danger} />
+    <DeleteAction drag={drag} onPress={ask} background={color.danger} label={t('common.delete')} />
   );
 
   return (
@@ -70,10 +72,12 @@ function DeleteAction({
   drag,
   onPress,
   background,
+  label,
 }: {
   drag: SharedValue<number>;
   onPress: () => void;
   background: string;
+  label: string;
 }) {
   const styles = useThemedStyles(makeStyles);
 
@@ -87,7 +91,7 @@ function DeleteAction({
     <Animated.View style={[styles.actionWrap, animated]}>
       <Press onPress={onPress} haptic style={[styles.action, { backgroundColor: background }]}>
         <Icon name="close" size={16} color="#fff" />
-        <Text style={styles.actionLabel}>Delete</Text>
+        <Text style={styles.actionLabel}>{label}</Text>
       </Press>
     </Animated.View>
   );

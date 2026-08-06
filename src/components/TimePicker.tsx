@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Press } from '@/components/ui';
+import { useT } from '@/i18n/useT';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -123,6 +124,7 @@ export function TimePicker({
   onCancel: () => void;
   onConfirm: (value: string) => void;
 }) {
+  const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -167,13 +169,13 @@ export function TimePicker({
 
         <View style={styles.actions}>
           <Press onPress={onCancel} style={[styles.button, styles.buttonGhost]}>
-            <Text style={[styles.buttonLabel, { color: color.inkSoft }]}>Cancel</Text>
+            <Text style={[styles.buttonLabel, { color: color.inkSoft }]}>{t('common.cancel')}</Text>
           </Press>
           <Press
             onPress={() => onConfirm(picked)}
             disabled={tooEarly}
             style={[styles.button, styles.buttonSolid, tooEarly && styles.buttonOff]}>
-            <Text style={[styles.buttonLabel, { color: '#fff' }]}>Set time</Text>
+            <Text style={[styles.buttonLabel, { color: '#fff' }]}>{t('common.done')}</Text>
           </Press>
         </View>
       </View>

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/ui';
 import { useSyncStatus } from '@/data/syncStatus';
+import { useT } from '@/i18n/useT';
 import { retryNow } from '@/data/sync';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
@@ -23,6 +24,7 @@ import { body } from '@/theme/type';
 export function SyncBanner() {
   const { color, accents, status } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   const insets = useSafeAreaInsets();
 
   const pending = useSyncStatus((s) => s.pending);
@@ -53,18 +55,18 @@ export function SyncBanner() {
       <View style={[styles.bar, { backgroundColor: skin.bg, borderColor: skin.fg + '33' }]}>
         <Icon name="warning" size={16} color={skin.fg} />
         <Text style={[styles.label, { color: skin.fg }]} numberOfLines={2}>
-          {failure ?? (pending > 0 ? 'No internet. Changes not saved yet.' : 'No internet.')}
+          {failure ?? t(pending > 0 ? 'sync.offlinePending' : 'sync.offline')}
         </Text>
 
         {failure ? (
           <Press onPress={clearFailure} hitSlop={8} style={styles.action}>
-            <Text style={[styles.actionLabel, { color: skin.fg }]}>Dismiss</Text>
+            <Text style={[styles.actionLabel, { color: skin.fg }]}>{t('common.dismiss')}</Text>
           </Press>
         ) : retrying ? (
           <ActivityIndicator size="small" color={skin.fg} style={styles.action} />
         ) : (
           <Press onPress={retry} hitSlop={8} style={styles.action}>
-            <Text style={[styles.actionLabel, { color: skin.fg }]}>Retry</Text>
+            <Text style={[styles.actionLabel, { color: skin.fg }]}>{t('common.retry')}</Text>
           </Press>
         )}
       </View>

@@ -16,6 +16,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import Svg, { Circle, G, Path } from 'react-native-svg';
+
 import { Icon, type IconName } from '@/components/Icon';
 import {
   PRESS_OPACITY,
@@ -467,11 +469,28 @@ export function Segmented<T extends string>({
 /* -------------------------------------------------------------------------- */
 
 /** The three-bar ClassCare mark. Scales from the 38px header to the 46px hero. */
+/**
+ * The Held mark on a rounded tile — three heads over one cradling stroke.
+ *
+ * Drawn from the vector master in `icons/svg/held-mark-onblue.svg` rather than
+ * bundling a PNG, so it stays sharp at every size and can follow the theme.
+ * Geometry is the 96-unit master grid described in `icons/README.md`, scaled to
+ * whatever `size` is asked for.
+ *
+ * The README's small-size rule is applied below 44px: the cradle thickens, the
+ * heads grow, and the two-tone treatment drops to one colour, because at that
+ * scale the teal heads read as noise against the blue.
+ */
 export function Logo({ size = 46, tint: tintProp }: { size?: number; tint?: string }) {
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const tint = tintProp ?? color.primary;
-  const u = size / 46;
+
+  const small = size < 44;
+  const artwork = size * 0.74;
+  const stroke = small ? 15.5 : 13;
+  const head = small ? 7.5 : 6.5;
+
   return (
     <View
       style={[
@@ -479,27 +498,27 @@ export function Logo({ size = 46, tint: tintProp }: { size?: number; tint?: stri
         {
           width: size,
           height: size,
-          borderRadius: 14 * u,
+          borderRadius: size * 0.224,
           backgroundColor: tint,
-          gap: 3 * u,
         },
       ]}>
-      {[
-        [20, 1],
-        [14, 0.75],
-        [17, 0.5],
-      ].map(([w, o], i) => (
-        <View
-          key={i}
-          style={{
-            width: w * u,
-            height: 3 * u,
-            borderRadius: 2 * u,
-            backgroundColor: '#fff',
-            opacity: o,
-          }}
-        />
-      ))}
+      <Svg width={artwork} height={artwork} viewBox="0 0 96 96">
+        {/* The master shifts the mark +6.5 on Y so it sits optically centred. */}
+        <G translateY={6.5}>
+          <Path
+            d="M16 36C16 74 80 74 80 36"
+            fill="none"
+            stroke="#fff"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+          />
+          <G fill={small ? '#fff' : '#6FE3DE'}>
+            <Circle cx={31} cy={24} r={head} />
+            <Circle cx={48} cy={17} r={head} />
+            <Circle cx={65} cy={24} r={head} />
+          </G>
+        </G>
+      </Svg>
     </View>
   );
 }

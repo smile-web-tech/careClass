@@ -37,6 +37,13 @@
       "expo-web-browser",
       "expo-apple-authentication",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#2457E8"
+        }
+      ],
+      [
         "expo-contacts",
         {
           "contactsPermission": "ClassCare reads your contacts so you can add a student without retyping their name and number."
@@ -47,7 +54,7 @@
         {
           "backgroundColor": "#0C1729",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 96
         }
       ]
     ],

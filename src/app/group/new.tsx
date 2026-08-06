@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { showAlert } from '@/components/Dialog';
 import { GroupForm } from '@/components/GroupForm';
+import { useT } from '@/i18n/useT';
 import { useStore } from '@/data/store';
 import { isReachable } from '@/data/sync';
 
@@ -17,13 +18,14 @@ import { isReachable } from '@/data/sync';
  */
 export default function NewGroup() {
   const router = useRouter();
+  const t = useT();
   const addGroup = useStore((s) => s.addGroup);
   const [checking, setChecking] = useState(false);
 
   return (
     <GroupForm
-      title="New group"
-      submitLabel={checking ? 'Checking…' : 'Create group'}
+      title={t('groups.new')}
+      submitLabel={checking ? t('common.checking') : t('groups.create')}
       busy={checking}
       onSubmit={async (draft) => {
         setChecking(true);
@@ -31,11 +33,7 @@ export default function NewGroup() {
         setChecking(false);
 
         if (!online) {
-          await showAlert(
-            'No internet',
-            'A new group has to reach the server. Connect and try again.',
-            'danger',
-          );
+          await showAlert(t('common.noInternet'), t('groups.noInternetCreate'), 'danger');
           return;
         }
 

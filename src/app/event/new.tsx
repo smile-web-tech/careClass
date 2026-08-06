@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { confirm } from '@/components/Dialog';
+import { useT } from '@/i18n/useT';
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { TimeField, TimePicker } from '@/components/TimePicker';
@@ -27,6 +28,7 @@ import { accentNames, radius, space, useTheme, useThemedStyles, type Theme } fro
 import { body, display } from '@/theme/type';
 
 export default function EventForm() {
+  const t = useT();
   const { id, date: dateParam } = useLocalSearchParams<{ id?: string; date?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -68,9 +70,9 @@ export default function EventForm() {
   const confirmDelete = async () => {
     if (!existing) return;
     const yes = await confirm({
-      title: `Delete "${existing.title}"?`,
-      message: 'This cannot be undone.',
-      confirmLabel: 'Delete',
+      title: t('calendar.deleteTitle', { title: existing.title }),
+      message: t('calendar.cannotUndo'),
+      confirmLabel: t('common.delete'),
     });
     if (!yes) return;
     removeEvent(existing.id);
@@ -79,7 +81,7 @@ export default function EventForm() {
 
   return (
     <Screen>
-      <TopBar title={existing ? 'Edit event' : 'New event'} dismiss />
+      <TopBar title={t(existing ? 'calendar.editEvent' : 'calendar.newEvent')} dismiss />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -90,26 +92,26 @@ export default function EventForm() {
           contentContainerStyle={{ padding: space.gutter, paddingBottom: insets.bottom + 130 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <Overline style={styles.label}>Event</Overline>
+          <Overline style={styles.label}>{t('calendar.event')}</Overline>
           <Card style={styles.group}>
             <FieldRow
-              label="Title"
-              placeholder="e.g. Parent meeting"
+              label={t('calendar.eventTitle')}
+              placeholder={t('calendar.eventTitleHint')}
               value={title}
               onChangeText={setTitle}
               autoCapitalize="sentences"
             />
             <Divider inset={15} />
             <FieldRow
-              label="Note"
-              placeholder="Optional"
+              label={t('calendar.note')}
+              placeholder={t('common.optional')}
               value={note}
               onChangeText={setNote}
               autoCapitalize="sentences"
             />
           </Card>
 
-          <Overline style={styles.label}>When</Overline>
+          <Overline style={styles.label}>{t('calendar.when')}</Overline>
           <Card style={styles.group}>
             <View style={styles.dateRow}>
               <Press
@@ -134,21 +136,21 @@ export default function EventForm() {
 
             <Divider inset={15} />
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>All day</Text>
+              <Text style={styles.toggleLabel}>{t('calendar.allDay')}</Text>
               <Toggle value={allDay} onChange={setAllDay} />
             </View>
 
             {!allDay ? (
               <>
                 <Divider inset={15} />
-                <TimeField label="Starts" value={start} onPress={() => setPicking('start')} />
+                <TimeField label={t('groups.starts')} value={start} onPress={() => setPicking('start')} />
                 <Divider inset={15} />
-                <TimeField label="Ends" value={end} onPress={() => setPicking('end')} />
+                <TimeField label={t('groups.ends')} value={end} onPress={() => setPicking('end')} />
               </>
             ) : null}
           </Card>
 
-          <Overline style={styles.label}>Colour</Overline>
+          <Overline style={styles.label}>{t('groups.colour')}</Overline>
           <View style={styles.accentRow}>
             {accentNames.map((a) => {
               const on = a === accent;
@@ -178,7 +180,9 @@ export default function EventForm() {
             <Card style={[styles.group, { marginTop: 14 }]}>
               <Press onPress={confirmDelete} style={styles.deleteRow}>
                 <Icon name="close" size={15} color={color.dangerDeep} />
-                <Text style={[styles.deleteLabel, { color: color.dangerDeep }]}>Delete event</Text>
+                <Text style={[styles.deleteLabel, { color: color.dangerDeep }]}>
+                  {t('calendar.deleteEvent')}
+                </Text>
               </Press>
             </Card>
           ) : null}
@@ -188,7 +192,7 @@ export default function EventForm() {
       <StickyFooter>
         <Button
           grow
-          label={existing ? 'Save changes' : 'Add to calendar'}
+          label={t(existing ? 'common.saveChanges' : 'calendar.addToCalendar')}
           height={50}
           onPress={submit}
           disabled={!ready}
@@ -197,7 +201,7 @@ export default function EventForm() {
 
       <TimePicker
         visible={picking !== null}
-        title={picking === 'end' ? 'Ends at' : 'Starts at'}
+        title={t(picking === 'end' ? 'groups.endsAt' : 'groups.startsAt')}
         value={picking === 'end' ? end : start}
         min={picking === 'end' ? start : undefined}
         onCancel={() => setPicking(null)}

@@ -36,18 +36,21 @@ import {
 import { useStore, useStudents } from '@/data/store';
 import { isReachable } from '@/data/sync';
 import type { Assessment, AssessmentKind } from '@/data/types';
+import type { TranslationKey } from '@/i18n';
+import { useT } from '@/i18n/useT';
 import { toKey } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 import * as Crypto from 'expo-crypto';
 
-const KINDS: { key: AssessmentKind; label: string }[] = [
-  { key: 'quiz', label: 'Quiz' },
-  { key: 'exam', label: 'Exam' },
-  { key: 'final', label: 'Final' },
+const KINDS: { key: AssessmentKind; labelKey: TranslationKey }[] = [
+  { key: 'quiz', labelKey: 'grades.kindQuiz' },
+  { key: 'exam', labelKey: 'grades.kindExam' },
+  { key: 'final', labelKey: 'grades.kindFinal' },
 ];
 
 export default function RecordGrades() {
+  const t = useT();
   const { color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -105,11 +108,7 @@ export default function RecordGrades() {
     setSaving(false);
 
     if (!online) {
-      await showAlert(
-        'No internet',
-        'Marks have to reach the server so students can be told. Connect and try again.',
-        'danger',
-      );
+      await showAlert(t('common.noInternet'), t('grades.noInternetSave'), 'danger');
       return;
     }
 
@@ -132,10 +131,10 @@ export default function RecordGrades() {
   if (!group) {
     return (
       <Screen>
-        <TopBar title="Record marks" dismiss />
+        <TopBar title={t('grades.recordMarks')} dismiss />
         <View style={styles.missing}>
-          <Text style={styles.missingText}>That group no longer exists.</Text>
-          <Button label="Go back" variant="ghost" onPress={() => router.back()} />
+          <Text style={styles.missingText}>{t('groups.gone')}</Text>
+          <Button label={t('common.goBack')} variant="ghost" onPress={() => router.back()} />
         </View>
       </Screen>
     );
@@ -143,7 +142,7 @@ export default function RecordGrades() {
 
   return (
     <Screen>
-      <TopBar title={existing ? 'Edit marks' : 'Record marks'} dismiss />
+      <TopBar title={t(existing ? 'grades.editMarks' : 'grades.recordMarks')} dismiss />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -157,22 +156,26 @@ export default function RecordGrades() {
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <Overline style={styles.label}>Assessment</Overline>
+          <Overline style={styles.label}>{t('grades.assessment')}</Overline>
           <View style={{ marginBottom: 16 }}>
-            <Segmented options={KINDS} value={kind} onChange={setKind} />
+            <Segmented
+              options={KINDS.map((k) => ({ key: k.key, label: t(k.labelKey) }))}
+              value={kind}
+              onChange={setKind}
+            />
           </View>
 
           <Card style={styles.group}>
             <FieldRow
-              label="Title"
-              placeholder="e.g. Unit 3 quiz"
+              label={t('grades.assessmentTitle')}
+              placeholder={t('grades.assessmentTitleHint')}
               value={title}
               onChangeText={setTitle}
               autoCapitalize="sentences"
             />
             <Divider inset={15} />
             <FieldRow
-              label="Out of"
+              label={t('grades.outOf')}
               placeholder="100"
               value={maxScore}
               onChangeText={setMaxScore}
@@ -180,13 +183,13 @@ export default function RecordGrades() {
             />
           </Card>
           {!maxValid ? (
-            <Text style={styles.error}>“Out of” has to be a number above zero.</Text>
+            <Text style={styles.error}>{t('grades.maxScoreError')}</Text>
           ) : null}
 
           <View style={styles.rosterHead}>
             <Overline>{group.name}</Overline>
             <Text style={styles.rosterCount}>
-              {entered.length} of {roster.length} marked
+              {t('grades.marked', { count: entered.length, total: roster.length })}
             </Text>
           </View>
 
@@ -215,7 +218,7 @@ export default function RecordGrades() {
                     <TextInput
                       value={value}
                       onChangeText={(v) => setScores((prev) => ({ ...prev, [s.id]: v }))}
-                      placeholder="—"
+                      placeholder="·"
                       placeholderTextColor={color.faint}
                       keyboardType="numeric"
                       selectionColor={color.primary}
@@ -228,7 +231,7 @@ export default function RecordGrades() {
                         },
                       ]}
                     />
-                    <Text style={styles.outOf}>/ {maxValid ? max : '—'}</Text>
+                    <Text style={styles.outOf}>/ {maxValid ? max : '·'}</Text>
                   </View>
                 </View>
               );
@@ -237,13 +240,12 @@ export default function RecordGrades() {
 
           {invalid.length ? (
             <Text style={styles.error}>
-              {invalid.length === 1 ? 'One mark is' : `${invalid.length} marks are`} outside 0–
-              {maxValid ? max : '?'}.
+              {t('grades.outsideRange', { count: invalid.length, max: maxValid ? max : '?' })}
             </Text>
           ) : null}
 
           <Text style={styles.footnote}>
-            Leave a box empty for a student who did not sit it. An empty box is not a zero.
+            {t('grades.emptyIsNotZero')}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -251,7 +253,9 @@ export default function RecordGrades() {
       <StickyFooter>
         <Button
           grow
-          label={saving ? 'Checking…' : existing ? 'Save changes' : 'Save marks'}
+          label={
+            saving ? t('common.checking') : t(existing ? 'common.saveChanges' : 'common.save')
+          }
           height={50}
           onPress={save}
           disabled={!ready || saving}

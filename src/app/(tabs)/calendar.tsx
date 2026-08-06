@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
+import { useT } from '@/i18n/useT';
 import { EmptyState, IconButton, Press } from '@/components/ui';
 import { useEvents, useGroups, useStudents } from '@/data/store';
 import type { CalendarEvent, Group, Session } from '@/data/types';
@@ -28,7 +29,7 @@ import {
   toKey,
   weekDays,
 } from '@/lib/date';
-import { sessionPhase, sessionsOn } from '@/lib/schedule';
+import { sessionPhase, sessionsOn, roomLabel } from '@/lib/schedule';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -50,6 +51,7 @@ type Entry =
   | { kind: 'event'; at: string; event: CalendarEvent };
 
 export default function Calendar() {
+  const t = useT();
   const { accents, color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -153,7 +155,7 @@ export default function Calendar() {
             <Text style={[text.pageTitle, styles.ink]}>{heading}</Text>
             <Text style={styles.weekSummary}>
               {monthMode
-                ? 'Drag up to collapse'
+                ? t('calendar.dragCollapse')
                 : `${weekTotal} session${weekTotal === 1 ? '' : 's'} this week`}
             </Text>
           </View>
@@ -270,7 +272,7 @@ export default function Calendar() {
         </View>
 
         {entries.length === 0 ? (
-          <EmptyState title="Nothing scheduled" hint="Tap + to add something of your own" />
+          <EmptyState title={t('calendar.nothingToday')} hint={t('calendar.addYourOwn')} />
         ) : (
           entries.map((entry, i) =>
             entry.kind === 'session' ? (
@@ -312,7 +314,7 @@ export default function Calendar() {
         onPress={() => router.push(`/event/new?date=${selectedKey}`)}
         style={[styles.fab, { bottom: bottomInset + 12 }]}
         accessibilityRole="button"
-        accessibilityLabel="Add an event">
+        accessibilityLabel={t('calendar.addEvent')}>
         <Icon name="plusLarge" size={23} color="#fff" />
       </Press>
     </Screen>
@@ -329,6 +331,7 @@ function EventRow({
   last: boolean;
   onOpen: () => void;
 }) {
+  const t = useT();
   const { accents } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const a = accents[event.accent];
@@ -337,7 +340,7 @@ function EventRow({
     <View style={styles.timelineRow}>
       <View style={styles.timeCol}>
         {event.allDay ? (
-          <Text style={styles.timeEnd}>All day</Text>
+          <Text style={styles.timeEnd}>{t('calendar.allDay')}</Text>
         ) : (
           <>
             <Text style={styles.timeStart}>{event.start}</Text>
@@ -384,6 +387,7 @@ function TimelineRow({
   onNotify: () => void;
   onOpen: () => void;
 }) {
+  const t = useT();
   const theme = useTheme();
   const { accents, color } = theme;
   const styles = useThemedStyles(makeStyles);
@@ -413,16 +417,16 @@ function TimelineRow({
             </View>
           </View>
           <Text style={styles.sessionMeta}>
-            {group.subject} · {count} students · {group.room}
+            {group.subject} · {t('students.count', { count })} · {roomLabel(group.room, t)}
           </Text>
           <View style={styles.sessionActions}>
             <Press onPress={onAttendance} style={styles.sessionAction}>
               <Icon name="check" size={14} color={color.inkSoft} />
-              <Text style={styles.sessionActionLabel}>Attendance</Text>
+              <Text style={styles.sessionActionLabel}>{t('home.attendance')}</Text>
             </Press>
             <Press onPress={onNotify} style={styles.sessionAction}>
               <Icon name="chat" size={14} color={color.inkSoft} />
-              <Text style={styles.sessionActionLabel}>Notify</Text>
+              <Text style={styles.sessionActionLabel}>{t('home.notify')}</Text>
             </Press>
           </View>
         </Press>

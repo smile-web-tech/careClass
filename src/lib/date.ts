@@ -1,35 +1,97 @@
 /** Local-time date helpers. Everything the app shows is in the teacher's own timezone. */
+import { activeLanguage, translate, type Language } from '@/i18n';
 
-const DOW_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DOW_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTH_SHORT = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-const MONTH_LONG = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+/** Short form of the translator, for this module's relative-time words. */
+const tr = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) =>
+  translate(activeLanguage(), key, vars);
+
+/**
+ * Day and month names, per language.
+ *
+ * Not `Intl.DateTimeFormat`: React Native ships a trimmed ICU on Android, so
+ * asking it for Turkmen month names returns English on most devices. These are
+ * short enough to state outright and are then guaranteed correct everywhere.
+ *
+ * Read through `useStore` at call time rather than passed in, because these are
+ * used by plain formatting helpers that screens call inline.
+ */
+const NAMES: Record<Language, { dowShort: string[]; dowLong: string[]; monthShort: string[]; monthLong: string[] }> = {
+  tk: {
+    dowShort: ['Ýek', 'Duş', 'Siş', 'Çar', 'Pen', 'Ann', 'Şen'],
+    dowLong: [
+      'Ýekşenbe',
+      'Duşenbe',
+      'Sişenbe',
+      'Çarşenbe',
+      'Penşenbe',
+      'Anna',
+      'Şenbe',
+    ],
+    monthShort: ['Ýan', 'Few', 'Mart', 'Apr', 'Maý', 'Iýun', 'Iýul', 'Awg', 'Sen', 'Okt', 'Noý', 'Dek'],
+    monthLong: [
+      'Ýanwar',
+      'Fewral',
+      'Mart',
+      'Aprel',
+      'Maý',
+      'Iýun',
+      'Iýul',
+      'Awgust',
+      'Sentýabr',
+      'Oktýabr',
+      'Noýabr',
+      'Dekabr',
+    ],
+  },
+  ru: {
+    dowShort: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
+    dowLong: [
+      'Воскресенье',
+      'Понедельник',
+      'Вторник',
+      'Среда',
+      'Четверг',
+      'Пятница',
+      'Суббота',
+    ],
+    monthShort: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
+    monthLong: [
+      'Январь',
+      'Февраль',
+      'Март',
+      'Апрель',
+      'Май',
+      'Июнь',
+      'Июль',
+      'Август',
+      'Сентябрь',
+      'Октябрь',
+      'Ноябрь',
+      'Декабрь',
+    ],
+  },
+  en: {
+    dowShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    dowLong: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    monthShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    monthLong: [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ],
+  },
+};
+
+const names = () => NAMES[activeLanguage()] ?? NAMES.tk;
 
 /** `YYYY-MM-DD` in *local* time — `toISOString` would shift across UTC. */
 export function toKey(d: Date) {
@@ -65,10 +127,10 @@ export function weekDays(anchor: Date) {
   return Array.from({ length: 7 }, (_, i) => addDays(start, i));
 }
 
-export const dowShort = (d: Date) => DOW_SHORT[d.getDay()];
-export const dowLong = (d: Date) => DOW_LONG[d.getDay()];
-export const monthLong = (d: Date) => MONTH_LONG[d.getMonth()];
-export const monthShort = (d: Date) => MONTH_SHORT[d.getMonth()];
+export const dowShort = (d: Date) => names().dowShort[d.getDay()];
+export const dowLong = (d: Date) => names().dowLong[d.getDay()];
+export const monthLong = (d: Date) => names().monthLong[d.getMonth()];
+export const monthShort = (d: Date) => names().monthShort[d.getMonth()];
 
 export const isSameDay = (a: Date, b: Date) => toKey(a) === toKey(b);
 
@@ -89,7 +151,7 @@ export const longDateTime = (ts: number) => {
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${shortDate(d)} at ${hh}:${mm}`;
+  return `${shortDate(d)} ${tr('time.at')} ${hh}:${mm}`;
 };
 
 /** Minutes since local midnight for an `HH:mm` string. */
@@ -112,37 +174,37 @@ export function at(dateKey: string, hhmm: string) {
  */
 export function countdownTo(target: Date, now = new Date()) {
   const mins = Math.round((target.getTime() - now.getTime()) / 60000);
-  if (mins <= 0) return 'now';
+  if (mins <= 0) return tr('time.now');
 
   const days = Math.round((startOfDay(target).getTime() - startOfDay(now).getTime()) / 86400000);
-  if (days === 1) return 'tomorrow';
+  if (days === 1) return tr('time.tomorrow');
   if (days > 1) return dowLong(target);
 
   const h = Math.floor(mins / 60);
-  return `in ${h > 0 ? `${h}h ` : ''}${mins % 60}m`;
+  return tr('time.inTime', { time: `${h > 0 ? `${h}h ` : ''}${mins % 60}m` });
 }
 
 /** "Today 16:00" / "Tomorrow 10:30" / "Wed 18:00" — group list subtitle. */
 export function relativeSlot(when: Date, now = new Date()) {
   const time = `${`${when.getHours()}`.padStart(2, '0')}:${`${when.getMinutes()}`.padStart(2, '0')}`;
   const days = Math.round((startOfDay(when).getTime() - startOfDay(now).getTime()) / 86400000);
-  if (days === 0) return { label: `Today ${time}`, imminent: true };
-  if (days === 1) return { label: `Tomorrow ${time}`, imminent: false };
+  if (days === 0) return { label: `${tr('time.today')} ${time}`, imminent: true };
+  if (days === 1) return { label: `${tr('time.tomorrowCap')} ${time}`, imminent: false };
   return { label: `${dowShort(when)} ${time}`, imminent: false };
 }
 
 /** "18 min ago" / "2h ago" / "Yesterday" / "Wed" — message + reply timestamps. */
 export function timeAgo(ts: number, now = Date.now()) {
   const mins = Math.floor((now - ts) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1) return tr('time.justNow');
+  if (mins < 60) return tr('time.minAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 12) return `${hours}h ago`;
+  if (hours < 12) return tr('time.hoursAgo', { count: hours });
   const days = Math.round(
     (startOfDay(new Date(now)).getTime() - startOfDay(new Date(ts)).getTime()) / 86400000,
   );
-  if (days <= 0) return `${hours}h ago`;
-  if (days === 1) return 'Yesterday';
+  if (days <= 0) return tr('time.hoursAgo', { count: hours });
+  if (days === 1) return tr('time.yesterday');
   if (days < 7) return dowShort(new Date(ts));
   return shortDate(new Date(ts));
 }

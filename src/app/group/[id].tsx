@@ -7,11 +7,20 @@ import { AngledGradient, Ring } from '@/components/decor';
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
 import { Avatar, Badge, Button, IconButton, Press, StatTile, Txt } from '@/components/ui';
-import { absenceCount, attendanceRate, useGroup, useRoster } from '@/data/store';
+import { useT } from '@/i18n/useT';
+import {
+  absenceCount,
+  attendanceOnDay,
+  attendanceRate,
+  groupAveragePercent,
+  useGroup,
+  useRoster,
+  useStore,
+} from '@/data/store';
 import type { Student } from '@/data/types';
 import { callNumber, smsNumber } from '@/lib/contact';
 import { toKey } from '@/lib/date';
-import { nextSessionForGroup, slotDaysLabel, slotTimeLabel } from '@/lib/schedule';
+import { nextSessionForGroup, slotDaysLabel, slotTimeLabel, roomLabel } from '@/lib/schedule';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -26,25 +35,41 @@ export default function GroupDetail() {
 
   const group = useGroup(id);
   const roster = useRoster(id);
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
+
+  // Recomputed when marks or attendance change, not just when the roster does:
+  // both tiles used to read stale or empty sources — attendance averaged eight
+  // weeks instead of today, and the average came off `avgScore`, a column the
+  // grading feature never writes, so it sat at "—" no matter how much was
+  // graded.
+  const grades = useStore((s) => s.grades);
+  const attendance = useStore((s) => s.attendance);
 
   const stats = useMemo(() => {
     if (!group) return null;
-    const ids = roster.map((s) => s.id);
-    const { rate } = attendanceRate(ids, [group.id]);
-    const scored = roster.filter((s) => s.avgScore != null);
-    const avg = scored.length
-      ? scored.reduce((n, s) => n + (s.avgScore ?? 0), 0) / scored.length
-      : null;
-    return { rate, avg };
-  }, [group, roster]);
+
+    // Today's register when there is one, otherwise the recent average. Showing
+    // only today looked broken on every non-teaching day: the tile sat empty
+    // even for a group with months of history behind it.
+    const today = attendanceOnDay(group.id);
+    const rate = today.today
+      ? today.rate
+      : attendanceRate(
+          roster.map((s) => s.id),
+          [group.id],
+        ).rate;
+
+    return { rate, todayMarked: today.today, avg: groupAveragePercent(group.id) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group, roster, grades, attendance]);
 
   if (!group) {
     return (
       <Screen>
         <View style={styles.missing}>
-          <Txt>That group no longer exists.</Txt>
-          <Button label="Go back" variant="ghost" onPress={() => router.back()} />
+          <Txt>{t('groups.gone')}</Txt>
+          <Button label={t('common.goBack')} variant="ghost" onPress={() => router.back()} />
         </View>
       </Screen>
     );
@@ -106,29 +131,39 @@ export default function GroupDetail() {
             <View style={styles.metaChips}>
               <MetaChip label={slotDaysLabel(group)} />
               <MetaChip label={slotTimeLabel(group)} />
-              <MetaChip label={group.room} />
+              <MetaChip label={roomLabel(group.room, t)} />
             </View>
           </View>
         </View>
 
         <View style={styles.statRow}>
-          <StatTile value={String(roster.length)} label="Students" />
+          <StatTile value={String(roster.length)} label={t('nav.students')} />
           <StatTile
-            value={stats?.rate != null ? `${stats.rate}%` : '—'}
-            label="Attendance"
+            value={stats?.rate != null ? `${stats.rate}%` : '·'}
+            label={t('home.attendance')}
             tone={stats?.rate != null ? color.success : color.mutedLight}
           />
-          <StatTile value={stats?.avg != null ? stats.avg.toFixed(1) : '—'} label="Avg. score" />
+          <StatTile
+            value={stats?.avg != null ? `${stats.avg}%` : '·'}
+            label={t('students.avgScore')}
+            tone={stats?.avg != null ? color.primary : color.mutedLight}
+          />
         </View>
 
         <View style={styles.actionRow}>
           <Button
             grow
             icon="chat"
-            label="Message all"
+            label={t('groups.messageAll')}
             onPress={() => router.push({ pathname: '/compose', params: { group: group.id } })}
           />
-          <Button grow variant="outline" icon="check" label="Attendance" onPress={openAttendance} />
+          <Button
+            grow
+            variant="outline"
+            icon="check"
+            label={t('home.attendance')}
+            onPress={openAttendance}
+          />
         </View>
 
         <View style={styles.actionRow}>
@@ -136,13 +171,13 @@ export default function GroupDetail() {
             grow
             variant="outline"
             icon="check"
-            label="Grades"
+            label={t('nav.grades')}
             onPress={() => router.push(`/grades?group=${group.id}`)}
           />
         </View>
 
         <View style={styles.rosterHead}>
-          <Text style={[text.section, styles.ink]}>Students</Text>
+          <Text style={[text.section, styles.ink]}>{t('nav.students')}</Text>
           <Press
             onPress={() => router.push({ pathname: '/group/roster', params: { id: group.id } })}
             style={styles.addLink}>
@@ -164,7 +199,7 @@ export default function GroupDetail() {
           {hidden > 0 || expanded ? (
             <Press onPress={() => setExpanded((v) => !v)} style={styles.showMore}>
               <Text style={styles.showMoreLabel}>
-                {expanded ? 'Show less' : `Show ${hidden} more`}
+                {expanded ? t('common.showLess') : t('common.showMore', { count: hidden })}
               </Text>
             </Press>
           ) : null}
@@ -173,8 +208,8 @@ export default function GroupDetail() {
             <Press
               onPress={() => router.push({ pathname: '/group/roster', params: { id: group.id } })}
               style={styles.emptyRoster}>
-              <Txt style={styles.emptyRosterTitle}>No students in this group yet.</Txt>
-              <Text style={styles.emptyRosterLink}>Choose from your students</Text>
+              <Txt style={styles.emptyRosterTitle}>{t('groups.noStudentsYet')}</Txt>
+              <Text style={styles.emptyRosterLink}>{t('groups.chooseFromStudents')}</Text>
             </Press>
           ) : null}
         </View>

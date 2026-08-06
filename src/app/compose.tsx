@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -30,6 +30,8 @@ import { fetchMessages, sendMessage as apiSendMessage } from '@/data/api';
 import { messageTemplates } from '@/data/seed';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Audience, Channel } from '@/data/types';
+import type { TranslationKey } from '@/i18n';
+import { useT } from '@/i18n/useT';
 import { describeError } from '@/lib/errors';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -42,20 +44,22 @@ import { body, text } from '@/theme/type';
  * reported "sent" while reaching nobody. `Channel` keeps `'push'` because the
  * database enum and older message rows still carry it.
  */
-const CHANNELS: { key: Channel; label: string; icon: IconName }[] = [
-  { key: 'sms', label: 'SMS', icon: 'chat' },
-  { key: 'email', label: 'Email', icon: 'envelope' },
+const CHANNELS: { key: Channel; labelKey: TranslationKey; icon: IconName }[] = [
+  { key: 'sms', labelKey: 'messages.channelSms', icon: 'chat' },
+  { key: 'email', labelKey: 'messages.channelEmail', icon: 'envelope' },
 ];
 
-const AUDIENCES: { key: Audience; label: string }[] = [
-  { key: 'students', label: 'Students' },
-  { key: 'parents', label: 'Parents' },
-  { key: 'both', label: 'Both' },
+const AUDIENCES: { key: Audience; labelKey: TranslationKey }[] = [
+  { key: 'students', labelKey: 'messages.audienceStudents' },
+  { key: 'parents', labelKey: 'messages.audienceParents' },
+  { key: 'both', labelKey: 'messages.audienceBoth' },
 ];
 
 const PLACEHOLDERS = ['{name}', '{group}', '{time}'];
 
 export default function Compose() {
+  const t = useT();
+  const scroller = useRef<ScrollView>(null);
   const { accents, color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams<{
@@ -116,8 +120,7 @@ export default function Compose() {
   const [sending, setSending] = useState(false);
 
   /** Real gateways are involved only when signed in against a real project. */
-  const demo = useStore((s) => s.demo);
-  const liveSend = hasSupabase && !demo;
+  const liveSend = hasSupabase;
 
   const selectedGroups = groups.filter((g) => selection[g.id]);
   const activeChannels = CHANNELS.filter((c) => channels[c.key]);
@@ -170,14 +173,14 @@ export default function Compose() {
   const blocker =
     selectedGroups.length === 0
       ? focusIds.length
-        ? 'Those students are not in any group'
-        : 'No group selected'
+        ? t('messages.notInAnyGroup')
+        : t('messages.noGroupSelected')
       : reach === 0
         ? selectedGroups.length > 1
-          ? 'Those groups have no students'
-          : `${selectedGroups[0].name} has no students`
+          ? t('messages.groupHasNoStudents', { name: '' }).trim()
+          : t('messages.groupHasNoStudents', { name: selectedGroups[0].name })
         : activeChannels.length === 0
-          ? 'Pick at least one channel'
+          ? t('messages.pickChannel')
           : null;
 
   const canSend = !blocker && draft.trim().length > 0;
@@ -212,19 +215,12 @@ export default function Compose() {
       useStore.setState({ messages: await fetchMessages() });
 
       const skipped = report.skipped.sms + report.skipped.email + report.skipped.push;
-      const missing = [
-        report.skipped.email ? 'an email address' : '',
-        report.skipped.sms || report.skipped.push ? 'a phone number' : '',
-      ]
-        .filter(Boolean)
-        .join(' or ');
-
       // Every delivery rejected. The message is in the log but nobody was told
       // anything, so stay on the composer rather than dropping the teacher on a
       // Messages list that looks like the class has been informed.
       if (report.sent === 0) {
         await showAlert(
-          'Nothing was sent',
+          t('messages.nothingSentTitle'),
           [`All ${report.failed} deliveries were rejected.`, ...report.errors].join('\n\n'),
           'danger',
         );
@@ -235,10 +231,18 @@ export default function Compose() {
 
       if (report.failed || skipped) {
         void showAlert(
-          `Sent to ${report.sent} of ${report.sent + report.failed + skipped}`,
+          t('messages.sentOf', {
+            sent: report.sent,
+            total: report.sent + report.failed + skipped,
+          }),
           [
             skipped
-              ? `${skipped} skipped — no ${missing} on file. Add it on the student, then send again.`
+              ? t(
+                  audience === 'parents'
+                    ? 'grades.skippedNoParentEmail'
+                    : 'grades.skippedNoEmail',
+                  { count: skipped },
+                )
               : '',
             report.failed ? `${report.failed} rejected by the provider.` : '',
             ...report.errors,
@@ -254,10 +258,8 @@ export default function Compose() {
       // can fix that, but whoever set it up can, and the message names the step.
       const notDeployed = described.kind === 'notFound';
       void showAlert(
-        'Nothing was sent',
-        notDeployed
-          ? 'Messaging is not finished being set up on the server yet. Nothing went out.'
-          : described.message,
+        t('messages.nothingSentTitle'),
+        notDeployed ? t('error.serverMessage') : described.message,
         'danger',
       );
     } finally {
@@ -265,17 +267,14 @@ export default function Compose() {
     }
   };
 
-  const audienceWord =
-    audience === 'both' ? 'students and parents' : audience === 'parents' ? 'parents' : 'students';
-
   return (
     <Screen>
       <TopBar
-        title="New message"
+        title={t('messages.newMessage')}
         dismiss
         trailing={
           <Press onPress={() => setTemplatesOpen(true)}>
-            <Text style={styles.templatesLink}>Templates</Text>
+            <Text style={styles.templatesLink}>{t('messages.templates')}</Text>
           </Press>
         }
       />
@@ -285,6 +284,7 @@ export default function Compose() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top + 60}>
         <ScrollView
+          ref={scroller}
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={{
             padding: space.gutter,
@@ -327,12 +327,16 @@ export default function Compose() {
             </View>
           )}
 
-          <Overline style={styles.label}>Recipients</Overline>
+          <Overline style={styles.label}>{t('messages.recipients')}</Overline>
           <View style={{ marginBottom: 20 }}>
-            <Segmented options={AUDIENCES} value={audience} onChange={setAudience} />
+            <Segmented
+              options={AUDIENCES.map((a) => ({ key: a.key, label: t(a.labelKey) }))}
+              value={audience}
+              onChange={setAudience}
+            />
           </View>
 
-          <Overline style={styles.label}>Send via</Overline>
+          <Overline style={styles.label}>{t('messages.sendVia')}</Overline>
           <View style={styles.channelRow}>
             {CHANNELS.map((c) => {
               const on = channels[c.key];
@@ -356,7 +360,7 @@ export default function Compose() {
                   />
                   <Text
                     style={[styles.channelLabel, { color: on ? color.primaryInk : color.inkSoft }]}>
-                    {c.label}
+                    {t(c.labelKey)}
                   </Text>
                 </Press>
               );
@@ -373,13 +377,22 @@ export default function Compose() {
             </View>
           ) : null}
 
-          <Overline style={styles.label}>Message</Overline>
+          <Overline style={styles.label}>{t('messages.message')}</Overline>
           <Card style={styles.editor}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
               multiline
-              placeholder="Type your message…"
+              /*
+                Scroll the editor above the keyboard on focus.
+                `automaticallyAdjustKeyboardInsets` is iOS-only and the Android
+                window merely resizes, which leaves the caret behind the
+                keyboard: the teacher types and cannot see what they typed. The
+                editor is the last thing on the page, so scrolling to the end
+                puts it exactly where it needs to be.
+              */
+              onFocus={() => setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 80)}
+              placeholder={t('messages.typeMessage')}
               placeholderTextColor={color.mutedLight}
               style={styles.editorInput}
               textAlignVertical="top"
@@ -406,7 +419,7 @@ export default function Compose() {
           <View style={styles.info}>
             <Icon name="info" size={18} color={color.primary} />
             <Text style={styles.infoText}>
-              Placeholders are filled per recipient, so everyone gets their own name.
+              {t('messages.placeholderHint')}
             </Text>
           </View>
         </ScrollView>
@@ -414,15 +427,15 @@ export default function Compose() {
 
       <StickyFooter>
         <FooterSummary
-          title={blocker ?? `Reaches ${reach} ${audienceWord}`}
+          title={blocker ?? t('messages.reaches', { count: reach })}
           hint={
             activeChannels.length
-              ? `via ${activeChannels.map((c) => c.label).join(' + ')}`
-              : 'Pick at least one channel'
+              ? activeChannels.map((c) => t(c.labelKey)).join(' + ')
+              : t('messages.pickChannel')
           }
         />
         <Button
-          label={sending ? 'Sending…' : 'Send'}
+          label={sending ? t('common.sending') : t('messages.send')}
           icon="send"
           onPress={send}
           disabled={!canSend || sending}
@@ -437,9 +450,11 @@ export default function Compose() {
         <Press style={styles.scrim} onPress={() => setTemplatesOpen(false)} />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
           <View style={styles.grabber} />
-          <Text style={[text.sheetTitle, styles.ink, { marginBottom: 4 }]}>Templates</Text>
+          <Text style={[text.sheetTitle, styles.ink, { marginBottom: 4 }]}>
+            {t('messages.templates')}
+          </Text>
           <Txt style={styles.sheetHint}>
-            Placeholders stay intact — they fill per recipient when you send.
+            {t('messages.placeholderHint')}
           </Txt>
           {messageTemplates.map((t, i) => (
             <View key={t.id}>

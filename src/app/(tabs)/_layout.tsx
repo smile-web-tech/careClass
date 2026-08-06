@@ -9,14 +9,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/Icon';
 import { Press } from '@/components/ui';
 import { useUnreadReplies } from '@/data/store';
+import type { TranslationKey } from '@/i18n';
+import { useT } from '@/i18n/useT';
 import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
-const TABS: { name: string; label: string; icon: IconName }[] = [
-  { name: 'index', label: 'Groups', icon: 'tabGroups' },
-  { name: 'calendar', label: 'Calendar', icon: 'tabCalendar' },
-  { name: 'messages', label: 'Messages', icon: 'tabMessages' },
-  { name: 'students', label: 'Students', icon: 'tabStudents' },
+const TABS: { name: string; key: TranslationKey; icon: IconName }[] = [
+  { name: 'index', key: 'nav.groups', icon: 'tabGroups' },
+  { name: 'calendar', key: 'nav.calendar', icon: 'tabCalendar' },
+  { name: 'messages', key: 'nav.messages', icon: 'tabMessages' },
+  { name: 'students', key: 'nav.students', icon: 'tabStudents' },
 ];
 
 export default function TabsLayout() {
@@ -41,6 +43,7 @@ export default function TabsLayout() {
  */
 function ClassCareTabBar({ state, navigation }: BottomTabBarProps) {
   const { color } = useTheme();
+  const t = useT();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const unread = useUnreadReplies();
@@ -57,7 +60,7 @@ function ClassCareTabBar({ state, navigation }: BottomTabBarProps) {
             key={route.key}
             accessibilityRole="button"
             accessibilityState={focused ? { selected: true } : {}}
-            accessibilityLabel={tab.label}
+            accessibilityLabel={t(tab.key)}
             onPress={() => {
               const event = navigation.emit({
                 type: 'tabPress',
@@ -76,7 +79,7 @@ function ClassCareTabBar({ state, navigation }: BottomTabBarProps) {
                   color: focused ? color.primary : color.mutedLight,
                 },
               ]}>
-              {tab.label}
+              {t(tab.key)}
             </Text>
             {tab.name === 'messages' && unread > 0 ? (
               <View style={styles.badge}>

@@ -41,6 +41,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/ui';
+import { useT } from '@/i18n/useT';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
 
@@ -169,6 +170,7 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
   { label, hint, error, optional, trailing, containerStyle, onFocus, onBlur, ...input },
   ref,
 ) {
+  const t = useT();
   const { color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const ctx = useContext(RevealContext);
@@ -179,7 +181,7 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
     <View ref={box} style={[styles.field, containerStyle]} collapsable={false}>
       <View style={styles.labelRow}>
         <Text style={styles.label}>{label}</Text>
-        {optional ? <Text style={styles.optional}>Optional</Text> : null}
+        {optional ? <Text style={styles.optional}>{t('common.optional')}</Text> : null}
       </View>
 
       <View

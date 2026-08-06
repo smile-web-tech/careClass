@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AuthButton, AuthField, AuthNotice, AuthScreen } from '@/components/AuthForm';
+import { useT } from '@/i18n/useT';
 import { OtpInput } from '@/components/OtpInput';
 import { PasswordField } from '@/components/PasswordField';
 import { Press } from '@/components/ui';
@@ -27,6 +28,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 type Step = 'email' | 'reset';
 
 export default function ForgotPassword() {
+  const t = useT();
   const router = useRouter();
   const { email: prefill } = useLocalSearchParams<{ email?: string }>();
   const styles = useThemedStyles(makeStyles);
@@ -81,9 +83,9 @@ export default function ForgotPassword() {
       setCode('');
       setError(
         /expired/i.test(msg)
-          ? 'That code has expired. Send yourself a new one.'
+          ? t('auth.codeExpired')
           : /invalid|token|otp/i.test(msg)
-            ? 'That code is not right. Check it and try again.'
+            ? t('auth.codeWrong')
             : msg,
       );
     } finally {
@@ -94,12 +96,12 @@ export default function ForgotPassword() {
   if (step === 'email') {
     return (
       <AuthScreen
-        title="Reset your password"
-        subtitle="Tell us the address on your account and we will send a six-digit code.">
+        title={t('auth.resetPassword')}
+        subtitle={t('auth.resetSubtitle')}>
         {error ? <AuthNotice>{error}</AuthNotice> : null}
 
         <AuthField
-          label="Email"
+          label={t('auth.email')}
           value={email}
           onChangeText={setEmail}
           placeholder="you@example.com"
@@ -113,14 +115,14 @@ export default function ForgotPassword() {
           autoFocus
         />
 
-        <AuthButton label="Send code" onPress={() => void send()} disabled={!emailOk} busy={busy} />
+        <AuthButton label={t('auth.sendCode')} onPress={() => void send()} disabled={!emailOk} busy={busy} />
       </AuthScreen>
     );
   }
 
   return (
     <AuthScreen
-      title="Choose a new password"
+      title={t('auth.chooseNewPassword')}
       subtitle={`If ${email.trim().toLowerCase()} has an account, a code is on its way.`}
       onBack={() => {
         setStep('email');
@@ -129,7 +131,7 @@ export default function ForgotPassword() {
       }}>
       {error ? <AuthNotice>{error}</AuthNotice> : null}
 
-      <Text style={styles.label}>Code from the email</Text>
+      <Text style={styles.label}>{t('auth.codeFromEmail')}</Text>
       <View style={styles.otpWrap}>
         <OtpInput
           value={code}
@@ -145,7 +147,7 @@ export default function ForgotPassword() {
 
       <PasswordField
         ref={passwordRef}
-        label="New password"
+        label={t('auth.newPassword')}
         value={password}
         onChangeText={setPassword}
         meter
@@ -158,7 +160,7 @@ export default function ForgotPassword() {
       />
 
       <AuthButton
-        label="Set new password"
+        label={t('auth.setNewPassword')}
         onPress={() => void submit()}
         disabled={!canReset}
         busy={busy}
@@ -167,7 +169,7 @@ export default function ForgotPassword() {
       <View style={styles.resendRow}>
         <Press onPress={() => void send()} disabled={cooldown > 0 || busy} hitSlop={8}>
           <Text style={[styles.resend, cooldown > 0 && { color: color.mutedLight }]}>
-            {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
+            {cooldown > 0 ? t('auth.resendIn', { count: cooldown }) : t('auth.resendCode')}
           </Text>
         </Press>
       </View>
