@@ -59,6 +59,7 @@ const toStudent = (row: StudentRow, groupIds: string[]): Student => ({
   email: row.email ?? undefined,
   parentName: row.parent_name ?? undefined,
   parentPhone: row.parent_phone ?? undefined,
+  parentEmail: row.parent_email ?? undefined,
   accent: row.accent,
   note: row.note ?? undefined,
   avgScore: row.avg_score ?? undefined,
@@ -201,13 +202,17 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return null;
 
+  // `maybeSingle`, not `single`: a missing row is a state to handle, and
+  // `single` reports it as an error. That turned "no profile row" into a
+  // rejected promise, which took the whole `Promise.all` in `hydrate()` with
+  // it — so the app silently stopped reconciling with the server entirely and
+  // ran on local state forever. The fallback below was never reached.
   const row = unwrap(
-    await supabase.from('teachers').select('*').eq('id', auth.user.id).single(),
+    await supabase.from('teachers').select('*').eq('id', auth.user.id).maybeSingle(),
   ) as TeacherRow | null;
-  // The signup trigger creates this row; if it somehow hasn't, fall back to
-  // auth rather than blowing up the whole hydrate.
+
   if (!row) {
-    return {
+    const profile = {
       id: auth.user.id,
       name: (auth.user.user_metadata?.full_name as string) ?? '',
       email: auth.user.email ?? null,
@@ -216,6 +221,27 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
       provider: auth.user.app_metadata?.provider ?? 'email',
       createdAt: auth.user.created_at,
     };
+
+    // Create it rather than returning a convincing-looking profile that exists
+    // nowhere. Every other table's `teacher_id` is a foreign key onto this row,
+    // so without it the account can read fine and cannot save anything — which
+    // surfaces much later as "New group could not be saved".
+    //
+    // The signup trigger normally does this; an account created before that
+    // trigger existed never got one. RLS permits it: the `own profile` policy
+    // checks `id = auth.uid()`, which is exactly this row.
+    const { error } = await supabase.from('teachers').insert({
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      avatar_url: profile.avatarUrl,
+    });
+    // 23505 means another device won the race and created it first. Fine.
+    if (error && error.code !== '23505') {
+      console.warn('[classcare] could not create the profile row:', error.message);
+    }
+
+    return profile;
   }
 
   return {
@@ -465,6 +491,7 @@ export async function createStudent(student: Student): Promise<Student> {
         email: student.email ?? null,
         parent_name: student.parentName ?? null,
         parent_phone: student.parentPhone ?? null,
+        parent_email: student.parentEmail ?? null,
         accent: student.accent,
         note: student.note ?? null,
       })
@@ -503,6 +530,9 @@ export async function updateStudent(id: string, patch: Partial<Student>) {
         }),
         ...(patch.parentPhone !== undefined && {
           parent_phone: patch.parentPhone ?? null,
+        }),
+        ...(patch.parentEmail !== undefined && {
+          parent_email: patch.parentEmail ?? null,
         }),
         ...(patch.note !== undefined && { note: patch.note ?? null }),
       })
@@ -575,6 +605,24 @@ export async function saveAttendance(
 }
 
 /**
+ * What the Edge Function actually managed to do.
+ *
+ * `skipped` counts recipients dropped before dispatch because the contact
+ * detail that channel needs is not on file — a student with no email address
+ * cannot be emailed. That used to be invisible: the send returned 200 with
+ * nothing queued and the teacher was told it went out.
+ */
+export type SendReport = {
+  messageId: string;
+  queued: number;
+  sent: number;
+  failed: number;
+  skipped: { sms: number; email: number; push: number };
+  /** Distinct gateway errors, deduplicated — one bad key repeats 11 times. */
+  errors: string[];
+};
+
+/**
  * Hand a message to the server for fan-out.
  *
  * Sending never happens on the device: iOS and Android both refuse to let an
@@ -593,8 +641,29 @@ export async function sendMessage(input: {
   const { data, error } = await supabase.functions.invoke('send-message', {
     body: input,
   });
-  if (error) throw new Error(error.message);
-  return data as { messageId: string; queued: number };
+  if (error) throw new Error(await functionErrorMessage(error));
+  return data as SendReport;
+}
+
+/**
+ * Dig the real reason out of a failed Edge Function call.
+ *
+ * `FunctionsHttpError.message` is always the same sentence — "Edge Function
+ * returned a non-2xx status code" — and the thing the teacher needs ("no email
+ * address on file for these students") is in the response body, which
+ * supabase-js hands over untouched as `context`.
+ */
+async function functionErrorMessage(error: unknown) {
+  const response = (error as { context?: Response }).context;
+  if (response && typeof response.json === 'function') {
+    try {
+      const body = await response.json();
+      if (body?.error) return String(body.error);
+    } catch {
+      // Body was not JSON, or already consumed — fall back to the generic text.
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function markRepliesRead() {

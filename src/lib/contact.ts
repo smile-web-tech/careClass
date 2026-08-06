@@ -1,5 +1,7 @@
 import * as Linking from 'expo-linking';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+
+import { showAlert } from '@/components/Dialog';
 
 /**
  * Tap-to-contact helpers. These hand off to the OS dialer / SMS app / mail
@@ -23,7 +25,7 @@ const open = async (url: string, what: string) => {
   try {
     await Linking.openURL(url);
   } catch {
-    Alert.alert('Cannot open', `This device has no app registered for ${what}.`);
+    showAlert('Cannot open', `This device has no app registered for ${what}.`, 'danger');
   }
 };
 

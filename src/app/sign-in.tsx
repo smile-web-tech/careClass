@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { showError } from '@/components/Dialog';
 import { AngledGradient, Glow, Ring } from '@/components/decor';
 import { GoogleMark, Icon } from '@/components/Icon';
 import { Logo, Press } from '@/components/ui';
@@ -64,7 +65,7 @@ export default function SignIn() {
       router.replace('/(tabs)');
     } catch (e) {
       if (!(e instanceof AuthCancelled)) {
-        Alert.alert('Could not sign in', e instanceof Error ? e.message : String(e));
+        showError(e, 'Could not sign in');
       }
     } finally {
       setBusy(null);

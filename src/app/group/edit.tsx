@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { confirm } from '@/components/Dialog';
 import { GroupForm } from '@/components/GroupForm';
 import { Icon } from '@/components/Icon';
 import { Card, Press } from '@/components/ui';
@@ -33,32 +34,26 @@ export default function EditGroup() {
    * `group_slots`, `student_groups` and `attendance`, so the schedule and the
    * whole attendance history for this group go with it. Students survive.
    */
-  const confirmDelete = () => {
-    Alert.alert(
-      `Delete ${group.name}?`,
-      memberCount
+  const confirmDelete = async () => {
+    const first = await confirm({
+      title: `Delete ${group.name}?`,
+      message: memberCount
         ? `Its schedule and attendance history are removed. The ${memberCount} student${memberCount > 1 ? 's' : ''} in it stay in your account, just no longer in this group.`
         : 'Its schedule and attendance history are removed.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete group',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert('Are you certain?', 'There is no undo.', [
-              { text: 'Keep it', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => {
-                  removeGroup(group.id);
-                  router.replace('/(tabs)');
-                },
-              },
-            ]),
-        },
-      ],
-    );
+      confirmLabel: 'Delete group',
+    });
+    if (!first) return;
+
+    const sure = await confirm({
+      title: 'Are you certain?',
+      message: 'There is no undo.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep it',
+    });
+    if (!sure) return;
+
+    removeGroup(group.id);
+    router.replace('/(tabs)');
   };
 
   return (

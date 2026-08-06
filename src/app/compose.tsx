@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { showAlert } from '@/components/Dialog';
 import { Icon, type IconName } from '@/components/Icon';
 import { FooterSummary, Screen, StickyFooter, TopBar } from '@/components/layout';
 import {
@@ -30,14 +30,21 @@ import { fetchMessages, sendMessage as apiSendMessage } from '@/data/api';
 import { messageTemplates } from '@/data/seed';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Audience, Channel } from '@/data/types';
+import { describeError } from '@/lib/errors';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
+/**
+ * No push channel. ClassCare is the teacher's app — students and parents never
+ * install it, so there is no device to push to and the server's `sendPush` is a
+ * documented no-op. Offering the button only ever produced deliveries that
+ * reported "sent" while reaching nobody. `Channel` keeps `'push'` because the
+ * database enum and older message rows still carry it.
+ */
 const CHANNELS: { key: Channel; label: string; icon: IconName }[] = [
   { key: 'sms', label: 'SMS', icon: 'chat' },
   { key: 'email', label: 'Email', icon: 'envelope' },
-  { key: 'push', label: 'Push', icon: 'bell' },
 ];
 
 const AUDIENCES: { key: Audience; label: string }[] = [
@@ -74,14 +81,30 @@ export default function Compose() {
     [focusIds, students],
   );
 
-  const [picked, setPicked] = useState<Record<string, boolean>>(() =>
-    params.group ? { [params.group]: true } : { [groups[0]?.id ?? '']: true },
-  );
+  /**
+   * `null` until the teacher touches a chip, so the default can follow the data
+   * instead of being frozen at mount.
+   *
+   * Seeding this from `groups[0]` in a `useState` initialiser looked equivalent
+   * and was not: the initialiser runs once, and opening the composer before the
+   * store has hydrated from Supabase left it holding a key that matches no
+   * group. The chips then rendered with nothing selected and the footer read
+   * "No group selected" with no way to explain itself.
+   */
+  const [picked, setPicked] = useState<Record<string, boolean> | null>(null);
+  const selection =
+    picked ??
+    (params.group
+      ? { [params.group]: true }
+      : groups[0]
+        ? { [groups[0].id]: true }
+        : ({} as Record<string, boolean>));
+  const toggleGroup = (id: string) => setPicked({ ...selection, [id]: !selection[id] });
   const [audience, setAudience] = useState<Audience>(params.audience ?? 'students');
   const [channels, setChannels] = useState<Record<Channel, boolean>>({
     sms: true,
     email: false,
-    push: true,
+    push: false,
   });
   const [draft, setDraft] = useState(() => {
     const t = messageTemplates.find((x) => x.id === `t-${params.template}`);
@@ -96,7 +119,7 @@ export default function Compose() {
   const demo = useStore((s) => s.demo);
   const liveSend = hasSupabase && !demo;
 
-  const selectedGroups = groups.filter((g) => picked[g.id]);
+  const selectedGroups = groups.filter((g) => selection[g.id]);
   const activeChannels = CHANNELS.filter((c) => channels[c.key]);
   const multiplier = audience === 'both' ? 2 : 1;
 
@@ -107,7 +130,57 @@ export default function Compose() {
         0,
       ) * multiplier;
 
-  const canSend = reach > 0 && activeChannels.length > 0 && draft.trim().length > 0;
+  /**
+   * Recipients the email channel cannot reach.
+   *
+   * The server drops these silently — it has no address to send to — so say so
+   * before the teacher taps Send rather than after. Email is the channel where
+   * this bites: a phone number is required on every student, an address is not.
+   */
+  const targeted = focusIds.length
+    ? focused
+    : students.filter((s) => selectedGroups.some((g) => s.groupIds.includes(g.id)));
+
+  const noEmail = channels.email
+    ? targeted.reduce((n, s) => {
+        let missing = 0;
+        if (audience !== 'parents' && !s.email) missing += 1;
+        // A guardian only counts as a recipient at all if we hold some way to
+        // reach them, which mirrors how the function builds its list.
+        if (
+          audience !== 'students' &&
+          (s.parentPhone || s.parentEmail || s.parentName) &&
+          !s.parentEmail
+        ) {
+          missing += 1;
+        }
+        return n + missing;
+      }, 0)
+    : 0;
+
+  /**
+   * Why Send is unavailable, in the teacher's terms.
+   *
+   * "No group selected" used to cover all of these, including the case where a
+   * group *is* ticked and simply has nobody in it — which reads as the app
+   * ignoring the tap. The focus case matters too: arriving from attendance the
+   * chip picker is not rendered at all, so an empty group list there is not
+   * something the teacher can see, let alone fix.
+   */
+  const blocker =
+    selectedGroups.length === 0
+      ? focusIds.length
+        ? 'Those students are not in any group'
+        : 'No group selected'
+      : reach === 0
+        ? selectedGroups.length > 1
+          ? 'Those groups have no students'
+          : `${selectedGroups[0].name} has no students`
+        : activeChannels.length === 0
+          ? 'Pick at least one channel'
+          : null;
+
+  const canSend = !blocker && draft.trim().length > 0;
   const segments = Math.max(1, Math.ceil(draft.length / 160));
 
   /**
@@ -132,19 +205,60 @@ export default function Compose() {
 
     setSending(true);
     try {
-      await apiSendMessage({
+      const report = await apiSendMessage({
         ...payload,
         studentIds: focusIds.length ? focusIds : undefined,
       });
       useStore.setState({ messages: await fetchMessages() });
+
+      const skipped = report.skipped.sms + report.skipped.email + report.skipped.push;
+      const missing = [
+        report.skipped.email ? 'an email address' : '',
+        report.skipped.sms || report.skipped.push ? 'a phone number' : '',
+      ]
+        .filter(Boolean)
+        .join(' or ');
+
+      // Every delivery rejected. The message is in the log but nobody was told
+      // anything, so stay on the composer rather than dropping the teacher on a
+      // Messages list that looks like the class has been informed.
+      if (report.sent === 0) {
+        await showAlert(
+          'Nothing was sent',
+          [`All ${report.failed} deliveries were rejected.`, ...report.errors].join('\n\n'),
+          'danger',
+        );
+        return;
+      }
+
       router.replace('/(tabs)/messages');
+
+      if (report.failed || skipped) {
+        void showAlert(
+          `Sent to ${report.sent} of ${report.sent + report.failed + skipped}`,
+          [
+            skipped
+              ? `${skipped} skipped — no ${missing} on file. Add it on the student, then send again.`
+              : '',
+            report.failed ? `${report.failed} rejected by the provider.` : '',
+            ...report.errors,
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+        );
+      }
     } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      Alert.alert(
+      const described = describeError(e);
+      // The one case worth overriding: a 404 here is not "not found" to the
+      // teacher, it means the function was never deployed. Nobody using the app
+      // can fix that, but whoever set it up can, and the message names the step.
+      const notDeployed = described.kind === 'notFound';
+      void showAlert(
         'Nothing was sent',
-        /not found|404/i.test(detail)
-          ? 'The send-message function is not deployed yet, so no SMS or email went out.\n\nRun: supabase functions deploy send-message'
-          : detail,
+        notDeployed
+          ? 'Messaging is not finished being set up on the server yet. Nothing went out.'
+          : described.message,
+        'danger',
       );
     } finally {
       setSending(false);
@@ -206,8 +320,8 @@ export default function Compose() {
                   label={g.name}
                   dot={accents[g.accent].dot}
                   count={students.filter((s) => s.groupIds.includes(g.id)).length}
-                  selected={!!picked[g.id]}
-                  onPress={() => setPicked((p) => ({ ...p, [g.id]: !p[g.id] }))}
+                  selected={!!selection[g.id]}
+                  onPress={() => toggleGroup(g.id)}
                 />
               ))}
             </View>
@@ -248,6 +362,16 @@ export default function Compose() {
               );
             })}
           </View>
+
+          {noEmail > 0 ? (
+            <View style={styles.warn}>
+              <Icon name="info" size={18} color={color.warningDeep} />
+              <Text style={styles.warnText}>
+                {noEmail} of them {noEmail === 1 ? 'has' : 'have'} no email address on file and will
+                not be emailed. Add one on the student to include them.
+              </Text>
+            </View>
+          ) : null}
 
           <Overline style={styles.label}>Message</Overline>
           <Card style={styles.editor}>
@@ -290,7 +414,7 @@ export default function Compose() {
 
       <StickyFooter>
         <FooterSummary
-          title={reach === 0 ? 'No group selected' : `Reaches ${reach} ${audienceWord}`}
+          title={blocker ?? `Reaches ${reach} ${audienceWord}`}
           hint={
             activeChannels.length
               ? `via ${activeChannels.map((c) => c.label).join(' + ')}`
@@ -342,7 +466,7 @@ export default function Compose() {
   );
 }
 
-const makeStyles = ({ color }: Theme) =>
+const makeStyles = ({ color, accents }: Theme) =>
   StyleSheet.create({
     /** Default body ink. Text does not inherit colour from a parent View. */
     ink: { color: color.ink },
@@ -436,6 +560,23 @@ const makeStyles = ({ color }: Theme) =>
       paddingHorizontal: 15,
       paddingVertical: 13,
       marginTop: 14,
+    },
+    warn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: accents.amber.tint,
+      borderRadius: radius.button,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+      marginBottom: 20,
+    },
+    warnText: {
+      flex: 1,
+      fontFamily: body[400],
+      fontSize: 12.5,
+      lineHeight: 18.1,
+      color: accents.amber.ink,
     },
     infoText: {
       flex: 1,

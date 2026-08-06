@@ -69,6 +69,7 @@ export type StudentRow = {
   email: string | null;
   parent_name: string | null;
   parent_phone: string | null;
+  parent_email: string | null;
   accent: GroupAccentRow;
   note: string | null;
   avg_score: number | null;
@@ -131,6 +132,8 @@ export type ReplyRow = {
   body: string;
   received_at: string;
   read_at: string | null;
+  /** RFC 5322 Message-ID of the inbound mail, so webhook retries can't duplicate. */
+  inbound_message_id: string | null;
 };
 
 export type CalendarEventRow = {

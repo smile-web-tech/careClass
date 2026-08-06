@@ -13,8 +13,9 @@
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BackHandler, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { confirm as askConfirm } from '@/components/Dialog';
 import { AuthButton, AuthField, AuthLink, AuthNotice, AuthScreen } from '@/components/AuthForm';
 import { OtpInput } from '@/components/OtpInput';
 import { PasswordField } from '@/components/PasswordField';
@@ -95,14 +96,13 @@ export default function Register() {
     if (step === 3) {
       // The account already exists but is unconfirmed; sending them back to the
       // password step would silently re-register with a different one.
-      Alert.alert(
-        'Leave without confirming?',
-        'Your account is not active until you enter the code. You can start again from scratch.',
-        [
-          { text: 'Keep going', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: leave },
-        ],
-      );
+      void askConfirm({
+        title: 'Leave without confirming?',
+        message:
+          'Your account is not active until you enter the code. You can start again from scratch.',
+        confirmLabel: 'Leave',
+        cancelLabel: 'Keep going',
+      }).then((yes) => yes && leave());
       return;
     }
     setStep(1);

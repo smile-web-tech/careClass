@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { Avatar, Badge, Card, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
+import { refreshInbox } from '@/data/sync';
 import type { Message, Reply } from '@/data/types';
 import { timeAgo } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -32,7 +33,28 @@ export default function Messages() {
   const markRepliesRead = useStore((s) => s.markRepliesRead);
 
   const [tab, setTab] = useState<'sent' | 'replies'>('sent');
+  const [refreshing, setRefreshing] = useState(false);
   const unread = replies.filter((r) => r.unread).length;
+
+  /**
+   * Pull to refresh.
+   *
+   * Delivery receipts and replies both originate outside the app, and the
+   * realtime channel is not carried by the PHP reverse proxy (see
+   * `docs/reverse-proxy.md`) — so the fallback is a 30s poll that only runs
+   * while this screen is foregrounded. A pull is the teacher saying "now".
+   */
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshInbox();
+    } catch {
+      // Offline or the proxy is down. The list simply keeps what it had; an
+      // alert here would fire every time the teacher pulls on a bad connection.
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   // Opening the tab is the read receipt — matches how the badge behaves
   // everywhere else in the app.
@@ -74,6 +96,15 @@ export default function Messages() {
           paddingBottom: bottomInset,
           gap: 10,
         }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={color.muted}
+            colors={[color.primary]}
+            progressBackgroundColor={color.surface}
+          />
+        }
         showsVerticalScrollIndicator={false}>
         {tab === 'sent' ? (
           messages.length ? (

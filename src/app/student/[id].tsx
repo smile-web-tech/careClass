@@ -52,7 +52,12 @@ export default function StudentProfile() {
           <View style={styles.headerBar}>
             <IconButton name="chevronLeft" onPress={() => router.back()} />
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <IconButton name="pencil" iconSize={17} fg={color.inkSoft} />
+              <IconButton
+                name="pencil"
+                iconSize={17}
+                fg={color.inkSoft}
+                onPress={() => router.push(`/student/edit?id=${student.id}`)}
+              />
               <IconButton name="more" iconSize={17} fg={color.inkSoft} />
             </View>
           </View>
@@ -155,6 +160,19 @@ export default function StudentProfile() {
                   value={student.parentPhone}
                   tabular
                   onPress={() => callNumber(student.parentPhone!)}
+                />
+              </>
+            ) : null}
+            {student.parentEmail ? (
+              <>
+                <Divider inset={64} />
+                <ContactRow
+                  icon="mail"
+                  tint={accents.violet.tint}
+                  fg={accents.violet.ink}
+                  label={`Parent email${student.parentName ? ` · ${student.parentName}` : ''}`}
+                  value={student.parentEmail}
+                  onPress={() => emailAddress(student.parentEmail!)}
                 />
               </>
             ) : null}

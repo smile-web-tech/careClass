@@ -1,7 +1,9 @@
 import * as api from '@/data/api';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
+import { useSyncStatus } from '@/data/syncStatus';
 import type { AttendanceStatus, CalendarEvent, Group, Student } from '@/data/types';
-import { hasSupabase } from '@/lib/supabase';
+import { describeError, isOfflineError } from '@/lib/errors';
+import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
 /**
  * The bridge between the local store and Supabase.
@@ -15,18 +17,167 @@ import { hasSupabase } from '@/lib/supabase';
  * entirely on the seed data.
  */
 
-let pending: Promise<unknown> = Promise.resolve();
+/* -------------------------------------------------------------------------- */
+/* Write queue                                                                */
+/* -------------------------------------------------------------------------- */
 
-/** Serialise remote writes so a rapid save/edit pair cannot land out of order. */
-function enqueue(work: () => Promise<unknown>) {
+/**
+ * Pending remote writes, oldest first.
+ *
+ * This used to be a promise chain whose `.catch` logged and moved on, which is
+ * how a group could exist on the device and nowhere else: the teacher created
+ * it on a dead connection, the write was dropped, nothing said so, and the
+ * failure only surfaced days later as "that group does not exist on the server"
+ * when they tried to message it.
+ *
+ * Now a write that fails because the server is unreachable stays at the head of
+ * the queue and is retried — on a timer, when the app is brought forward, and
+ * when the teacher taps Retry. Order is preserved throughout, because a rapid
+ * create-then-edit pair applied backwards is worse than either failing.
+ *
+ * Not persisted across launches, and that is deliberate: `hydrate()` replaces
+ * local state with the server's on every start, so a queue that outlived the
+ * process would be trying to push changes the app had already thrown away.
+ */
+type QueuedWrite = { run: () => Promise<unknown>; label: string; attempts: number };
+
+const queue: QueuedWrite[] = [];
+let draining = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Backoff, capped. Long enough to be polite, short enough to feel automatic. */
+const retryDelay = (attempts: number) => Math.min(2 ** attempts * 1000, 30_000);
+
+function publish() {
+  useSyncStatus.getState().report({ pending: queue.length });
+}
+
+function scheduleRetry(attempts: number) {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void drain();
+  }, retryDelay(attempts));
+}
+
+async function drain(): Promise<void> {
+  if (draining) return;
+  draining = true;
+
+  try {
+    while (queue.length) {
+      const job = queue[0];
+      try {
+        await job.run();
+        queue.shift();
+        publish();
+        useSyncStatus.getState().report({ offline: false });
+      } catch (e) {
+        if (isOfflineError(e)) {
+          // Keep it. The change is still good; the network is not.
+          job.attempts += 1;
+          useSyncStatus.getState().report({ offline: true });
+          scheduleRetry(job.attempts);
+          return;
+        }
+
+        // Retrying will not fix a rejected write — a violated constraint, an
+        // expired session, a row the teacher may not touch. Drop it so one bad
+        // write cannot wedge every good one behind it, and say what happened.
+        queue.shift();
+        publish();
+        const described = describeError(e);
+        console.warn(`[classcare] ${job.label} failed permanently:`, described.detail);
+        useSyncStatus.getState().report({
+          offline: false,
+          failure: `${job.label} could not be saved. ${described.message}`,
+        });
+      }
+    }
+  } finally {
+    draining = false;
+  }
+}
+
+/**
+ * Queue a remote write.
+ *
+ * `label` is shown to the teacher if the write is ultimately rejected, so it
+ * reads as a thing they did — "New group", not "createGroup".
+ */
+function enqueue(work: () => Promise<unknown>, label: string) {
   if (!hasSupabase) return;
   // Demo mode has no session; firing these would just log a wall of 401s.
   if (useStore.getState().demo) return;
-  pending = pending.then(work).catch((e) => {
-    // Surfacing this properly (a retry queue + an offline banner) is the next
-    // step; losing the error silently would be worse than logging it.
-    console.warn('[classcare] remote write failed:', e);
-  });
+
+  queue.push({ run: work, label, attempts: 0 });
+  publish();
+  void drain();
+}
+
+/**
+ * Can the server be reached right now?
+ *
+ * Used to refuse a create outright rather than accepting it locally and finding
+ * out later. Attendance is different and stays optimistic — marking a register
+ * on classroom wifi is the whole reason the app works offline — but a group or
+ * a student created on a dead connection is a trap: it looks saved, and the
+ * failure surfaces days later as "that group does not exist on the server".
+ *
+ * `/auth/v1/health` needs no credentials and is one of the paths the PHP
+ * reverse proxy carries, so this measures the route the app actually uses
+ * rather than the internet in general.
+ */
+export async function isReachable(timeoutMs = 5000): Promise<boolean> {
+  // Nothing to reach in demo mode; refusing there would break the seed data.
+  if (!hasSupabase || useStore.getState().demo) return true;
+
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    // Any HTTP answer proves the round trip. A 401 or a 404 still means the
+    // phone reached the server, which is the only question being asked.
+    await fetch(`${supabaseUrl}/auth/v1/health`, { signal: abort.signal });
+    useSyncStatus.getState().report({ offline: false });
+    return true;
+  } catch {
+    useSyncStatus.getState().report({ offline: true });
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Try the queue again now — app foreground, and the Retry button via
+ * `retryNow`.
+ *
+ * Resolves once the queue is empty or has stalled again, so the caller can show
+ * a spinner for as long as it is actually doing something.
+ */
+export async function flushWrites() {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  await drain();
+  return queue.length === 0;
+}
+
+/**
+ * What the Retry button does.
+ *
+ * Draining the queue is not enough on its own: the offline flag is also raised
+ * by `isReachable()` refusing a create, and that path queues nothing. Retry
+ * would then run a `while (queue.length)` loop zero times, change nothing, and
+ * leave the banner up — a button that visibly does nothing. So re-probe first,
+ * which is what actually clears the flag, and only then push any pending work.
+ */
+export async function retryNow() {
+  const online = await isReachable();
+  if (!online) return false;
+  await flushWrites();
+  return true;
 }
 
 /** Replace local state with what the server has. Call after sign-in and on focus. */
@@ -73,19 +224,19 @@ export async function hydrate() {
 export const remote: StoreMirror = {
   // No id rewriting here any more: the store mints a UUID and the row is
   // inserted under it, so the id the UI already holds is the real one.
-  createGroup: (group: Group) => enqueue(() => api.createGroup(group)),
+  createGroup: (group: Group) => enqueue(() => api.createGroup(group), 'New group'),
 
   updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) =>
-    enqueue(() => api.updateGroup(id, patch)),
+    enqueue(() => api.updateGroup(id, patch), 'Group changes'),
 
-  deleteGroup: (id: string) => enqueue(() => api.deleteGroup(id)),
+  deleteGroup: (id: string) => enqueue(() => api.deleteGroup(id), 'Deleting the group'),
 
-  createStudent: (student: Student) => enqueue(() => api.createStudent(student)),
+  createStudent: (student: Student) => enqueue(() => api.createStudent(student), 'New student'),
 
   updateStudent: (id: string, patch: Partial<Student>) =>
-    enqueue(() => api.updateStudent(id, patch)),
+    enqueue(() => api.updateStudent(id, patch), 'Student changes'),
 
-  archiveStudent: (id: string) => enqueue(() => api.archiveStudent(id)),
+  archiveStudent: (id: string) => enqueue(() => api.archiveStudent(id), 'Removing the student'),
 
   saveAttendance: (key: string, marks: Record<string, AttendanceStatus>) =>
     enqueue(() => {
@@ -93,7 +244,7 @@ export const remote: StoreMirror = {
       const [groupId, rest] = key.split('@');
       const [date, start] = rest.split('#');
       return api.saveAttendance(groupId, date, start, marks);
-    }),
+    }, 'Attendance'),
 
   sendMessage: (input) =>
     enqueue(async () => {
@@ -101,16 +252,16 @@ export const remote: StoreMirror = {
       // The function computes the real recipient count and delivery states, so
       // re-read rather than trusting the optimistic row.
       useStore.setState({ messages: await api.fetchMessages() });
-    }),
+    }, 'Your message'),
 
-  markRepliesRead: () => enqueue(() => api.markRepliesRead()),
+  markRepliesRead: () => enqueue(() => api.markRepliesRead(), 'Marking replies read'),
 
-  createEvent: (event: CalendarEvent) => enqueue(() => api.createEvent(event)),
+  createEvent: (event: CalendarEvent) => enqueue(() => api.createEvent(event), 'New event'),
 
   updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) =>
-    enqueue(() => api.updateEvent(id, patch)),
+    enqueue(() => api.updateEvent(id, patch), 'Event changes'),
 
-  deleteEvent: (id: string) => enqueue(() => api.deleteEvent(id)),
+  deleteEvent: (id: string) => enqueue(() => api.deleteEvent(id), 'Deleting the event'),
 };
 
 /** Install the write-through mirror. Called once from the root layout. */
@@ -118,11 +269,21 @@ export function installSync() {
   if (hasSupabase) setStoreMirror(remote);
 }
 
+/**
+ * Re-read the outbox and inbox.
+ *
+ * Both arrive from outside the app — delivery receipts from the gateways,
+ * replies from whatever writes to `replies` — so nothing the teacher does
+ * locally can bring them in. Hence a manual pull as well as the subscription.
+ */
+export async function refreshInbox() {
+  if (!hasSupabase) return;
+  const [messages, replies] = await Promise.all([api.fetchMessages(), api.fetchReplies()]);
+  useStore.setState({ messages, replies });
+}
+
 /** Keep the inbox badge honest — replies arrive from webhooks, not from us. */
 export function watchInbox() {
   if (!hasSupabase) return () => {};
-  return api.subscribeToInbox(async () => {
-    const [messages, replies] = await Promise.all([api.fetchMessages(), api.fetchReplies()]);
-    useStore.setState({ messages, replies });
-  });
+  return api.subscribeToInbox(refreshInbox);
 }

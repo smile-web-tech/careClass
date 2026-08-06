@@ -26,6 +26,7 @@ export type Student = {
   email?: string;
   parentName?: string;
   parentPhone?: string;
+  parentEmail?: string;
   groupIds: string[];
   accent: AccentName;
   note?: string;

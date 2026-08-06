@@ -74,6 +74,11 @@ npx supabase secrets set \
   RESEND_API_KEY=re_... RESEND_FROM="ClassCare <no-reply@yourdomain>"
 ```
 
+`RESEND_FROM` is required, not optional. Without it the function refuses to send
+email rather than falling back to Resend's `onboarding@resend.dev` sender, which
+only ever delivers to the Resend account owner — every student and parent is
+rejected while the send still looks healthy from the app.
+
 The function reads `SUPABASE_SERVICE_ROLE_KEY`, which Supabase injects into every
 function at runtime — do not try to set it yourself, as the `SUPABASE_` prefix is
 reserved and `secrets set` will reject it. That key bypasses row level security,

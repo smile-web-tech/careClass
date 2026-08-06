@@ -255,19 +255,54 @@ function renderEmail(opts: {
   return { subject, text, html };
 }
 
+/**
+ * The address a reply should come back to.
+ *
+ * With `RESEND_INBOUND_DOMAIN` set, every message gets its own address carrying
+ * the delivery id. That token is what makes routing exact: the `inbound-email`
+ * function reads it and knows the teacher, the student, and whether it was the
+ * student or the guardian who wrote back. Matching on the From address instead
+ * would break the moment a parent replies from a different account, or is on
+ * two teachers' rosters.
+ *
+ * Unset, this returns undefined and the caller falls back to the teacher's own
+ * mailbox — which is what shipped before inbound existed, and still works.
+ */
+function replyAddressFor(deliveryId: string) {
+  const domain = Deno.env.get('RESEND_INBOUND_DOMAIN');
+  return domain ? `reply-${deliveryId}@${domain}` : undefined;
+}
+
 async function sendEmail(opts: {
   to: string;
   subject: string;
   text: string;
   html: string;
   replyTo?: string;
+  /** Kept off the tokenised address: an unsubscribe belongs with a human. */
+  unsubscribeTo?: string;
 }) {
-  const from = Deno.env.get('RESEND_FROM') ?? 'ClassCare <onboarding@resend.dev>';
+  // Deliberately no fallback to `onboarding@resend.dev`. That sandbox sender
+  // exists to let you prove your API key works, and Resend refuses every
+  // recipient except the account owner's own address — so falling back to it
+  // means each student's message is rejected 403 while the send still looks
+  // healthy from the app. Better to fail with the reason.
+  const from = Deno.env.get('RESEND_FROM');
+  if (!from) {
+    throw new Error(
+      'RESEND_FROM is not set, so email can only reach the Resend account owner. ' +
+        'Run: supabase secrets set RESEND_FROM="ClassCare <notifications@yourdomain>"',
+    );
+  }
+  if (!Deno.env.get('RESEND_API_KEY')) throw new Error('RESEND_API_KEY is not set');
   // Prefer a real mailbox the teacher reads. Falling back to the From address
   // is still better than no Reply-To at all.
   const replyTo = opts.replyTo || Deno.env.get('RESEND_REPLY_TO') || undefined;
   const unsubscribeMailbox =
-    Deno.env.get('RESEND_UNSUBSCRIBE') || replyTo || from.replace(/^.*<|>$/g, '');
+    Deno.env.get('RESEND_UNSUBSCRIBE') ||
+    opts.unsubscribeTo ||
+    Deno.env.get('RESEND_REPLY_TO') ||
+    from.replace(/^.*<|>$/g, '');
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -370,7 +405,25 @@ Deno.serve(async (req) => {
     ? await groupQuery
     : await groupQuery.in('id', payload.groupIds ?? []);
   if (groupError) return json({ error: groupError.message }, 400);
-  if (!groups?.length) return json({ error: 'No groups selected' }, 400);
+  if (!groups?.length) {
+    // Distinguishing these matters, because the second one is not something the
+    // teacher did wrong. Writes are mirrored to Supabase in the background and
+    // a failure there is currently only logged (see `enqueue` in data/sync.ts),
+    // so a group created while the connection was down exists on the device and
+    // nowhere else. The app then sends an id the server has never seen.
+    return json(
+      {
+        error: announcement
+          ? 'You have no active groups to announce to.'
+          : (payload.groupIds?.length ?? 0) === 0
+            ? 'No group was included in the send.'
+            : 'That group does not exist on the server. It was most likely created while ' +
+              'the connection was down and never synced. Restart the app to refresh from ' +
+              'the server, then recreate it if it is gone.',
+      },
+      400,
+    );
+  }
 
   const groupIds = groups.map((g) => g.id);
 
@@ -390,7 +443,7 @@ Deno.serve(async (req) => {
 
   const { data: students, error: studentError } = await db
     .from('students')
-    .select('id, name, phone, email, parent_name, parent_phone')
+    .select('id, name, phone, email, parent_name, parent_phone, parent_email')
     .eq('teacher_id', teacherId)
     .in('id', studentIds)
     .is('archived_at', null);
@@ -420,14 +473,20 @@ Deno.serve(async (req) => {
         time,
       });
     }
-    if ((audience === 'parents' || audience === 'both') && (s.parent_phone || s.parent_name)) {
+    // A guardian counts as reachable if we hold any way to reach them. Keying
+    // this on `parent_phone` alone used to drop every parent who had only an
+    // email address on file.
+    if (
+      (audience === 'parents' || audience === 'both') &&
+      (s.parent_phone || s.parent_email || s.parent_name)
+    ) {
       recipients.push({
         studentId: s.id,
         kind: 'parent',
         // Parents get addressed by their own name where we have one.
         name: s.parent_name ?? s.name,
         phone: s.parent_phone,
-        email: null,
+        email: s.parent_email,
         groupName,
         time,
       });
@@ -437,6 +496,40 @@ Deno.serve(async (req) => {
   // Dispatch works from delivery rows, which carry only ids; keep a lookup so
   // each email can name the right class.
   const byStudent = new Map(recipients.map((r) => [`${r.studentId}:${r.kind}`, r]));
+
+  // Work out what can actually be delivered *before* recording the message.
+  // A recipient with no address for the chosen channel is not an error, but it
+  // is not a delivery either, and a send where that empties the whole list must
+  // not be reported as success — that is exactly how a class ends up never
+  // hearing about a cancelled lesson.
+  const skipped: Record<Channel, number> = { sms: 0, email: 0, push: 0 };
+  const plan = recipients.flatMap((r) =>
+    channels
+      .map((channel) => {
+        const destination = channel === 'email' ? r.email : r.phone;
+        if (!destination) {
+          skipped[channel] += 1;
+          return null;
+        }
+        return { recipient: r, channel, destination };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null),
+  );
+
+  if (!plan.length) {
+    const missing = channels
+      .filter((c) => skipped[c] > 0)
+      .map((c) => (c === 'email' ? 'an email address' : 'a phone number'));
+    return json(
+      {
+        error:
+          `None of the ${recipients.length} selected recipients have ` +
+          `${missing.join(' or ') || 'contact details'} on file, so nothing could be sent. ` +
+          `Add the missing details on each student, or pick another channel.`,
+      },
+      400,
+    );
+  }
 
   const { data: message, error: messageError } = await db
     .from('messages')
@@ -459,25 +552,16 @@ Deno.serve(async (req) => {
 
   // Queue every delivery before dispatching, so a gateway outage leaves an
   // accurate record of what was meant to go out rather than silence.
-  const queued = recipients.flatMap((r) =>
-    channels
-      .map((channel) => {
-        const destination =
-          channel === 'email' ? r.email : channel === 'sms' ? r.phone : r.phone;
-        if (!destination) return null;
-        return {
-          message_id: message.id,
-          teacher_id: teacherId,
-          student_id: r.studentId,
-          recipient: r.kind,
-          channel,
-          destination,
-          rendered: render(template, r),
-          state: 'queued' as const,
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null),
-  );
+  const queued = plan.map(({ recipient, channel, destination }) => ({
+    message_id: message.id,
+    teacher_id: teacherId,
+    student_id: recipient.studentId,
+    recipient: recipient.kind,
+    channel,
+    destination,
+    rendered: render(template, recipient),
+    state: 'queued' as const,
+  }));
 
   const { data: deliveries, error: deliveryError } = await db
     .from('message_deliveries')
@@ -486,7 +570,12 @@ Deno.serve(async (req) => {
   if (deliveryError) return json({ error: deliveryError.message }, 400);
 
   // Dispatch. Failures are recorded per row — one bad number must not sink the
-  // whole send.
+  // whole send. They are also counted, because a delivery that failed silently
+  // in a table the app never reads is indistinguishable from one that worked.
+  let sent = 0;
+  let failed = 0;
+  const errors = new Set<string>();
+
   await Promise.all(
     (deliveries ?? []).map(async (d) => {
       try {
@@ -506,7 +595,10 @@ Deno.serve(async (req) => {
             subject,
             text,
             html,
-            replyTo: teacherEmail,
+            // The tokenised address when inbound is configured, otherwise
+            // straight to the teacher exactly as before.
+            replyTo: replyAddressFor(d.id) ?? teacherEmail,
+            unsubscribeTo: teacherEmail,
           });
         } else return; // Push is batched below.
 
@@ -514,12 +606,16 @@ Deno.serve(async (req) => {
           .from('message_deliveries')
           .update({ state: 'sent', provider_id: providerId, updated_at: new Date().toISOString() })
           .eq('id', d.id);
+        sent += 1;
       } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        failed += 1;
+        errors.add(reason);
         await db
           .from('message_deliveries')
           .update({
             state: 'failed',
-            error: e instanceof Error ? e.message : String(e),
+            error: reason,
             updated_at: new Date().toISOString(),
           })
           .eq('id', d.id);
@@ -537,7 +633,15 @@ Deno.serve(async (req) => {
       .from('message_deliveries')
       .update({ state: 'sent', updated_at: new Date().toISOString() })
       .in('id', pushRows.map((d) => d.id));
+    sent += pushRows.length;
   }
 
-  return json({ messageId: message.id, queued: queued.length });
+  return json({
+    messageId: message.id,
+    queued: queued.length,
+    sent,
+    failed,
+    skipped,
+    errors: [...errors],
+  });
 });

@@ -19,8 +19,10 @@ import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { DialogHost } from '@/components/Dialog';
+import { SyncBanner } from '@/components/SyncBanner';
 import { useGroups, useStore } from '@/data/store';
-import { hydrate, installSync, watchInbox } from '@/data/sync';
+import { flushWrites, hydrate, installSync, watchInbox } from '@/data/sync';
 import { rescheduleClassReminders } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -68,6 +70,22 @@ function useSupabaseSession() {
 }
 
 /**
+ * Push any stalled writes the moment the app comes forward.
+ *
+ * The queue retries on its own backoff, but the teacher opening the app is the
+ * strongest available signal that the phone might have a connection again —
+ * they have usually just walked somewhere with signal.
+ */
+function useFlushOnForeground() {
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void flushWrites();
+    });
+    return () => sub.remove();
+  }, []);
+}
+
+/**
  * Keep local class reminders true to the schedule.
  *
  * Reminders are scheduled from the group list, so editing a group's day or time
@@ -98,6 +116,7 @@ function useClassReminders() {
 function RootNavigator() {
   const { color, scheme } = useTheme();
   useClassReminders();
+  useFlushOnForeground();
 
   // Paint the window itself, not just our views: without this the OS shows a
   // white flash behind modal transitions and under the Android nav bar.
@@ -130,11 +149,20 @@ function RootNavigator() {
         <Stack.Screen name="attendance" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
         <Stack.Screen name="student/new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="student/edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/roster" options={{ presentation: 'modal' }} />
         <Stack.Screen name="event/new" options={{ presentation: 'modal' }} />
       </Stack>
+
+      {/*
+        Both sit above the navigator so they survive every screen change: a
+        dropped connection is not the current screen's problem, and a dialog
+        opened from a screen that then navigates away must still resolve.
+      */}
+      <SyncBanner />
+      <DialogHost />
     </>
   );
 }

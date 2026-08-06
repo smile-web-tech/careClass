@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { confirm, showAlert, showError } from '@/components/Dialog';
 import { Icon, type IconName } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
 import { Button, Card, Divider, Overline, Press, StatTile, Toggle, Txt } from '@/components/ui';
@@ -70,29 +71,27 @@ export default function Profile() {
     try {
       await updateTeacher({ name: next, timezone });
     } catch (e) {
-      Alert.alert('Could not save', e instanceof Error ? e.message : String(e));
+      showError(e, 'Could not save');
     }
   };
 
-  const confirmSignOut = () => {
-    Alert.alert('Sign out?', 'Your groups and students stay in your account.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          if (live) {
-            try {
-              await signOut();
-            } catch {
-              // Even if the network call fails, drop the local session.
-            }
-          }
-          doSignOut();
-          router.replace('/sign-in');
-        },
-      },
-    ]);
+  const confirmSignOut = async () => {
+    const yes = await confirm({
+      title: 'Sign out?',
+      message: 'Your groups and students stay in your account.',
+      confirmLabel: 'Sign out',
+    });
+    if (!yes) return;
+
+    if (live) {
+      try {
+        await signOut();
+      } catch {
+        // Even if the network call fails, drop the local session.
+      }
+    }
+    doSignOut();
+    router.replace('/sign-in');
   };
 
   /**
@@ -100,39 +99,33 @@ export default function Profile() {
    * cascades through every table — groups, students, attendance, message
    * history. The auth user itself survives; that needs the admin API.
    */
-  const confirmDelete = () => {
-    Alert.alert(
-      'Delete all your data?',
-      `This removes ${groups.length} groups, ${students.length} students and every attendance record and message. It cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete everything',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert('Are you certain?', 'There is no undo and no backup.', [
-              { text: 'Keep my data', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                  setBusy(true);
-                  try {
-                    await deleteAccountData();
-                    await signOut();
-                    doSignOut();
-                    router.replace('/sign-in');
-                  } catch (e) {
-                    Alert.alert('Could not delete', e instanceof Error ? e.message : String(e));
-                  } finally {
-                    setBusy(false);
-                  }
-                },
-              },
-            ]),
-        },
-      ],
-    );
+  const confirmDelete = async () => {
+    const first = await confirm({
+      title: 'Delete all your data?',
+      message: `This removes ${groups.length} groups, ${students.length} students and every attendance record and message. It cannot be undone.`,
+      confirmLabel: 'Delete everything',
+    });
+    if (!first) return;
+
+    const sure = await confirm({
+      title: 'Are you certain?',
+      message: 'There is no undo and no backup.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep my data',
+    });
+    if (!sure) return;
+
+    setBusy(true);
+    try {
+      await deleteAccountData();
+      await signOut();
+      doSignOut();
+      router.replace('/sign-in');
+    } catch (e) {
+      showError(e, 'Could not delete');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -241,7 +234,7 @@ export default function Profile() {
             label="Privacy"
             hint="What ClassCare stores and why"
             onPress={() =>
-              Alert.alert(
+              showAlert(
                 'Your data',
                 live
                   ? 'Your groups, students and attendance live in your own Supabase account, behind row level security — no other teacher can read them.\n\nStudent phone numbers are only sent to an SMS gateway at the moment you send a message.'

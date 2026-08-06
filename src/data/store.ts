@@ -58,6 +58,7 @@ type NewStudent = {
   email?: string;
   parentName?: string;
   parentPhone?: string;
+  parentEmail?: string;
   groupIds: string[];
 };
 

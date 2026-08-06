@@ -7,7 +7,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { confirm } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { TimeField, TimePicker } from '@/components/TimePicker';
@@ -65,19 +65,16 @@ export default function EventForm() {
     router.back();
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!existing) return;
-    Alert.alert(`Delete "${existing.title}"?`, 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          removeEvent(existing.id);
-          router.back();
-        },
-      },
-    ]);
+    const yes = await confirm({
+      title: `Delete "${existing.title}"?`,
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+    });
+    if (!yes) return;
+    removeEvent(existing.id);
+    router.back();
   };
 
   return (

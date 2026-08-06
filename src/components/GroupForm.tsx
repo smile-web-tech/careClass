@@ -34,12 +34,15 @@ export function GroupForm({
   initial,
   /** Rendered under the form — the danger zone on the edit screen. */
   footer,
+  /** Blocks the submit while the caller is working — e.g. the online check. */
+  busy,
   onSubmit,
 }: {
   title: string;
   submitLabel: string;
   initial?: Group;
   footer?: React.ReactNode;
+  busy?: boolean;
   onSubmit: (draft: GroupDraft) => void;
 }) {
   const { accents, color } = useTheme();
@@ -184,7 +187,7 @@ export function GroupForm({
       </KeyboardAvoidingView>
 
       <StickyFooter>
-        <Button grow label={submitLabel} height={50} onPress={submit} disabled={!ready} />
+        <Button grow label={submitLabel} height={50} onPress={submit} disabled={!ready || busy} />
       </StickyFooter>
 
       <TimePicker
