@@ -1,5 +1,6 @@
 import type {
   Assessment,
+  MessageTemplate,
   AttendanceRecord,
   AttendanceStatus,
   Audience,
@@ -14,12 +15,12 @@ import type {
 } from '@/data/types';
 import type {
   AssessmentRow,
-  EmailTemplateOverrides,
   AttendanceRow,
   CalendarEventRow,
   GradeRow,
   GroupRow,
   GroupSlotRow,
+  MessageTemplateRow,
   MessageRow,
   ReplyRow,
   StudentRow,
@@ -267,7 +268,6 @@ export async function updateTeacher(patch: {
   timezone?: string;
   pushToken?: string;
   language?: string;
-  emailTemplates?: EmailTemplateOverrides | null;
 }) {
   const teacherId = await requireUser();
   unwrap(
@@ -278,7 +278,6 @@ export async function updateTeacher(patch: {
         ...(patch.timezone !== undefined && { timezone: patch.timezone }),
         ...(patch.pushToken !== undefined && { push_token: patch.pushToken }),
         ...(patch.language !== undefined && { language: patch.language }),
-        ...(patch.emailTemplates !== undefined && { email_templates: patch.emailTemplates }),
       })
       .eq('id', teacherId)
       .select(),
@@ -712,6 +711,59 @@ export async function deleteReply(id: string) {
 export async function deleteMessage(id: string) {
   const teacherId = await requireUser();
   unwrap(await supabase.from('messages').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Message templates                                                          */
+/* -------------------------------------------------------------------------- */
+
+const toTemplate = (row: MessageTemplateRow): MessageTemplate => ({
+  id: row.id,
+  title: row.title,
+  body: row.body,
+});
+
+export async function fetchTemplates(): Promise<MessageTemplate[]> {
+  const rows = unwrap(
+    await supabase.from('message_templates').select('*').order('created_at'),
+  ) as MessageTemplateRow[];
+  return rows.map(toTemplate);
+}
+
+/** Insert under the store's id — see `createGroup` for why. */
+export async function createTemplate(template: MessageTemplate) {
+  const teacherId = await requireUser();
+  unwrap(
+    await supabase
+      .from('message_templates')
+      .insert({
+        id: template.id,
+        teacher_id: teacherId,
+        title: template.title,
+        body: template.body,
+      })
+      .select(),
+  );
+}
+
+export async function updateTemplate(id: string, patch: Partial<MessageTemplate>) {
+  unwrap(
+    await supabase
+      .from('message_templates')
+      .update({
+        ...(patch.title !== undefined && { title: patch.title }),
+        ...(patch.body !== undefined && { body: patch.body }),
+      })
+      .eq('id', id)
+      .select(),
+  );
+}
+
+export async function deleteTemplate(id: string) {
+  const teacherId = await requireUser();
+  unwrap(
+    await supabase.from('message_templates').delete().eq('id', id).eq('teacher_id', teacherId),
+  );
 }
 
 /* -------------------------------------------------------------------------- */

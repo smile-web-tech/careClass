@@ -31,13 +31,6 @@ type Row<T> = {
   Relationships: [];
 };
 
-export type EmailTemplateOverrides = {
-  messageSignature?: string;
-  gradeSubject?: string;
-  gradeBody?: string;
-  gradeSignature?: string;
-};
-
 export type TeacherRow = {
   id: string;
   name: string;
@@ -48,8 +41,6 @@ export type TeacherRow = {
   phone: string | null;
   /** 'tk' | 'ru' — the app's language and the language students are written in. */
   language: string;
-  /** The teacher's overrides only; null means use the built-in wording. */
-  email_templates: EmailTemplateOverrides | null;
   created_at: string;
 };
 
@@ -185,6 +176,15 @@ export type GradeRow = {
   updated_at: string;
 };
 
+export type MessageTemplateRow = {
+  id: string;
+  teacher_id: string;
+  title: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -201,6 +201,7 @@ export type Database = {
       calendar_events: Row<CalendarEventRow>;
       assessments: Row<AssessmentRow>;
       grades: Row<GradeRow>;
+      message_templates: Row<MessageTemplateRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,12 +28,12 @@ import {
   Txt,
 } from '@/components/ui';
 import { fetchMessages, sendMessage as apiSendMessage } from '@/data/api';
-import { messageTemplates } from '@/data/seed';
-import { useGroups, useStore, useStudents } from '@/data/store';
+import { useGroups, useStore, useStudents, useTemplates } from '@/data/store';
 import type { Audience, Channel } from '@/data/types';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { describeError } from '@/lib/errors';
+import { builtInTemplates } from '@/lib/templates';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
@@ -73,6 +74,7 @@ export default function Compose() {
 
   const groups = useGroups();
   const students = useStudents();
+  const savedTemplates = useTemplates();
   const sendMessage = useStore((s) => s.sendMessage);
 
   /** When arriving from attendance, the message targets specific students. */
@@ -110,13 +112,42 @@ export default function Compose() {
     email: false,
     push: false,
   });
+  // The starters are translations, so the opening draft has to be resolved
+  // through the translator rather than read off a constant.
   const [draft, setDraft] = useState(() => {
-    const t = messageTemplates.find((x) => x.id === `t-${params.template}`);
-    return (
-      t?.body ?? 'Hi {name}, reminder: {group} meets today at {time}. Please bring your workbook.'
-    );
+    const starters = builtInTemplates(t);
+    return (starters.find((x) => x.id === params.template) ?? starters[0]).body;
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
+
+  /**
+   * Room to scroll while the keyboard is up.
+   *
+   * Scrolling on focus alone did nothing: on Android the window resizes rather
+   * than the ScrollView shrinking, so the content still fits and there is
+   * nowhere to scroll to. Padding the bottom by the keyboard's real height
+   * creates that room, and only then does scrolling to the end put the editor
+   * above the keyboard. The height comes from the event because it varies with
+   * the keyboard, suggestion strip and language.
+   */
+  const [keyboard, setKeyboard] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const show = Keyboard.addListener(showEvent, (e) => {
+      setKeyboard(e.endCoordinates.height);
+      // After the padding lands, not in the same frame as it.
+      requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboard(0));
+
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const [sending, setSending] = useState(false);
 
   /** Real gateways are involved only when signed in against a real project. */
@@ -289,7 +320,7 @@ export default function Compose() {
           contentContainerStyle={{
             padding: space.gutter,
             paddingTop: 18,
-            paddingBottom: insets.bottom + 140,
+            paddingBottom: insets.bottom + 140 + keyboard,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -383,15 +414,6 @@ export default function Compose() {
               value={draft}
               onChangeText={setDraft}
               multiline
-              /*
-                Scroll the editor above the keyboard on focus.
-                `automaticallyAdjustKeyboardInsets` is iOS-only and the Android
-                window merely resizes, which leaves the caret behind the
-                keyboard: the teacher types and cannot see what they typed. The
-                editor is the last thing on the page, so scrolling to the end
-                puts it exactly where it needs to be.
-              */
-              onFocus={() => setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 80)}
               placeholder={t('messages.typeMessage')}
               placeholderTextColor={color.mutedLight}
               style={styles.editorInput}
@@ -456,25 +478,35 @@ export default function Compose() {
           <Txt style={styles.sheetHint}>
             {t('messages.placeholderHint')}
           </Txt>
-          {messageTemplates.map((t, i) => (
-            <View key={t.id}>
+          {[...savedTemplates, ...builtInTemplates(t)].map((template, i) => (
+            <View key={template.id}>
               {i > 0 ? <Divider /> : null}
               <Press
                 onPress={() => {
-                  setDraft(t.body);
+                  setDraft(template.body);
                   setTemplatesOpen(false);
                 }}
                 style={styles.templateRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.templateTitle}>{t.title}</Text>
+                  <Text style={styles.templateTitle}>{template.title}</Text>
                   <Text style={styles.templateBody} numberOfLines={2}>
-                    {t.body}
+                    {template.body}
                   </Text>
                 </View>
                 <Icon name="disclosure" size={16} color={color.chevron} />
               </Press>
             </View>
           ))}
+
+          <Press
+            onPress={() => {
+              setTemplatesOpen(false);
+              router.push('/templates');
+            }}
+            style={styles.manageRow}>
+            <Icon name="pencil" size={15} color={color.primary} />
+            <Text style={styles.manageLabel}>{t('template.manage')}</Text>
+          </Press>
         </View>
       </Modal>
     </Screen>
@@ -625,6 +657,15 @@ const makeStyles = ({ color, accents }: Theme) =>
       paddingVertical: 14,
     },
     templateTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    manageRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 14,
+      marginTop: 4,
+    },
+    manageLabel: { fontFamily: body[700], fontSize: 14, color: color.primary },
     templateBody: {
       fontFamily: body[400],
       fontSize: 12.5,

@@ -1,7 +1,14 @@
 import * as api from '@/data/api';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
 import { useSyncStatus } from '@/data/syncStatus';
-import type { Assessment, AttendanceStatus, CalendarEvent, Group, Student } from '@/data/types';
+import type {
+  Assessment,
+  AttendanceStatus,
+  CalendarEvent,
+  Group,
+  MessageTemplate,
+  Student,
+} from '@/data/types';
 import type { Language } from '@/i18n';
 import { describeError, isOfflineError } from '@/lib/errors';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
@@ -181,7 +188,7 @@ export async function retryNow() {
 export async function hydrate() {
   if (!hasSupabase) return;
 
-  const [teacher, groups, students, attendance, messages, replies, assessments, grades] =
+  const [teacher, groups, students, attendance, messages, replies, assessments, grades, templates] =
     await Promise.all([
       api.fetchTeacher(),
       api.fetchGroups(),
@@ -191,6 +198,7 @@ export async function hydrate() {
       api.fetchReplies(),
       api.fetchAssessments(),
       api.fetchGrades(),
+      api.fetchTemplates(),
     ]);
 
   // Fetched separately and tolerantly: `calendar_events` arrived in migration
@@ -212,6 +220,7 @@ export async function hydrate() {
     replies,
     assessments,
     grades,
+    templates,
     // Keep whatever is already local when the table is not there yet.
     ...(events ? { events } : {}),
     ...(teacher && {
@@ -271,6 +280,14 @@ export const remote: StoreMirror = {
     enqueue(() => api.saveAssessment(assessment, scores), 'Grades'),
 
   deleteAssessment: (id: string) => enqueue(() => api.deleteAssessment(id), 'Deleting the grades'),
+
+  createTemplate: (template: MessageTemplate) =>
+    enqueue(() => api.createTemplate(template), 'New template'),
+
+  updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) =>
+    enqueue(() => api.updateTemplate(id, patch), 'Template changes'),
+
+  deleteTemplate: (id: string) => enqueue(() => api.deleteTemplate(id), 'Deleting the template'),
 
   createEvent: (event: CalendarEvent) => enqueue(() => api.createEvent(event), 'New event'),
 

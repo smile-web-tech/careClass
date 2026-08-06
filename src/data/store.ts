@@ -14,6 +14,7 @@ import type {
   Grade,
   Group,
   Message,
+  MessageTemplate,
   Reply,
   Session,
   Student,
@@ -83,6 +84,8 @@ type State = {
   assessments: Assessment[];
   /** One mark per student per assessment. */
   grades: Grade[];
+  /** Reusable message bodies the teacher wrote. Built-ins are not in here. */
+  templates: MessageTemplate[];
 
   /**
    * Interface language, and the language students' emails are written in.
@@ -131,6 +134,10 @@ type State = {
     scores: { studentId: string; score: number }[],
   ) => void;
   removeAssessment: (id: string) => void;
+
+  addTemplate: (title: string, body: string) => string;
+  updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) => void;
+  removeTemplate: (id: string) => void;
 
   setLanguage: (language: Language) => void;
   setReminders: (on: boolean, lead?: ReminderLead) => void;
@@ -190,6 +197,9 @@ export type StoreMirror = {
     scores: { studentId: string; score: number }[],
   ) => void;
   deleteAssessment: (id: string) => void;
+  createTemplate: (template: MessageTemplate) => void;
+  updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) => void;
+  deleteTemplate: (id: string) => void;
   createEvent: (event: CalendarEvent) => void;
   updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) => void;
   deleteEvent: (id: string) => void;
@@ -220,6 +230,7 @@ export const useStore = create<State>()(
       events: [],
       assessments: [],
       grades: [],
+      templates: [],
       language: DEFAULT_LANGUAGE,
       languageChosen: false,
       remindersOn: false,
@@ -463,6 +474,25 @@ export const useStore = create<State>()(
         mirror.saveAssessment?.(assessment, scores);
       },
 
+      addTemplate: (title, body) => {
+        const template = { id: uid(), title, body };
+        set((s) => ({ templates: [...s.templates, template] }));
+        mirror.createTemplate?.(template);
+        return template.id;
+      },
+
+      updateTemplate: (id, patch) => {
+        set((s) => ({
+          templates: s.templates.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        }));
+        mirror.updateTemplate?.(id, patch);
+      },
+
+      removeTemplate: (id) => {
+        set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
+        mirror.deleteTemplate?.(id);
+      },
+
       removeAssessment: (id) => {
         set((s) => ({
           assessments: s.assessments.filter((a) => a.id !== id),
@@ -497,6 +527,7 @@ export const useStore = create<State>()(
         languageChosen: s.languageChosen,
         assessments: s.assessments,
         grades: s.grades,
+        templates: s.templates,
         remindersOn: s.remindersOn,
         reminderLead: s.reminderLead,
       }),
@@ -512,6 +543,7 @@ export const useGroups = () => useStore((s) => s.groups);
 export const useStudents = () => useStore((s) => s.students);
 export const useEvents = () => useStore((s) => s.events);
 
+export const useTemplates = () => useStore((s) => s.templates);
 export const useAssessments = () => useStore((s) => s.assessments);
 export const useGrades = () => useStore((s) => s.grades);
 

@@ -128,4 +128,16 @@ export type Grade = {
   notifiedAt?: number;
 };
 
+/**
+ * A reusable message body the teacher wrote.
+ *
+ * The built-in starters are not these: they live in the translation catalogue
+ * so they arrive in the teacher's language. This type is only what they saved.
+ */
+export type MessageTemplate = {
+  id: string;
+  title: string;
+  body: string;
+};
+
 export type { AttendanceStatus };

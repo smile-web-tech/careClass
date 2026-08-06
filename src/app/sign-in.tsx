@@ -221,7 +221,16 @@ const makeStyles = ({ color }: Theme) =>
       maxWidth: 290,
     },
 
-    chipRow: { flexDirection: 'row', gap: 8, marginTop: 26 },
+    // Wraps, because these labels are only short in English. "Toplumlaýyn SMS
+    // we e-poçta" and "30 sekuntda gatnaşyk" side by side are wider than a
+    // phone, and a fixed row simply ran them off the edge of the screen.
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      rowGap: 8,
+      marginTop: 26,
+    },
     chip: {
       backgroundColor: `${ON_DARK}0.1)`,
       borderWidth: 1,
@@ -229,6 +238,9 @@ const makeStyles = ({ color }: Theme) =>
       paddingHorizontal: 12,
       paddingVertical: 7,
       borderRadius: radius.md,
+      // Lets a single very long label shrink rather than push the row wider
+      // than its container, which wrapping alone cannot prevent.
+      flexShrink: 1,
     },
     chipLabel: {
       fontFamily: body[600],

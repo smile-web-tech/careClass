@@ -151,6 +151,8 @@ function RootNavigator() {
         <Stack.Screen name="group/edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/roster" options={{ presentation: 'modal' }} />
         <Stack.Screen name="event/new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="templates" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="about" options={{ presentation: 'modal' }} />
         <Stack.Screen name="message/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="grades/index" />
         <Stack.Screen name="grades/new" options={{ presentation: 'modal' }} />

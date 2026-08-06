@@ -235,6 +235,39 @@ export default function Profile() {
         <Overline style={styles.label}>{t('profile.appearance')}</Overline>
         <ThemePicker />
 
+        <Overline style={styles.label}>{t('messages.templates')}</Overline>
+        <Card style={[styles.group, { overflow: 'hidden' }]}>
+          <ActionRow
+            icon="chat"
+            label={t('template.manage')}
+            hint={t('profile.emailTemplatesHint')}
+            onPress={() => router.push('/templates')}
+          />
+        </Card>
+
+        <Overline style={styles.label}>{t('about.aboutApp')}</Overline>
+        <Card style={[styles.group, { overflow: 'hidden' }]}>
+          <ActionRow
+            icon="info"
+            label={t('about.aboutApp')}
+            hint={t('about.aboutHint')}
+            onPress={() => router.push('/about')}
+          />
+          <Divider inset={58} />
+          <ActionRow
+            icon="mail"
+            label={t('about.support')}
+            hint={t('about.supportHint')}
+            onPress={() =>
+              Linking.openURL(
+                `mailto:smiletechweb@gmail.com?subject=${encodeURIComponent(
+                  t('about.supportSubject'),
+                )}`,
+              ).catch(() => showAlert(t('error.cannotOpen'), t('error.noAppFor', { what: 'email' }), 'danger'))
+            }
+          />
+        </Card>
+
         <Overline style={styles.label}>{t('profile.data')}</Overline>
         <Card style={styles.group}>
           <ActionRow

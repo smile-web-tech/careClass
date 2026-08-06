@@ -9,7 +9,8 @@ import { PageHeading, Screen, useTabInset } from '@/components/layout';
 import { Avatar, Card, EmptyState, IconButton, initialsOf, Press, Txt } from '@/components/ui';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Group, Student } from '@/data/types';
-import { translateNow, useT } from '@/i18n/useT';
+import type { TranslationKey } from '@/i18n';
+import { useT } from '@/i18n/useT';
 import { smsNumber } from '@/lib/contact';
 import { at, countdownTo, longDate, relativeSlot } from '@/lib/date';
 import { nextSessionForGroup, nextSessionOverall, roomLabel } from '@/lib/schedule';
@@ -69,7 +70,7 @@ export default function Home() {
         showsVerticalScrollIndicator={false}>
         <PageHeading
           eyebrow={longDate(now)}
-          title={`${greetingFor(now)}, ${teacherName.split(' ')[0]}`}
+          title={`${greetingFor(now, t)}, ${teacherName.split(' ')[0]}`}
           trailing={
             <Press
               onPress={() => router.push('/profile')}
@@ -184,11 +185,19 @@ export default function Home() {
   );
 }
 
-function greetingFor(d: Date) {
+/**
+ * The greeting, resolved through the caller's `t`.
+ *
+ * It used to call `translateNow`, which reads the current language but does not
+ * subscribe to it — so switching language left the greeting in the old one
+ * until something else happened to re-render the screen. Taking `t` puts it on
+ * the same subscription as every other string here.
+ */
+function greetingFor(d: Date, t: (key: TranslationKey) => string) {
   const h = d.getHours();
-  if (h < 12) return translateNow('home.goodMorning');
-  if (h < 18) return translateNow('home.goodAfternoon');
-  return translateNow('home.goodEvening');
+  if (h < 12) return t('home.goodMorning');
+  if (h < 18) return t('home.goodAfternoon');
+  return t('home.goodEvening');
 }
 
 /* -------------------------------------------------------------------------- */

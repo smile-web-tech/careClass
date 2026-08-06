@@ -21,7 +21,7 @@ import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'reac
 
 import { Icon, type IconName } from '@/components/Icon';
 import { Press } from '@/components/ui';
-import { translateNow } from '@/i18n/useT';
+import { translateNow, useT } from '@/i18n/useT';
 import { describeError } from '@/lib/errors';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
@@ -130,6 +130,9 @@ const TONE_ICON: Record<DialogTone, IconName> = {
 /** Mounted once, at the root. Everything above talks to this. */
 export function DialogHost() {
   const { color, status, shadow, scheme } = useTheme();
+  // `useT`, not `translateNow`: this one is resolved during render, so it has to
+  // subscribe to the language rather than merely read it.
+  const t = useT();
   const styles = useThemedStyles(makeStyles);
 
   // Heavier than the app's shared `color.scrim`, which is tuned for the time
@@ -186,7 +189,7 @@ export function DialogHost() {
   const { title, message, tone = 'info', dismissable = true } = current.request;
   const actions: DialogAction[] = current.request.actions?.length
     ? current.request.actions
-    : [{ label: translateNow('common.ok'), intent: 'primary' }];
+    : [{ label: t('common.ok'), intent: 'primary' }];
 
   const toneSkin = {
     info: { tint: color.primaryTint, fg: color.primary },
