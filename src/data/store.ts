@@ -6,11 +6,13 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { seedGroups, seedMessages, seedReplies, seedStudents, teacher } from '@/data/seed';
 import type {
+  Assessment,
   AttendanceRecord,
   AttendanceStatus,
   Audience,
   CalendarEvent,
   Channel,
+  Grade,
   Group,
   Message,
   Reply,
@@ -83,6 +85,10 @@ type State = {
   replies: Reply[];
   /** The teacher's own calendar entries — not class sessions. */
   events: CalendarEvent[];
+  /** Everything a group has sat, newest first. */
+  assessments: Assessment[];
+  /** One mark per student per assessment. */
+  grades: Grade[];
 
   /** Local class reminders: off, or how many minutes before the start. */
   remindersOn: boolean;
@@ -112,6 +118,15 @@ type State = {
     announcement?: boolean;
   }) => void;
   markRepliesRead: () => void;
+  markReplyRead: (id: string) => void;
+  removeReply: (id: string) => void;
+  removeMessage: (id: string) => void;
+
+  saveAssessment: (
+    assessment: Assessment,
+    scores: { studentId: string; score: number }[],
+  ) => void;
+  removeAssessment: (id: string) => void;
 
   setReminders: (on: boolean, lead?: ReminderLead) => void;
 
@@ -161,6 +176,14 @@ export type StoreMirror = {
     announcement?: boolean;
   }) => void;
   markRepliesRead: () => void;
+  markReplyRead: (id: string) => void;
+  deleteReply: (id: string) => void;
+  deleteMessage: (id: string) => void;
+  saveAssessment: (
+    assessment: Assessment,
+    scores: { studentId: string; score: number }[],
+  ) => void;
+  deleteAssessment: (id: string) => void;
   createEvent: (event: CalendarEvent) => void;
   updateEvent: (id: string, patch: Partial<Omit<CalendarEvent, 'id'>>) => void;
   deleteEvent: (id: string) => void;
@@ -186,6 +209,8 @@ export const useStore = create<State>()(
       messages: seedMessages,
       replies: seedReplies,
       events: [],
+      assessments: [],
+      grades: [],
       remindersOn: false,
       reminderLead: 15,
 
@@ -358,6 +383,75 @@ export const useStore = create<State>()(
         }));
         mirror.markRepliesRead?.();
       },
+
+      /**
+       * Reading one reply marks that one read.
+       *
+       * Opening the tab used to mark every reply read, which meant a teacher
+       * glancing at the badge lost the list of what they had not answered yet.
+       * The unread mark is only useful if it survives being looked at.
+       */
+      markReplyRead: (id) => {
+        if (!get().replies.some((r) => r.id === id && r.unread)) return;
+        set((s) => ({
+          replies: s.replies.map((r) => (r.id === id ? { ...r, unread: false } : r)),
+        }));
+        mirror.markReplyRead?.(id);
+      },
+
+      removeReply: (id) => {
+        set((s) => ({ replies: s.replies.filter((r) => r.id !== id) }));
+        mirror.deleteReply?.(id);
+      },
+
+      removeMessage: (id) => {
+        set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
+        mirror.deleteMessage?.(id);
+      },
+
+      /**
+       * Save an assessment and its marks together.
+       *
+       * Scores replace whatever was there for the same student, matching the
+       * upsert on the server — a teacher re-entering a mark is correcting it.
+       */
+      saveAssessment: (assessment, scores) => {
+        set((s) => {
+          const others = s.grades.filter((g) => g.assessmentId !== assessment.id);
+          const existing = new Map(
+            s.grades.filter((g) => g.assessmentId === assessment.id).map((g) => [g.studentId, g]),
+          );
+          return {
+            assessments: [
+              assessment,
+              ...s.assessments.filter((a) => a.id !== assessment.id),
+            ],
+            grades: [
+              ...others,
+              ...scores.map(({ studentId, score }) => {
+                const prior = existing.get(studentId);
+                return {
+                  id: prior?.id ?? uid(),
+                  assessmentId: assessment.id,
+                  studentId,
+                  score,
+                  // A corrected mark has not been reported at its new value.
+                  notifiedAt: prior?.score === score ? prior?.notifiedAt : undefined,
+                };
+              }),
+            ],
+          };
+        });
+        mirror.saveAssessment?.(assessment, scores);
+      },
+
+      removeAssessment: (id) => {
+        set((s) => ({
+          assessments: s.assessments.filter((a) => a.id !== id),
+          grades: s.grades.filter((g) => g.assessmentId !== id),
+        }));
+        mirror.deleteAssessment?.(id);
+      },
     }),
     {
       name: 'classcare-v1',
@@ -376,6 +470,8 @@ export const useStore = create<State>()(
         messages: s.messages,
         replies: s.replies,
         events: s.events,
+        assessments: s.assessments,
+        grades: s.grades,
         remindersOn: s.remindersOn,
         reminderLead: s.reminderLead,
       }),
@@ -390,6 +486,54 @@ export const useStore = create<State>()(
 export const useGroups = () => useStore((s) => s.groups);
 export const useStudents = () => useStore((s) => s.students);
 export const useEvents = () => useStore((s) => s.events);
+
+export const useAssessments = () => useStore((s) => s.assessments);
+export const useGrades = () => useStore((s) => s.grades);
+
+/** How a percentage reads to a teacher scanning a list. */
+export type GradeStanding = 'excellent' | 'good' | 'watch' | 'atRisk';
+
+export function standingOf(percent: number): GradeStanding {
+  if (percent >= 85) return 'excellent';
+  if (percent >= 70) return 'good';
+  if (percent >= 50) return 'watch';
+  return 'atRisk';
+}
+
+/**
+ * A student's average across assessments, as a percentage.
+ *
+ * Percentage rather than raw marks, because a quiz out of 20 and a final out of
+ * 100 cannot be averaged as numbers without silently weighting the final five
+ * times heavier. Each mark is normalised against its own `maxScore` first.
+ *
+ * Returns null when there is nothing to average — which the UI must show as
+ * "not graded yet" rather than as a zero, since those mean opposite things.
+ */
+export function averagePercent(
+  studentId: string,
+  grades: Grade[],
+  assessments: Assessment[],
+  filter?: { groupId?: string; kind?: Assessment['kind'] },
+): number | null {
+  const byId = new Map(assessments.map((a) => [a.id, a]));
+  const mine = grades.filter((g) => {
+    if (g.studentId !== studentId) return false;
+    const a = byId.get(g.assessmentId);
+    if (!a) return false;
+    if (filter?.groupId && a.groupId !== filter.groupId) return false;
+    if (filter?.kind && a.kind !== filter.kind) return false;
+    return true;
+  });
+
+  if (!mine.length) return null;
+
+  const total = mine.reduce((sum, g) => {
+    const a = byId.get(g.assessmentId)!;
+    return sum + (g.score / a.maxScore) * 100;
+  }, 0);
+  return Math.round((total / mine.length) * 10) / 10;
+}
 
 export const useGroup = (id?: string) => useStore((s) => s.groups.find((g) => g.id === id));
 

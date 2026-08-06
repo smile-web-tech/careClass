@@ -59,6 +59,14 @@ export default function Students() {
             </Text>
           </View>
           <IconButton
+            name="check"
+            iconSize={18}
+            fg={color.inkSoft}
+            accessibilityLabel="Grades"
+            onPress={() => router.push('/grades')}
+            style={{ marginRight: 8 }}
+          />
+          <IconButton
             name="plusLarge"
             iconSize={19}
             tint={color.primary}

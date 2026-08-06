@@ -131,6 +131,16 @@ export default function GroupDetail() {
           <Button grow variant="outline" icon="check" label="Attendance" onPress={openAttendance} />
         </View>
 
+        <View style={styles.actionRow}>
+          <Button
+            grow
+            variant="outline"
+            icon="check"
+            label="Grades"
+            onPress={() => router.push(`/grades?group=${group.id}`)}
+          />
+        </View>
+
         <View style={styles.rosterHead}>
           <Text style={[text.section, styles.ink]}>Students</Text>
           <Press

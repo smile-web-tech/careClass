@@ -1,9 +1,11 @@
 import type {
+  Assessment,
   AttendanceRecord,
   AttendanceStatus,
   Audience,
   CalendarEvent,
   Channel,
+  Grade,
   Group,
   Message,
   Reply,
@@ -11,8 +13,10 @@ import type {
   Weekday,
 } from '@/data/types';
 import type {
+  AssessmentRow,
   AttendanceRow,
   CalendarEventRow,
+  GradeRow,
   GroupRow,
   GroupSlotRow,
   MessageRow,
@@ -674,6 +678,138 @@ export async function markRepliesRead() {
       .is('read_at', null)
       .select(),
   );
+}
+
+/** Mark exactly one reply read — opening it is the receipt, not opening the tab. */
+export async function markReplyRead(id: string) {
+  unwrap(
+    await supabase
+      .from('replies')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', id)
+      .is('read_at', null)
+      .select(),
+  );
+}
+
+export async function deleteReply(id: string) {
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('replies').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+/**
+ * Remove a sent message from the history.
+ *
+ * `message_groups` and `message_deliveries` both cascade from `messages`, so
+ * this takes the delivery receipts with it. Nothing is unsent — the SMS and the
+ * email have already left — this only clears the teacher's own record of it.
+ */
+export async function deleteMessage(id: string) {
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('messages').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Grading                                                                    */
+/* -------------------------------------------------------------------------- */
+
+const toAssessment = (row: AssessmentRow): Assessment => ({
+  id: row.id,
+  groupId: row.group_id,
+  kind: row.kind,
+  title: row.title,
+  maxScore: Number(row.max_score),
+  takenOn: row.taken_on,
+});
+
+const toGrade = (row: GradeRow): Grade => ({
+  id: row.id,
+  assessmentId: row.assessment_id,
+  studentId: row.student_id,
+  // `numeric` arrives as a string over PostgREST; a string here would sort and
+  // average as text, which is the kind of bug that shows up as 9 > 80.
+  score: Number(row.score),
+  notifiedAt: row.notified_at ? new Date(row.notified_at).getTime() : undefined,
+});
+
+export async function fetchAssessments(): Promise<Assessment[]> {
+  const rows = unwrap(
+    await supabase.from('assessments').select('*').order('taken_on', { ascending: false }),
+  ) as AssessmentRow[];
+  return rows.map(toAssessment);
+}
+
+export async function fetchGrades(): Promise<Grade[]> {
+  const rows = unwrap(await supabase.from('grades').select('*')) as GradeRow[];
+  return rows.map(toGrade);
+}
+
+/**
+ * Save an assessment and its marks in one go.
+ *
+ * Upserted on `(assessment_id, student_id)`, which is what turns re-entering a
+ * mark into a correction rather than a second row. Teachers fix typos.
+ */
+export async function saveAssessment(
+  assessment: Assessment,
+  scores: { studentId: string; score: number }[],
+): Promise<void> {
+  const teacherId = await requireUser();
+
+  unwrap(
+    await supabase
+      .from('assessments')
+      .upsert({
+        id: assessment.id,
+        teacher_id: teacherId,
+        group_id: assessment.groupId,
+        kind: assessment.kind,
+        title: assessment.title,
+        max_score: assessment.maxScore,
+        taken_on: assessment.takenOn,
+      })
+      .select(),
+  );
+
+  if (!scores.length) return;
+
+  unwrap(
+    await supabase
+      .from('grades')
+      .upsert(
+        scores.map((s) => ({
+          teacher_id: teacherId,
+          assessment_id: assessment.id,
+          student_id: s.studentId,
+          score: s.score,
+        })),
+        { onConflict: 'assessment_id,student_id' },
+      )
+      .select(),
+  );
+}
+
+export async function deleteAssessment(id: string) {
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('assessments').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+export type GradeReport = {
+  assessmentId: string;
+  notified: number;
+  failed: number;
+  skipped: number;
+  errors: string[];
+};
+
+/** Tell each graded student (or their guardian) what they scored. */
+export async function sendGrades(input: {
+  assessmentId: string;
+  audience: Audience;
+}): Promise<GradeReport> {
+  const { data, error } = await supabase.functions.invoke('send-grades', { body: input });
+  if (error) throw new Error(await functionErrorMessage(error));
+  return data as GradeReport;
 }
 
 /* -------------------------------------------------------------------------- */

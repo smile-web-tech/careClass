@@ -9,6 +9,7 @@ export type AttendanceStatusRow = 'present' | 'late' | 'absent';
 export type MessageAudienceRow = 'students' | 'parents' | 'both';
 export type MessageChannelRow = 'sms' | 'email' | 'push';
 export type DeliveryStateRow = 'queued' | 'sent' | 'delivered' | 'failed';
+export type AssessmentKindRow = 'quiz' | 'exam' | 'final';
 export type GroupAccentRow =
   | 'blue'
   | 'teal'
@@ -150,6 +151,29 @@ export type CalendarEventRow = {
   updated_at: string;
 };
 
+export type AssessmentRow = {
+  id: string;
+  teacher_id: string;
+  group_id: string;
+  kind: AssessmentKindRow;
+  title: string;
+  max_score: number;
+  taken_on: string;
+  created_at: string;
+};
+
+export type GradeRow = {
+  id: string;
+  teacher_id: string;
+  assessment_id: string;
+  student_id: string;
+  score: number;
+  /** Null until the student has been told. */
+  notified_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -164,6 +188,8 @@ export type Database = {
       message_deliveries: Row<MessageDeliveryRow>;
       replies: Row<ReplyRow>;
       calendar_events: Row<CalendarEventRow>;
+      assessments: Row<AssessmentRow>;
+      grades: Row<GradeRow>;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -173,6 +199,7 @@ export type Database = {
       message_channel: MessageChannelRow;
       delivery_state: DeliveryStateRow;
       group_accent: GroupAccentRow;
+      assessment_kind: AssessmentKindRow;
     };
     CompositeTypes: Record<string, never>;
   };

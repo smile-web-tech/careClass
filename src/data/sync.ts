@@ -1,7 +1,7 @@
 import * as api from '@/data/api';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
 import { useSyncStatus } from '@/data/syncStatus';
-import type { AttendanceStatus, CalendarEvent, Group, Student } from '@/data/types';
+import type { Assessment, AttendanceStatus, CalendarEvent, Group, Student } from '@/data/types';
 import { describeError, isOfflineError } from '@/lib/errors';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
@@ -184,14 +184,17 @@ export async function retryNow() {
 export async function hydrate() {
   if (!hasSupabase) return;
 
-  const [teacher, groups, students, attendance, messages, replies] = await Promise.all([
-    api.fetchTeacher(),
-    api.fetchGroups(),
-    api.fetchStudents(),
-    api.fetchAttendance(),
-    api.fetchMessages(),
-    api.fetchReplies(),
-  ]);
+  const [teacher, groups, students, attendance, messages, replies, assessments, grades] =
+    await Promise.all([
+      api.fetchTeacher(),
+      api.fetchGroups(),
+      api.fetchStudents(),
+      api.fetchAttendance(),
+      api.fetchMessages(),
+      api.fetchReplies(),
+      api.fetchAssessments(),
+      api.fetchGrades(),
+    ]);
 
   // Fetched separately and tolerantly: `calendar_events` arrived in migration
   // 0002, so a project still on 0001 returns "relation does not exist". Inside
@@ -210,6 +213,8 @@ export async function hydrate() {
     attendance,
     messages,
     replies,
+    assessments,
+    grades,
     // Keep whatever is already local when the table is not there yet.
     ...(events ? { events } : {}),
     ...(teacher && {
@@ -255,6 +260,17 @@ export const remote: StoreMirror = {
     }, 'Your message'),
 
   markRepliesRead: () => enqueue(() => api.markRepliesRead(), 'Marking replies read'),
+
+  markReplyRead: (id: string) => enqueue(() => api.markReplyRead(id), 'Marking a reply read'),
+
+  deleteReply: (id: string) => enqueue(() => api.deleteReply(id), 'Deleting the reply'),
+
+  deleteMessage: (id: string) => enqueue(() => api.deleteMessage(id), 'Deleting the message'),
+
+  saveAssessment: (assessment: Assessment, scores: { studentId: string; score: number }[]) =>
+    enqueue(() => api.saveAssessment(assessment, scores), 'Grades'),
+
+  deleteAssessment: (id: string) => enqueue(() => api.deleteAssessment(id), 'Deleting the grades'),
 
   createEvent: (event: CalendarEvent) => enqueue(() => api.createEvent(event), 'New event'),
 

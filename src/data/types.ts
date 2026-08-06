@@ -98,4 +98,34 @@ export type Reply = {
   unread: boolean;
 };
 
+/* -------------------------------------------------------------------------- */
+/* Grading                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type AssessmentKind = 'quiz' | 'exam' | 'final';
+
+/**
+ * Something a group sat. Scores are stored against it rather than as bare
+ * numbers on the student, because "17" only means something next to the
+ * `maxScore` it was out of.
+ */
+export type Assessment = {
+  id: string;
+  groupId: string;
+  kind: AssessmentKind;
+  title: string;
+  maxScore: number;
+  /** `YYYY-MM-DD`, the same key format the schedule uses. */
+  takenOn: string;
+};
+
+export type Grade = {
+  id: string;
+  assessmentId: string;
+  studentId: string;
+  score: number;
+  /** Epoch ms when the student was told, or undefined if they have not been. */
+  notifiedAt?: number;
+};
+
 export type { AttendanceStatus };

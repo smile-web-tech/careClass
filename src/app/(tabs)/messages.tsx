@@ -1,10 +1,11 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
+import { SwipeToDelete } from '@/components/SwipeToDelete';
 import { Avatar, Badge, Card, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
 import { refreshInbox } from '@/data/sync';
@@ -30,7 +31,8 @@ export default function Messages() {
 
   const messages = useStore((s) => s.messages);
   const replies = useStore((s) => s.replies);
-  const markRepliesRead = useStore((s) => s.markRepliesRead);
+  const removeMessage = useStore((s) => s.removeMessage);
+  const removeReply = useStore((s) => s.removeReply);
 
   const [tab, setTab] = useState<'sent' | 'replies'>('sent');
   const [refreshing, setRefreshing] = useState(false);
@@ -55,15 +57,6 @@ export default function Messages() {
       setRefreshing(false);
     }
   }, []);
-
-  // Opening the tab is the read receipt — matches how the badge behaves
-  // everywhere else in the app.
-  useEffect(() => {
-    if (tab === 'replies' && unread > 0) {
-      const t = setTimeout(markRepliesRead, 900);
-      return () => clearTimeout(t);
-    }
-  }, [markRepliesRead, tab, unread]);
 
   return (
     <Screen>
@@ -108,12 +101,31 @@ export default function Messages() {
         showsVerticalScrollIndicator={false}>
         {tab === 'sent' ? (
           messages.length ? (
-            messages.map((m) => <SentCard key={m.id} message={m} />)
+            messages.map((m) => (
+              <SwipeToDelete
+                key={m.id}
+                what="this message"
+                message="This removes it from your history. Messages already sent cannot be recalled."
+                onDelete={() => removeMessage(m.id)}>
+                <Press onPress={() => router.push(`/message/${m.id}?kind=sent`)}>
+                  <SentCard message={m} />
+                </Press>
+              </SwipeToDelete>
+            ))
           ) : (
             <EmptyState title="Nothing sent yet" hint="Your outbox will show up here" />
           )
         ) : replies.length ? (
-          replies.map((r) => <ReplyCard key={r.id} reply={r} />)
+          replies.map((r) => (
+            <SwipeToDelete
+              key={r.id}
+              what={`${r.authorName}'s reply`}
+              onDelete={() => removeReply(r.id)}>
+              <Press onPress={() => router.push(`/message/${r.id}?kind=reply`)}>
+                <ReplyCard reply={r} />
+              </Press>
+            </SwipeToDelete>
+          ))
         ) : (
           <EmptyState title="No replies" hint="Answers land here as they arrive" />
         )}

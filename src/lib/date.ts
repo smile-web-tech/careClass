@@ -78,6 +78,20 @@ export const longDate = (d: Date) => `${dowLong(d)} ${d.getDate()} ${monthLong(d
 /** "Fri 31 Jul" — compact form used in nav bars and session lists. */
 export const shortDate = (d: Date) => `${dowShort(d)} ${d.getDate()} ${monthShort(d)}`;
 
+/**
+ * "Fri 31 Jul at 16:05" — for a single item's own screen.
+ *
+ * A list shows "2h ago", which is the right unit while scanning. Once the
+ * teacher has opened one thing, the exact time is what they need — usually to
+ * work out whether it arrived before or after a lesson.
+ */
+export const longDateTime = (ts: number) => {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${shortDate(d)} at ${hh}:${mm}`;
+};
+
 /** Minutes since local midnight for an `HH:mm` string. */
 export function minutesOf(hhmm: string) {
   const [h, m] = hhmm.split(':').map(Number);
