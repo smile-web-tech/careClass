@@ -332,15 +332,6 @@ async function sendEmail(opts: {
   return String(body?.id ?? '');
 }
 
-async function sendPush(tokens: string[], title: string, text: string) {
-  if (!tokens.length) return;
-  await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(tokens.map((to) => ({ to, title, body: text, sound: 'default' }))),
-  });
-}
-
 /* -------------------------------------------------------------------------- */
 /* Handler                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -626,15 +617,11 @@ Deno.serve(async (req) => {
   // Push goes to devices, which ClassCare only has for the teacher today —
   // a student-facing app is explicitly out of scope, so this is a no-op until
   // guardians opt into the web push channel.
-  const pushRows = (deliveries ?? []).filter((d) => d.channel === 'push');
-  if (pushRows.length) {
-    await sendPush([], 'ClassCare', template);
-    await db
-      .from('message_deliveries')
-      .update({ state: 'sent', updated_at: new Date().toISOString() })
-      .in('id', pushRows.map((d) => d.id));
-    sent += pushRows.length;
-  }
+  // No push branch here any more. ClassCare is the teacher's app; students and
+  // parents never install it, so there has never been a device to push to. The
+  // old code called a stub with an empty token list and then marked the rows
+  // 'sent', which reported delivery to nobody. The composer no longer offers
+  // the channel either.
 
   return json({
     messageId: message.id,

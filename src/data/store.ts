@@ -685,7 +685,11 @@ export function attendanceRate(
         if (!record && !invent) continue; // Never marked — not evidence of anything.
         sessions++;
         for (const sid of studentIds) {
-          const mark = record?.[sid] ?? historicMark(sid, key);
+          // A register can exist without an entry for this student — they
+          // joined after it was taken. Falling back to `historicMark` there
+          // invented a mark for a real person on a real date.
+          const mark = record?.[sid] ?? (invent ? historicMark(sid, key) : undefined);
+          if (!mark) continue;
           total++;
           if (mark !== 'absent') hits++;
         }
@@ -796,6 +800,100 @@ export function recentSessionsFor(student: Student, limit = 3) {
   }
 
   return out.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, limit);
+}
+
+/**
+ * Keys of every session of these groups that has already finished, within the
+ * trailing window. Derived from the schedule alone, so it answers "how many
+ * classes have there been" whether or not anyone took a register.
+ */
+function pastSessionKeys(groups: Group[], groupIds: string[], weeks: number, now = new Date()) {
+  const keys: string[] = [];
+  for (const g of groups) {
+    if (!groupIds.includes(g.id)) continue;
+    for (let d = 0; d < weeks * 7; d++) {
+      const day = new Date(now);
+      day.setDate(day.getDate() - d);
+      for (const slot of g.slots) {
+        if (slot.day !== day.getDay()) continue;
+        const dateKey = toKey(day);
+        if (at(dateKey, slot.end).getTime() > now.getTime()) continue;
+        keys.push(`${g.id}@${dateKey}#${slot.start}`);
+      }
+    }
+  }
+  return keys;
+}
+
+/**
+ * The three numbers on a student's profile, recomputed whenever their sources
+ * change.
+ *
+ * A hook rather than a plain function on purpose. The previous code called
+ * `attendanceRate()` inside a `useMemo` keyed on the student object, but that
+ * function reads the store imperatively: marking a register or entering a grade
+ * changes neither the student nor their identity, so the memo never
+ * invalidated and the tiles kept whatever they showed when the screen opened.
+ *
+ * The three numbers answer deliberately different questions:
+ *
+ *  - `sessions` — classes actually held. Schedule-derived, so it is a real
+ *    number from the first week, not a zero waiting on paperwork.
+ *  - `rate` — attendance across the sessions someone marked. Null when none
+ *    were: an unmarked register is missing evidence, not a 0%.
+ *  - `average` — marks normalised per assessment (see `averagePercent`), never
+ *    the legacy `students.avg_score` column, which the grading feature does not
+ *    write and which therefore sat empty on every real account.
+ */
+export function useStudentStats(student?: Student, weeks = 8) {
+  const groups = useStore((s) => s.groups);
+  const attendance = useStore((s) => s.attendance);
+  const grades = useStore((s) => s.grades);
+  const assessments = useStore((s) => s.assessments);
+
+  return useMemo(() => {
+    if (!student) return { rate: null, sessions: 0, marked: 0, average: null };
+
+    const keys = pastSessionKeys(groups, student.groupIds, weeks);
+    let present = 0;
+    let marked = 0;
+
+    for (const key of keys) {
+      // Only this student's own mark counts. A register that predates them
+      // simply has no entry, and inventing one would show a teacher absences
+      // that never happened.
+      const mark = attendance[key]?.[student.id];
+      if (!mark) continue;
+      marked++;
+      if (mark !== 'absent') present++;
+    }
+
+    return {
+      rate: marked ? Math.round((present / marked) * 100) : null,
+      sessions: keys.length,
+      marked,
+      average: averagePercent(student.id, grades, assessments),
+    };
+  }, [student, groups, attendance, grades, assessments, weeks]);
+}
+
+/**
+ * Recent marked sessions for a student, as a hook.
+ *
+ * Same staleness problem as the stats above: `recentSessionsFor` reads the
+ * store imperatively, so the list did not refresh after taking a register.
+ */
+export function useRecentSessions(student?: Student, limit = 3) {
+  const attendance = useStore((s) => s.attendance);
+  const groups = useStore((s) => s.groups);
+
+  return useMemo(
+    () => (student ? recentSessionsFor(student, limit) : []),
+    // `recentSessionsFor` reads these from the store; they are dependencies
+    // even though they are not named in the call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [student, limit, attendance, groups],
+  );
 }
 
 /** Absences for a student in a group over the trailing `weeks` — the roster badge. */

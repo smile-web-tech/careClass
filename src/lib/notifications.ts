@@ -20,6 +20,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import type { Group } from '@/data/types';
+import { translateNow } from '@/i18n/useT';
 import { at, toKey } from '@/lib/date';
 import { sessionsOn } from '@/lib/schedule';
 
@@ -69,11 +70,32 @@ export async function notificationPermissionStatus(): Promise<'granted' | 'denie
   return canAskAgain ? 'undetermined' : 'denied';
 }
 
-/** Android shows nothing without a channel. Safe to call repeatedly. */
+/**
+ * Android shows nothing without a channel. Safe to call repeatedly.
+ *
+ * Two channels, not one: a teacher who mutes class reminders during a holiday
+ * still wants to know a parent wrote back, and Android only lets them make that
+ * distinction if the app made it first.
+ */
 export async function ensureAndroidChannel() {
   if (Platform.OS !== 'android') return;
+
+  // Re-registering an existing id updates its name in place, which is how a
+  // language change reaches Android's own settings screen. The id must never
+  // change: Android treats a new id as a new channel, and the teacher's
+  // mute-this-one choice would silently reset.
   await Notifications.setNotificationChannelAsync('classes', {
-    name: 'Class reminders',
+    name: translateNow('notif.channelClasses'),
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#2457E8',
+  });
+
+  // The id here must match `channel_id` in `supabase/functions/_shared/fcm.ts`;
+  // Android 8+ silently drops a notification naming a channel that does not
+  // exist, which looks exactly like push being broken.
+  await Notifications.setNotificationChannelAsync('replies', {
+    name: translateNow('notif.channelReplies'),
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#2457E8',
@@ -114,13 +136,20 @@ export async function rescheduleClassReminders(groups: Group[], lead: ReminderLe
   planned.sort((a, b) => a.when.getTime() - b.when.getTime());
 
   for (const p of planned.slice(0, MAX_SCHEDULED)) {
+    // The text is frozen into the OS at scheduling time, not read when it
+    // fires — which is why switching language has to re-plan the whole set.
+    const when =
+      lead === 0
+        ? translateNow('notif.startingNow')
+        : translateNow('notif.startsIn', { min: lead, time: p.start });
+
     await Notifications.scheduleNotificationAsync({
       content: {
         title: p.group.name,
-        body:
-          lead === 0
-            ? `Starting now · ${p.group.room}`
-            : `Starts in ${lead} min at ${p.start} · ${p.group.room}`,
+        // A room is optional in practice even though the type says otherwise:
+        // an online class has none, and " · undefined" in a notification is
+        // the kind of detail that makes an app look unfinished.
+        body: p.group.room?.trim() ? `${when} · ${p.group.room.trim()}` : when,
         data: { kind: REMINDER_KIND, groupId: p.group.id, start: p.start },
         ...(Platform.OS === 'android' ? { channelId: 'classes' } : {}),
       },
@@ -169,5 +198,32 @@ export async function getDevicePushToken(): Promise<string | null> {
   } catch {
     // No FCM credentials in the build yet, or Play Services unavailable.
     return null;
+  }
+}
+
+/**
+ * Register this device for server-sent push, and store the token.
+ *
+ * Called after sign-in and whenever notification permission is granted. Safe to
+ * call repeatedly: FCM returns the same token until it rotates, and writing an
+ * unchanged value costs one cheap update.
+ *
+ * Everything here fails soft. A build without FCM credentials, a device without
+ * Play Services, a teacher who declined notifications — none of those are
+ * errors worth interrupting anyone over, and all of them simply mean no push.
+ */
+export async function registerForPush(
+  save: (token: string) => Promise<unknown>,
+): Promise<boolean> {
+  try {
+    const token = await getDevicePushToken();
+    if (!token) return false;
+
+    await ensureAndroidChannel();
+    await save(token);
+    return true;
+  } catch (e) {
+    console.warn('[classcare] push registration skipped:', e instanceof Error ? e.message : e);
+    return false;
   }
 }

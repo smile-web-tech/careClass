@@ -16,6 +16,7 @@ import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import {
   cancelClassReminders,
+  registerForPush,
   requestNotificationPermission,
   rescheduleClassReminders,
   scheduledReminderCount,
@@ -382,6 +383,10 @@ function ReminderSettings() {
           return;
         }
         setBlocked(false);
+        // Permission is the gate on getting a token at all, so this is the
+        // first moment registration can succeed for a teacher who declined
+        // at some earlier point.
+        void registerForPush((pushToken) => updateTeacher({ pushToken }));
       }
       setReminders(nextOn, nextLead);
       if (nextOn) await rescheduleClassReminders(groups, nextLead);

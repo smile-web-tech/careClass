@@ -20,6 +20,8 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import { sendPush } from '../_shared/fcm.ts';
+
 type InboundEvent = {
   type: string;
   data: {
@@ -250,12 +252,13 @@ Deno.serve(async (req) => {
     student_id: string | null;
     recipient: string;
     message_id: string;
+    destination: string | null;
   } | null = null;
 
   if (deliveryId) {
     const { data } = await db
       .from('message_deliveries')
-      .select('teacher_id, student_id, recipient, message_id')
+      .select('teacher_id, student_id, recipient, message_id, destination')
       .eq('id', deliveryId)
       .maybeSingle();
     delivery = data;
@@ -265,7 +268,7 @@ Deno.serve(async (req) => {
     // Most recent email delivery to this address, whoever it belonged to.
     const { data } = await db
       .from('message_deliveries')
-      .select('teacher_id, student_id, recipient, message_id')
+      .select('teacher_id, student_id, recipient, message_id, destination')
       .eq('channel', 'email')
       .ilike('destination', authorAddress)
       .order('updated_at', { ascending: false })
@@ -286,7 +289,11 @@ Deno.serve(async (req) => {
           .eq('id', delivery.student_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    db.from('teachers').select('email').eq('id', delivery.teacher_id).maybeSingle(),
+    db
+      .from('teachers')
+      .select('email, push_token, language')
+      .eq('id', delivery.teacher_id)
+      .maybeSingle(),
     db
       .from('message_groups')
       .select('groups(name)')
@@ -297,9 +304,31 @@ Deno.serve(async (req) => {
 
   const fromParent = delivery.recipient === 'parent';
   const studentName = student?.name ?? '';
-  const authorName = fromParent
+
+  /*
+   * Only claim the reply came from the parent when it actually did.
+   *
+   * The `reply-<uuid>@` token identifies the delivery, not the sender. Anyone
+   * who learns that address — a forwarded email, a shared mailbox — could
+   * otherwise write into this teacher's inbox under the parent's name, and the
+   * teacher would have no way to tell. A UUID is unguessable, so this is not a
+   * broadcast risk, but "unguessable" is not "authenticated".
+   *
+   * The reply is still recorded either way. Silently dropping a mismatch would
+   * lose the legitimate case that motivates this — a parent answering from a
+   * second address, which is common and looks identical from here. Showing the
+   * address it really came from lets the teacher judge.
+   */
+  const expected = (delivery.destination ?? '').trim().toLowerCase();
+  const senderMatches = !expected || !authorAddress || expected === authorAddress;
+
+  const claimedName = fromParent
     ? (student?.parent_name ?? (studentName ? `Parent of ${studentName}` : 'Parent'))
     : studentName || authorAddress;
+
+  const authorName = senderMatches
+    ? claimedName
+    : `${authorAddress} (not ${claimedName}'s usual address)`;
 
   const groupName =
     (messageGroup as { groups?: { name?: string } | null } | null)?.groups?.name ?? '';
@@ -339,6 +368,34 @@ Deno.serve(async (req) => {
       subject: event.data.subject ?? '',
       body,
     });
+  }
+
+  // Notify the phone. This is the whole point of the push feature: only the
+  // server knows a parent wrote back, and the teacher is usually not looking at
+  // the app when they do.
+  if (teacher?.push_token) {
+    try {
+      const { stale } = await sendPush({
+        token: teacher.push_token,
+        title: authorName,
+        // First line only. A notification is a summons, not the message.
+        body: body.split('\n')[0].slice(0, 140),
+        data: { kind: 'reply', teacherId: delivery.teacher_id },
+      });
+
+      // FCM says the app is gone or the token rotated. Clear it, or every
+      // future reply retries a token that can never work again.
+      if (stale.length) {
+        await db
+          .from('teachers')
+          .update({ push_token: null })
+          .eq('id', delivery.teacher_id);
+      }
+    } catch (e) {
+      // The reply is recorded and forwarded; a failed notification must not
+      // make this webhook non-2xx, because Resend would redeliver the lot.
+      console.warn('[classcare] reply push failed:', e instanceof Error ? e.message : e);
+    }
   }
 
   return json({ ok: true });

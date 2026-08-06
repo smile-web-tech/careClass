@@ -1,12 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
 import { Button, Card, Divider, IconButton, Overline, Press, StatTile, Txt } from '@/components/ui';
-import { attendanceRate, recentSessionsFor, useGroups, useStudent } from '@/data/store';
+import { useGroups, useRecentSessions, useStudent, useStudentStats } from '@/data/store';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { shortDate } from '@/lib/date';
@@ -25,12 +24,8 @@ export default function StudentProfile() {
   const student = useStudent(id);
   const groups = useGroups();
 
-  const stats = useMemo(() => {
-    if (!student) return null;
-    return attendanceRate([student.id], student.groupIds);
-  }, [student]);
-
-  const recent = useMemo(() => (student ? recentSessionsFor(student, 3) : []), [student]);
+  const stats = useStudentStats(student);
+  const recent = useRecentSessions(student, 3);
 
   if (!student) {
     return (
@@ -119,17 +114,20 @@ export default function StudentProfile() {
 
         <View style={styles.statRow}>
           <StatTile
-            value={stats?.rate != null ? `${stats.rate}%` : '·'}
+            value={stats.rate != null ? `${stats.rate}%` : '·'}
             label={t('home.attendance')}
-            tone={stats?.rate != null ? color.success : color.mutedLight}
+            tone={stats.rate != null ? color.success : color.mutedLight}
             fontSize={21}
           />
+          {/* Percent, matching the group screen. Raw marks cannot be compared
+              across a quiz out of 20 and a final out of 100. */}
           <StatTile
-            value={student.avgScore != null ? student.avgScore.toFixed(1) : '·'}
+            value={stats.average != null ? `${stats.average}%` : '·'}
             label={t('students.avgScore')}
+            tone={stats.average != null ? color.primary : color.mutedLight}
             fontSize={21}
           />
-          <StatTile value={String(stats?.sessions ?? 0)} label={t('students.sessions')} fontSize={21} />
+          <StatTile value={String(stats.sessions)} label={t('students.sessions')} fontSize={21} />
         </View>
 
         <View style={styles.block}>

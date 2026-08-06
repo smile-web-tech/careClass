@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "228965535461",
+    "project_id": "classcare-504301",
+    "storage_bucket": "classcare-504301.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:228965535461:android:8e47de5c955b1661f48e0c",
+        "android_client_info": {
+          "package_name": "com.smiletechweb.classcare"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "228965535461-i7cg89ep868q3nlfonm7ujm88mvpuufj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.smiletechweb.classcare",
+            "certificate_hash": "55f82634d344067519af618cabc01620958edf1f"
+          }
+        },
+        {
+          "client_id": "228965535461-7qsvkt5nss3hofrk2gqjs5mj2tmddn7h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdi0CTdw0x1ZvICIoe7lVW5rE6SrJ_dDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "228965535461-7qsvkt5nss3hofrk2gqjs5mj2tmddn7h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

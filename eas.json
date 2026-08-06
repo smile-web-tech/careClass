@@ -20,15 +20,20 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://epemnrnptzqarfsyvcxs.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_eFxapQM6joXkWoF9X74EnA_HDVQynt9"
+        "EXPO_PUBLIC_SUPABASE_URL": "https://api.smiletech.dev",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_eFxapQM6joXkWoF9X74EnA_HDVQynt9",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "228965535461-7qsvkt5nss3hofrk2gqjs5mj2tmddn7h.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://epemnrnptzqarfsyvcxs.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_eFxapQM6joXkWoF9X74EnA_HDVQynt9"
+        "EXPO_PUBLIC_SUPABASE_URL": "https://api.smiletech.dev",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_eFxapQM6joXkWoF9X74EnA_HDVQynt9",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "228965535461-7qsvkt5nss3hofrk2gqjs5mj2tmddn7h.apps.googleusercontent.com"
       }
     }
   },

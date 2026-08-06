@@ -46,9 +46,17 @@ example
 .env
 .env.local
 
-# Firebase config, when push is wired. Never the OAuth client JSON.
-google-services.json
-GoogleService-Info.plist
+# Firebase *service account* keys — a real private key, and the one thing here
+# that must never be committed. Held only as the FCM_SERVICE_ACCOUNT Supabase
+# secret and in EAS credentials.
+*-firebase-adminsdk-*.json
+service-account*.json
+
+# NOTE: google-services.json is deliberately NOT ignored. It is client config,
+# not a credential — every value in it ships inside the APK already, and the
+# API key it carries is restricted to this package name plus SHA-1. More to the
+# point, EAS uploads the build from git: ignoring the file means the builder
+# never receives it, and `app.json` names it, so the build fails.
 
 # Claude Code local state. Accumulates approved shell commands verbatim,
 # which means pasted tokens end up here. Never share.

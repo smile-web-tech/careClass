@@ -361,6 +361,15 @@ const tk = {
   'profile.noUpcoming': 'Ýatlatmaly sapak ýok',
   'profile.reminderHint': 'Her sapakdan az öň bildiriş geler',
   'profile.minutes': '{count} min',
+
+  /* The text of the reminder notification itself. Written at the moment a
+     reminder is scheduled, so changing language re-plans them all. */
+  'notif.startingNow': 'Häzir başlaýar',
+  'notif.startsIn': '{min} minutdan başlaýar · {time}',
+  /* Channel names. Android shows these in its own settings screen, so they are
+     the one piece of our text that appears outside the app. */
+  'notif.channelClasses': 'Sapak ýatlatmalary',
+  'notif.channelReplies': 'Jogaplar',
   'profile.appearance': 'Görnüşi',
   'profile.themeLight': 'Ýagty',
   'profile.themeDark': 'Garaňky',
@@ -824,6 +833,11 @@ const ru: Record<TranslationKey, string> = {
   'profile.noUpcoming': 'Нет занятий для напоминания',
   'profile.reminderHint': 'Уведомление незадолго до начала каждого занятия',
   'profile.minutes': '{count} мин',
+
+  'notif.startingNow': 'Начинается сейчас',
+  'notif.startsIn': 'Начнётся через {min} мин · {time}',
+  'notif.channelClasses': 'Напоминания о занятиях',
+  'notif.channelReplies': 'Ответы',
   'profile.appearance': 'Оформление',
   'profile.themeLight': 'Светлое',
   'profile.themeDark': 'Тёмное',
@@ -1286,6 +1300,11 @@ const en: Record<TranslationKey, string> = {
   'profile.noUpcoming': 'No upcoming classes to remind about',
   'profile.reminderHint': 'A notification shortly before each class starts',
   'profile.minutes': '{count} min',
+
+  'notif.startingNow': 'Starting now',
+  'notif.startsIn': 'Starts in {min} min at {time}',
+  'notif.channelClasses': 'Class reminders',
+  'notif.channelReplies': 'Replies',
   'profile.appearance': 'Appearance',
   'profile.themeLight': 'Light',
   'profile.themeDark': 'Dark',

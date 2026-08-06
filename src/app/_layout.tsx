@@ -10,7 +10,8 @@ import {
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
@@ -21,9 +22,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { DialogHost } from '@/components/Dialog';
 import { SyncBanner } from '@/components/SyncBanner';
+import { updateTeacher } from '@/data/api';
 import { useGroups, useStore } from '@/data/store';
 import { flushWrites, hydrate, installSync, watchInbox } from '@/data/sync';
-import { rescheduleClassReminders } from '@/lib/notifications';
+import { registerForPush, rescheduleClassReminders } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
 
@@ -52,6 +54,10 @@ function useSupabaseSession() {
 
       if (signedIn && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         hydrate().catch((e) => console.warn('[classcare] hydrate failed:', e));
+        // Store this device's push token against the account, so the server can
+        // tell them a parent replied. Nothing did this before, which is why
+        // `teachers.push_token` was always null however well FCM was set up.
+        void registerForPush((pushToken) => updateTeacher({ pushToken }));
         stopWatching();
         stopWatching = watchInbox();
       }
@@ -93,11 +99,15 @@ function useClassReminders() {
   const groups = useGroups();
   const on = useStore((s) => s.remindersOn);
   const lead = useStore((s) => s.reminderLead);
+  // A reminder's text is baked into the OS when it is scheduled, not read when
+  // it fires. Without re-planning on a language change, a teacher who switches
+  // to Russian keeps getting Turkmen reminders for the next fortnight.
+  const language = useStore((s) => s.language);
 
   useEffect(() => {
     if (!on) return;
     void rescheduleClassReminders(groups, lead);
-  }, [groups, on, lead]);
+  }, [groups, on, lead, language]);
 
   useEffect(() => {
     if (!on) return;
@@ -105,13 +115,45 @@ function useClassReminders() {
       if (state === 'active') void rescheduleClassReminders(groups, lead);
     });
     return () => sub.remove();
-  }, [groups, on, lead]);
+  }, [groups, on, lead, language]);
+}
+
+/**
+ * Open what the notification was about.
+ *
+ * Without this, tapping a reminder drops the teacher wherever they last were —
+ * which reads as the notification having done nothing. `useLastNotificationResponse`
+ * covers the cold-start case too: the tap that launched the app is replayed
+ * once the tree mounts.
+ *
+ * Gated on `signedIn` because a tap can arrive before the session has been
+ * restored, and pushing a group route at the sign-in screen would strand them.
+ * The effect re-runs when that flips, so nothing is lost by waiting.
+ */
+function useNotificationRouting() {
+  const response = Notifications.useLastNotificationResponse();
+  const signedIn = useStore((s) => s.signedIn);
+
+  useEffect(() => {
+    if (!response || !signedIn) return;
+
+    const data = response.notification.request.content.data as
+      | { kind?: string; groupId?: string }
+      | undefined;
+
+    if (data?.kind === 'class-reminder' && data.groupId) {
+      router.push({ pathname: '/group/[id]', params: { id: data.groupId } });
+    } else if (data?.kind === 'reply') {
+      router.push('/(tabs)/messages');
+    }
+  }, [response, signedIn]);
 }
 
 /** The app proper. Split out so it can consume the theme context above it. */
 function RootNavigator() {
   const { color, scheme } = useTheme();
   useClassReminders();
+  useNotificationRouting();
   useFlushOnForeground();
 
   // Paint the window itself, not just our views: without this the OS shows a
