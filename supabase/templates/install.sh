@@ -27,6 +27,19 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -z "${SUPABASE_ACCESS_TOKEN:-}" ]]; then
   echo "SUPABASE_ACCESS_TOKEN is not set. Create one at" >&2
   echo "https://supabase.com/dashboard/account/tokens" >&2
+  echo >&2
+  echo "  read -rs SUPABASE_ACCESS_TOKEN && export SUPABASE_ACCESS_TOKEN" >&2
+  exit 1
+fi
+
+# Checked here rather than left to the API, which answers a pasted placeholder
+# with "JWT could not be decoded" — true, and no help at all in working out
+# that the shell is holding the word `sbp_...` verbatim.
+if [[ "$SUPABASE_ACCESS_TOKEN" != sbp_* || ${#SUPABASE_ACCESS_TOKEN} -lt 30 ]]; then
+  echo "SUPABASE_ACCESS_TOKEN does not look like a personal access token." >&2
+  echo "Expected sbp_ followed by ~40 hex characters; got ${#SUPABASE_ACCESS_TOKEN} characters" \
+       "starting '${SUPABASE_ACCESS_TOKEN:0:4}'." >&2
+  echo "This is the account token from the dashboard, not the publishable or secret key." >&2
   exit 1
 fi
 
