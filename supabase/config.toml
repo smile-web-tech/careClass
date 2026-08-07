@@ -1,0 +1,29 @@
+# Supabase CLI settings for ClassCare.
+#
+# This file exists for one reason: the two functions need opposite JWT
+# settings, and passing that as a command-line flag means getting it right
+# every single time by hand. Getting it wrong either way is bad:
+#
+#   send-message   verify_jwt = true   — called by the app with the teacher's
+#                                        token. Deployed with --no-verify-jwt
+#                                        once already, which left it open to
+#                                        anyone who knew the URL.
+#   inbound-email  verify_jwt = false  — called by Resend, which has no
+#                                        Supabase token. It proves who it is
+#                                        with a Svix signature instead, checked
+#                                        inside the function. Requiring a JWT
+#                                        here answers every webhook with 401
+#                                        and replies silently stop arriving.
+#
+# With these written down, `supabase functions deploy <name>` is enough.
+
+project_id = "epemnrnptzqarfsyvcxs"
+
+[functions.send-message]
+verify_jwt = true
+
+[functions.send-grades]
+verify_jwt = true
+
+[functions.inbound-email]
+verify_jwt = false
