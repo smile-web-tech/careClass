@@ -1,5 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
-  <g transform="translate(13.5,13.75) scale(0.84)">  <g transform="translate(0,6.5)">
+  <!--
+    Scaled about the canvas centre so the mark spans ~45dp of the 108dp canvas.
+    The previous 0.84 put it at 79.5dp, wider than the 72dp window a launcher
+    actually shows, so the cradle ran under the mask and got cut off.
+  -->
+  <g transform="translate(30.95,31.1) scale(0.478)">  <g transform="translate(0,6.5)">
     <path d="M16 36C16 74 80 74 80 36" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"></path>
     <g fill="#fff"><circle cx="31" cy="24" r="6.5"></circle><circle cx="48" cy="17" r="6.5"></circle><circle cx="65" cy="24" r="6.5"></circle></g>
   </g></g>

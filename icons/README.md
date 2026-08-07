@@ -21,6 +21,12 @@ Tile gradient: linear-gradient(150deg, #2457E8, #123AAE).
 - **android/** — adaptive layers at 432px (108dp @4x): background, foreground,
   monochrome for Material You. Foreground art stays inside the 264px safe
   circle. legacy-* are pre-masked squircles for old launchers.
+
+  **The 108dp canvas is not what anyone sees.** A launcher masks it down to the
+  central 72dp, so art measured against 108 is measured against the wrong
+  number. Foreground art here spans 45dp — 63% of the visible window. An
+  earlier revision spanned 79.5dp, which looked correct in a file viewer and
+  arrived on a phone with the cradle clipped by the mask.
 - **web/** — PWA and favicon sizes, pre-rounded at 22.4%. maskable-512 has extra
   padding so any mask can crop it.
 - **mark/** — transparent mark on its own, for decks and documents.
