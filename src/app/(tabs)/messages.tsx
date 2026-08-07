@@ -115,6 +115,19 @@ export default function Messages() {
           />
         }
         showsVerticalScrollIndicator={false}>
+        {/*
+          A named button rather than relying on the `+` in the header. That
+          header icon changes destination with the tab, which is invisible: two
+          identical buttons, one of which quietly does something else. This one
+          says what it does and is the first thing on the tab.
+        */}
+        {tab === 'assignments' ? (
+          <Press onPress={() => router.push('/assignment')} style={styles.newAssignment}>
+            <Icon name="plus" size={15} color={color.primary} />
+            <Text style={styles.newAssignmentLabel}>{t('assign.new')}</Text>
+          </Press>
+        ) : null}
+
         {tab === 'sent' || tab === 'assignments' ? (
           (tab === 'sent' ? sent : assignments).length ? (
             (tab === 'sent' ? sent : assignments).map((m) => (
@@ -131,7 +144,7 @@ export default function Messages() {
           ) : (
             <EmptyState
               title={tab === 'assignments' ? t('assign.title') : t('messages.nothingSent')}
-              hint={tab === 'assignments' ? t('assign.subtitle') : t('messages.outboxHint')}
+              hint={tab === 'assignments' ? t('assign.studentsOnly') : t('messages.outboxHint')}
             />
           )
         ) : replies.length ? (
@@ -269,6 +282,20 @@ function ReplyCard({ reply }: { reply: Reply }) {
 
 const makeStyles = ({ color }: Theme) =>
   StyleSheet.create({
+    newAssignment: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 50,
+      borderRadius: radius.button,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: color.dashed,
+      marginBottom: 4,
+    },
+    newAssignmentLabel: { fontFamily: body[700], fontSize: 14, color: color.primary },
+
     /** Default body ink. Text does not inherit colour from a parent View. */
     ink: { color: color.ink },
     header: {
