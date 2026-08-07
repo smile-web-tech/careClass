@@ -154,7 +154,18 @@ async function fetchBody(emailId: string) {
   const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
     headers: { authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}` },
   });
-  if (!res.ok) throw new Error(`Could not read inbound email: ${res.status}`);
+  if (!res.ok) {
+    // Worth naming loudly. A revoked or rotated RESEND_API_KEY makes every
+    // reply vanish with no symptom a teacher could report beyond "parents
+    // answer and nothing arrives", and 401 is the only place it shows.
+    if (res.status === 401 || res.status === 403) {
+      console.error(
+        '[classcare] Resend rejected RESEND_API_KEY while reading an inbound email. ' +
+          'Replies cannot be recorded until the secret is updated and this function redeployed.',
+      );
+    }
+    throw new Error(`Could not read inbound email: ${res.status}`);
+  }
   const body = await res.json();
   const text: string = body?.text ?? '';
   // Some clients send HTML only. A crude tag strip beats storing markup that

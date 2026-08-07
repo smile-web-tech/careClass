@@ -132,6 +132,38 @@ function renderGradeEmail(opts: {
   return { subject, text, html };
 }
 
+/**
+ * Resend's rejection, restated for the person holding the phone.
+ *
+ * Passing Resend's own wording through is how a revoked key reached a teacher
+ * as "API key is invalid" — unactionable, and a description of the backend to
+ * anyone who can read the screen. Kept identical to `send-message` on purpose:
+ * the same failure must not read differently depending on which screen the
+ * teacher happened to be on.
+ */
+function resendFailure(status: number, body: { message?: string; name?: string }): string {
+  const detail = body?.message ?? `HTTP ${status}`;
+
+  if (status === 401 || status === 403) {
+    console.error('[classcare] Resend rejected the credential:', detail);
+    return 'Email is not set up on the server right now. Nothing was sent — please try again later.';
+  }
+
+  if (status === 429) {
+    console.warn('[classcare] Resend rate limit:', detail);
+    return 'Too many emails at once. Wait a moment and send the rest.';
+  }
+
+  if (status >= 500) {
+    console.error('[classcare] Resend server error:', detail);
+    return 'The mail service is having trouble. Nothing was sent — try again shortly.';
+  }
+
+  // A bad address is something the teacher can actually fix, so say which.
+  console.warn('[classcare] Resend refused a message:', detail);
+  return detail;
+}
+
 async function sendEmail(opts: {
   to: string;
   subject: string;
@@ -177,7 +209,7 @@ async function sendEmail(opts: {
     }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.message ?? `Email failed: ${res.status}`);
+  if (!res.ok) throw new Error(resendFailure(res.status, body));
   return String(body?.id ?? '');
 }
 

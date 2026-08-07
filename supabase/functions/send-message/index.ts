@@ -273,6 +273,40 @@ function replyAddressFor(deliveryId: string) {
   return domain ? `reply-${deliveryId}@${domain}` : undefined;
 }
 
+/**
+ * Turn a Resend rejection into something worth showing a teacher.
+ *
+ * Resend's own wording used to go straight through, which is how a revoked key
+ * reached a teacher's screen as "API key is invalid" — a sentence that tells
+ * them nothing they can act on, blames a component they have never heard of,
+ * and describes how the backend is wired to anyone holding the phone.
+ *
+ * The real cause still needs to reach whoever can fix it, so it is logged.
+ */
+function resendFailure(status: number, body: { message?: string; name?: string }): string {
+  const detail = body?.message ?? `HTTP ${status}`;
+
+  if (status === 401 || status === 403) {
+    console.error('[classcare] Resend rejected the credential:', detail);
+    return 'Email is not set up on the server right now. Nothing was sent — please try again later.';
+  }
+
+  if (status === 429) {
+    console.warn('[classcare] Resend rate limit:', detail);
+    return 'Too many emails at once. Wait a moment and send the rest.';
+  }
+
+  // 4xx below this point is usually a bad address, which the teacher *can* act
+  // on, so the specific reason is worth passing through. 5xx is Resend's.
+  if (status >= 500) {
+    console.error('[classcare] Resend server error:', detail);
+    return 'The mail service is having trouble. Nothing was sent — try again shortly.';
+  }
+
+  console.warn('[classcare] Resend refused a message:', detail);
+  return detail;
+}
+
 async function sendEmail(opts: {
   to: string;
   subject: string;
@@ -328,7 +362,7 @@ async function sendEmail(opts: {
     }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.message ?? `Email failed: ${res.status}`);
+  if (!res.ok) throw new Error(resendFailure(res.status, body));
   return String(body?.id ?? '');
 }
 
