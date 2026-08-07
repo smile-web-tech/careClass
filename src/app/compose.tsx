@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -44,6 +43,7 @@ import {
   type SmsOutcome,
 } from '@/lib/deviceSms';
 import { describeError } from '@/lib/errors';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { builtInTemplates } from '@/lib/templates';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -131,34 +131,10 @@ export default function Compose() {
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
-  /**
-   * Room to scroll while the keyboard is up.
-   *
-   * Scrolling on focus alone did nothing: on Android the window resizes rather
-   * than the ScrollView shrinking, so the content still fits and there is
-   * nowhere to scroll to. Padding the bottom by the keyboard's real height
-   * creates that room, and only then does scrolling to the end put the editor
-   * above the keyboard. The height comes from the event because it varies with
-   * the keyboard, suggestion strip and language.
-   */
-  const [keyboard, setKeyboard] = useState(0);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const show = Keyboard.addListener(showEvent, (e) => {
-      setKeyboard(e.endCoordinates.height);
-      // After the padding lands, not in the same frame as it.
-      requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
-    });
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboard(0));
-
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+  /** Room to scroll while the keyboard is up — see `useKeyboardInset`. */
+  const keyboard = useKeyboardInset(
+    useCallback(() => scroller.current?.scrollToEnd({ animated: true }), []),
+  );
   const [sending, setSending] = useState(false);
 
   /**

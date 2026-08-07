@@ -11,7 +11,7 @@
  * no address on file rather than quietly dropping them.
  */
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
@@ -39,6 +39,7 @@ import {
   type PickedAttachment,
 } from '@/lib/attachments';
 import { hasSupabase } from '@/lib/supabase';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -59,6 +60,13 @@ export default function Assignment() {
   const [files, setFiles] = useState<PickedAttachment[]>([]);
   const [instructions, setInstructions] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+
+  // The instructions box is the last thing on the screen, so it is the one the
+  // keyboard covers. See `useKeyboardInset` for why padding alone is not it.
+  const scroller = useRef<ScrollView>(null);
+  const keyboard = useKeyboardInset(
+    useCallback(() => scroller.current?.scrollToEnd({ animated: true }), []),
+  );
 
   const selectedGroups = groups.filter((g) => selection[g.id]);
   const targeted = students.filter((s) => selectedGroups.some((g) => s.groupIds.includes(g.id)));
@@ -155,11 +163,12 @@ export default function Assignment() {
       <TopBar title={t('assign.new')} dismiss />
 
       <ScrollView
+        ref={scroller}
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         contentContainerStyle={{
           padding: space.gutter,
           paddingTop: 14,
-          paddingBottom: insets.bottom + 150,
+          paddingBottom: insets.bottom + 150 + keyboard,
         }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
@@ -233,6 +242,9 @@ export default function Assignment() {
           <TextInput
             value={instructions}
             onChangeText={setInstructions}
+            onFocus={() =>
+              requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }))
+            }
             multiline
             placeholder={t('assign.instructionsPlaceholder')}
             placeholderTextColor={color.mutedLight}
