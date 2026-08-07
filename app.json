@@ -24,7 +24,8 @@
       "predictiveBackGestureEnabled": false,
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "android.permission.READ_CONTACTS"
+        "android.permission.READ_CONTACTS",
+        "android.permission.SEND_SMS"
       ],
       "softwareKeyboardLayoutMode": "resize",
       "googleServicesFile": "./google-services.json"

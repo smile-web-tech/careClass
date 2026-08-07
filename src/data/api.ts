@@ -636,12 +636,11 @@ export type SendReport = {
 };
 
 /**
- * Hand a message to the server for fan-out.
+ * Hand a message to the server for fan-out over a gateway.
  *
- * Sending never happens on the device: iOS and Android both refuse to let an
- * app dispatch SMS silently, and per-recipient placeholder substitution across
- * a whole group would mean opening the native composer once per student. The
- * Edge Function renders each message and calls the SMS/email/push providers.
+ * This is the path for email, and for SMS when a commercial gateway is
+ * configured. SMS sent from the teacher's own SIM does not come through here —
+ * the device does the sending and `recordDeviceSms` writes down what happened.
  */
 export async function sendMessage(input: {
   groupIds: string[];
@@ -656,6 +655,82 @@ export async function sendMessage(input: {
   });
   if (error) throw new Error(await functionErrorMessage(error));
   return data as SendReport;
+}
+
+/**
+ * Write down an SMS run that the device performed itself.
+ *
+ * The Edge Function normally creates the message and its deliveries as a side
+ * effect of sending. When the teacher's own SIM does the sending there is no
+ * server involved, so the log has to be written here — otherwise the Messages
+ * tab would show nothing and the teacher would have no record of what the class
+ * was told.
+ *
+ * Rows go in with their real outcome rather than `queued`: by the time this is
+ * called every message has already succeeded or failed, and a row that says
+ * `queued` forever is worse than no row.
+ */
+export async function recordDeviceSms(input: {
+  groupIds: string[];
+  audience: Audience;
+  body: string;
+  announcement?: boolean;
+  deliveries: {
+    studentId: string;
+    recipient: 'student' | 'parent';
+    destination: string;
+    rendered: string;
+    state: 'sent' | 'failed';
+    error?: string;
+  }[];
+}): Promise<string> {
+  const teacherId = await requireUser();
+
+  const message = unwrap(
+    await supabase
+      .from('messages')
+      .insert({
+        teacher_id: teacherId,
+        body: input.body,
+        audience: input.audience,
+        channels: ['sms'],
+        announcement: input.announcement ?? false,
+      })
+      .select()
+      .single(),
+  ) as MessageRow;
+
+  if (input.groupIds.length) {
+    unwrap(
+      await supabase
+        .from('message_groups')
+        .insert(input.groupIds.map((id) => ({ message_id: message.id, group_id: id })))
+        .select(),
+    );
+  }
+
+  if (input.deliveries.length) {
+    unwrap(
+      await supabase
+        .from('message_deliveries')
+        .insert(
+          input.deliveries.map((d) => ({
+            message_id: message.id,
+            teacher_id: teacherId,
+            student_id: d.studentId,
+            recipient: d.recipient,
+            channel: 'sms' as const,
+            destination: d.destination,
+            rendered: d.rendered,
+            state: d.state,
+            error: d.error ?? null,
+          })),
+        )
+        .select(),
+    );
+  }
+
+  return message.id;
 }
 
 /**

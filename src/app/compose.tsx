@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { showAlert } from '@/components/Dialog';
+import { showAlert, showDialog, showError } from '@/components/Dialog';
 import { Icon, type IconName } from '@/components/Icon';
 import { FooterSummary, Screen, StickyFooter, TopBar } from '@/components/layout';
 import {
@@ -27,11 +27,22 @@ import {
   Segmented,
   Txt,
 } from '@/components/ui';
-import { fetchMessages, sendMessage as apiSendMessage } from '@/data/api';
+import { SmsRunSheet } from '@/components/SmsRunSheet';
+import { fetchMessages, recordDeviceSms, sendMessage as apiSendMessage } from '@/data/api';
 import { useGroups, useStore, useStudents, useTemplates } from '@/data/store';
 import type { Audience, Channel } from '@/data/types';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
+import {
+  buildRecipients,
+  countSegments,
+  deviceSmsSupported,
+  hasSmsPermission,
+  requestSmsPermission,
+  sendSmsBatch,
+  SYSTEM_CONFIRM_THRESHOLD,
+  type SmsOutcome,
+} from '@/lib/deviceSms';
 import { describeError } from '@/lib/errors';
 import { builtInTemplates } from '@/lib/templates';
 import { hasSupabase } from '@/lib/supabase';
@@ -150,8 +161,39 @@ export default function Compose() {
   }, []);
   const [sending, setSending] = useState(false);
 
+  /**
+   * Sending SMS from the teacher's own SIM.
+   *
+   * Only offered where it can actually work — Android, with a radio, on a build
+   * that contains the native module. Everywhere else the choice is not shown at
+   * all rather than shown and disabled, because "why is this greyed out" is a
+   * question with no answer the teacher can act on.
+   *
+   * Defaulted on where available: these teachers have a SIM with a bundle and
+   * no commercial gateway account, so the phone is the route that works.
+   */
+  const deviceSms = deviceSmsSupported();
+  const [smsFromPhone, setSmsFromPhone] = useState(deviceSms);
+
+  /** Live state of a device send, or null when none is in flight or finished. */
+  const [run, setRun] = useState<{
+    total: number;
+    results: SmsOutcome[];
+    running: boolean;
+  } | null>(null);
+  const cancelled = useRef(false);
+
   /** Real gateways are involved only when signed in against a real project. */
   const liveSend = hasSupabase;
+
+  /**
+   * Gated on `liveSend` as well as on capability.
+   *
+   * Without a project the store is holding seed students, whose phone numbers
+   * are invented. Texting them would cost the teacher money and land real
+   * messages on whatever real numbers those invented ones happen to be.
+   */
+  const viaPhone = deviceSms && smsFromPhone && channels.sms && liveSend;
 
   const selectedGroups = groups.filter((g) => selection[g.id]);
   const activeChannels = CHANNELS.filter((c) => channels[c.key]);
@@ -215,7 +257,9 @@ export default function Compose() {
           : null;
 
   const canSend = !blocker && draft.trim().length > 0;
-  const segments = Math.max(1, Math.ceil(draft.length / 160));
+  // From the platform where possible, because the naive `length / 160` is wrong
+  // for every message containing a Turkmen letter — those cost 70 per segment.
+  const seg = countSegments(draft);
 
   /**
    * Sending is the one action that must not be optimistic. Everywhere else a
@@ -223,12 +267,141 @@ export default function Compose() {
    * message that never left would have the teacher believe the class was told.
    * So against a real backend we await the Edge Function and report failure.
    */
+  /**
+   * Send the SMS half of the message from this phone.
+   *
+   * Kept apart from the gateway path rather than hidden behind a flag inside
+   * it: nothing is shared. There is no server call, failures are per-recipient
+   * rather than per-batch, it takes half a minute of watched progress, and the
+   * message log has to be written by hand afterwards.
+   */
+  const sendFromPhone = async (body: string) => {
+    if (!hasSmsPermission()) {
+      const ok = await showDialog({
+        title: t('sms.permissionTitle'),
+        message: t('sms.permissionBody'),
+        actions: [
+          { label: t('common.cancel'), value: 'no', intent: 'quiet' },
+          { label: t('sms.continue'), value: 'yes', intent: 'primary' },
+        ],
+      });
+      if (ok !== 'yes') return;
+
+      const granted = await requestSmsPermission();
+      if (!granted.granted) {
+        // `canAskAgain` false means Android will never show the dialog again,
+        // so the only remaining route is Settings — say so rather than letting
+        // the next tap fail silently.
+        await showAlert(t('sms.permissionTitle'), t('sms.permissionDenied'), 'danger');
+        return;
+      }
+    }
+
+    const { recipients } = buildRecipients({
+      students: targeted,
+      groups: selectedGroups,
+      audience,
+      body,
+    });
+    if (recipients.length === 0) return;
+
+    // Android starts asking the teacher to confirm every message past roughly
+    // thirty an hour. Better they hear it from us, before the first one.
+    if (recipients.length > SYSTEM_CONFIRM_THRESHOLD) {
+      const go = await showDialog({
+        title: t('sms.manyTitle', { count: recipients.length }),
+        message: t('sms.manyBody'),
+        actions: [
+          { label: t('common.cancel'), value: 'no', intent: 'quiet' },
+          { label: t('sms.continue'), value: 'yes', intent: 'primary' },
+        ],
+      });
+      if (go !== 'yes') return;
+    }
+
+    cancelled.current = false;
+    setRun({ total: recipients.length, results: [], running: true });
+
+    const results = await sendSmsBatch(recipients, {
+      shouldStop: () => cancelled.current,
+      onProgress: ({ latest }) =>
+        setRun((r) => (r ? { ...r, results: [...r.results, latest] } : r)),
+    });
+
+    setRun((r) => (r ? { ...r, results, running: false } : r));
+
+    // Write the log even when every message failed: "we tried and nobody got
+    // it" is exactly the thing a teacher needs to be able to look up later.
+    if (liveSend && results.length) {
+      try {
+        await recordDeviceSms({
+          groupIds: selectedGroups.map((g) => g.id),
+          audience,
+          body,
+          deliveries: results.map((r) => ({
+            studentId: r.studentId,
+            recipient: r.kind,
+            destination: r.phone,
+            rendered: r.body,
+            state: r.state,
+            error: r.reason,
+          })),
+        });
+        useStore.setState({ messages: await fetchMessages() });
+      } catch (e) {
+        // The messages went out. Failing to write them down is worth a line in
+        // the log, not an alert over the top of the result the teacher is
+        // reading.
+        console.warn('[classcare] could not record device SMS:', e);
+      }
+    }
+  };
+
   const send = async () => {
+    const body = draft.trim();
+
+    if (viaPhone) {
+      setSending(true);
+      // Held rather than thrown: the email failing is no reason to abandon the
+      // texts, and the teacher gets told once the queue is done.
+      let emailError: unknown = null;
+
+      try {
+        // Email first. It is one server call and takes a second, where the SMS
+        // queue is a minute of watched progress — running it after would leave
+        // the email sitting behind the whole class list for no reason. The SMS
+        // channel is dropped from this call so nothing is sent twice.
+        if (channels.email) {
+          try {
+            await apiSendMessage({
+              groupIds: selectedGroups.map((g) => g.id),
+              studentIds: focusIds.length ? focusIds : undefined,
+              audience,
+              channels: ['email'],
+              body,
+            });
+            useStore.setState({ messages: await fetchMessages() });
+          } catch (e) {
+            emailError = e;
+          }
+        }
+
+        await sendFromPhone(body);
+      } catch (e) {
+        void showError(e, t('messages.nothingSentTitle'));
+      } finally {
+        setSending(false);
+      }
+
+      if (emailError) void showError(emailError, t('messages.nothingSentTitle'));
+      return;
+    }
+
     const payload = {
       groupIds: selectedGroups.map((g) => g.id),
       audience,
       channels: activeChannels.map((c) => c.key),
-      body: draft.trim(),
+      body,
     };
 
     if (!liveSend) {
@@ -269,9 +442,7 @@ export default function Compose() {
           [
             skipped
               ? t(
-                  audience === 'parents'
-                    ? 'grades.skippedNoParentEmail'
-                    : 'grades.skippedNoEmail',
+                  audience === 'parents' ? 'grades.skippedNoParentEmail' : 'grades.skippedNoEmail',
                   { count: skipped },
                 )
               : '',
@@ -398,6 +569,26 @@ export default function Compose() {
             })}
           </View>
 
+          {/* Only where the phone can actually do it, and only when SMS is on. */}
+          {deviceSms && channels.sms ? (
+            <>
+              <Overline style={styles.label}>{t('sms.transport')}</Overline>
+              <View style={{ marginBottom: 8 }}>
+                <Segmented
+                  options={[
+                    { key: 'phone', label: t('sms.viaPhone') },
+                    { key: 'gateway', label: t('sms.viaGateway') },
+                  ]}
+                  value={smsFromPhone ? 'phone' : 'gateway'}
+                  onChange={(v) => setSmsFromPhone(v === 'phone')}
+                />
+              </View>
+              {smsFromPhone ? (
+                <Text style={styles.transportHint}>{t('sms.viaPhoneHint')}</Text>
+              ) : null}
+            </>
+          ) : null}
+
           {noEmail > 0 ? (
             <View style={styles.warn}>
               <Icon name="info" size={18} color={color.warningDeep} />
@@ -433,16 +624,23 @@ export default function Compose() {
                 ))}
               </View>
               <Text style={styles.charCount}>
-                {draft.length} chars · {segments} SMS
+                {draft.length} · {t('sms.segments', { count: seg.segments })}
               </Text>
             </View>
           </Card>
 
+          {/* Only worth saying once the message is long enough for it to cost
+              something — a two-word draft in Turkmen is still one segment. */}
+          {channels.sms && seg.encoding === 'ucs2' && seg.segments > 1 ? (
+            <View style={styles.warn}>
+              <Icon name="info" size={18} color={color.warningDeep} />
+              <Text style={styles.warnText}>{t('sms.ucs2Warn')}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.info}>
             <Icon name="info" size={18} color={color.primary} />
-            <Text style={styles.infoText}>
-              {t('messages.placeholderHint')}
-            </Text>
+            <Text style={styles.infoText}>{t('messages.placeholderHint')}</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -464,6 +662,25 @@ export default function Compose() {
         />
       </StickyFooter>
 
+      <SmsRunSheet
+        visible={run !== null}
+        total={run?.total ?? 0}
+        results={run?.results ?? []}
+        running={run?.running ?? false}
+        onCancel={() => {
+          // Stops the queue between messages. The one already handed to the
+          // radio still goes — there is no unsending it.
+          cancelled.current = true;
+        }}
+        onClose={() => {
+          const sentSomething = (run?.results.length ?? 0) > 0;
+          setRun(null);
+          // Cancelled before anything went out: leave the teacher on their
+          // draft rather than on a Messages list with nothing new in it.
+          if (sentSomething) router.replace('/(tabs)/messages');
+        }}
+      />
+
       <Modal
         visible={templatesOpen}
         transparent
@@ -475,9 +692,7 @@ export default function Compose() {
           <Text style={[text.sheetTitle, styles.ink, { marginBottom: 4 }]}>
             {t('messages.templates')}
           </Text>
-          <Txt style={styles.sheetHint}>
-            {t('messages.placeholderHint')}
-          </Txt>
+          <Txt style={styles.sheetHint}>{t('messages.placeholderHint')}</Txt>
           {[...savedTemplates, ...builtInTemplates(t)].map((template, i) => (
             <View key={template.id}>
               {i > 0 ? <Divider /> : null}
@@ -624,6 +839,13 @@ const makeStyles = ({ color, accents }: Theme) =>
       fontSize: 12.5,
       lineHeight: 18.1,
       color: accents.amber.ink,
+    },
+    transportHint: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: color.mutedLight,
+      marginBottom: 20,
     },
     infoText: {
       flex: 1,
