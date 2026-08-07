@@ -32,14 +32,144 @@ type InboundEvent = {
     subject?: string;
     message_id?: string;
     received_for?: string[] | string;
+    /**
+     * Resend's inbound payload. The bytes arrive base64 in `content`; older and
+     * newer shapes have also used `content_type` vs `contentType` and a `url`
+     * instead of inline content, so all of them are read defensively — a photo
+     * of a child's homework is not worth losing to a field rename.
+     */
+    attachments?: {
+      filename?: string;
+      content?: string;
+      content_type?: string;
+      contentType?: string;
+      url?: string;
+      size?: number;
+    }[];
   };
 };
+
+/** Anything a student could plausibly send back, and nothing executable. */
+const INBOUND_MIME = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/gif',
+  'text/plain',
+  'text/csv',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+
+const MAX_INBOUND_BYTES = 10 * 1024 * 1024;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
   });
+
+/* -------------------------------------------------------------------------- */
+/* Inbound attachments                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Save whatever the student sent back.
+ *
+ * Runs after the reply row exists, and never fails the webhook: Resend retries
+ * a non-2xx response, and retrying the whole delivery because one photo could
+ * not be stored would duplicate the reply in the teacher's inbox. A missing
+ * attachment is recoverable — the student can be asked again. A duplicated
+ * inbox is not.
+ *
+ * Files land under the teacher's own folder, which is what the storage policy
+ * in migration 0010 grants them read access to.
+ */
+type StorageWriter = {
+  storage: {
+    from(bucket: string): {
+      upload(
+        path: string,
+        body: Uint8Array,
+        options: { contentType: string; upsert: boolean },
+      ): PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+  from(table: string): {
+    insert(rows: Record<string, unknown>[]): PromiseLike<{ error: { message: string } | null }>;
+  };
+};
+
+/**
+ * Typed structurally rather than as the client itself: `createClient`'s return
+ * type carries schema generics that do not survive being named in a parameter,
+ * and the two calls below are the entire surface this needs.
+ */
+async function storeInboundAttachments(
+  db: StorageWriter,
+  opts: {
+    replyId: string;
+    teacherId: string;
+    attachments: NonNullable<InboundEvent['data']['attachments']>;
+  },
+) {
+  const rows: Record<string, unknown>[] = [];
+
+  for (const [index, att] of opts.attachments.entries()) {
+    try {
+      const filename = (att.filename ?? `attachment-${index + 1}`).slice(-80);
+      const mime = att.content_type ?? att.contentType ?? 'application/octet-stream';
+      if (!INBOUND_MIME.has(mime)) continue;
+
+      let bytes: Uint8Array | null = null;
+
+      if (att.content) {
+        // Base64 inline. `atob` gives a binary string; the map turns it back
+        // into the octets it stood for.
+        const binary = atob(att.content);
+        bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      } else if (att.url) {
+        const res = await fetch(att.url);
+        if (!res.ok) continue;
+        bytes = new Uint8Array(await res.arrayBuffer());
+      }
+
+      if (!bytes || bytes.byteLength === 0 || bytes.byteLength > MAX_INBOUND_BYTES) continue;
+
+      const key = filename.normalize('NFKD').replace(/[^\w.\-]+/g, '_') || `file-${index + 1}`;
+      const storagePath = `${opts.teacherId}/replies/${opts.replyId}/${key}`;
+
+      const { error: uploadError } = await db.storage
+        .from('attachments')
+        .upload(storagePath, bytes, { contentType: mime, upsert: true });
+      if (uploadError) {
+        console.warn('inbound attachment upload failed:', uploadError.message);
+        continue;
+      }
+
+      rows.push({
+        reply_id: opts.replyId,
+        teacher_id: opts.teacherId,
+        storage_path: storagePath,
+        filename,
+        mime_type: mime,
+        size_bytes: bytes.byteLength,
+      });
+    } catch (e) {
+      console.warn('inbound attachment skipped:', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  if (rows.length) {
+    const { error } = await db.from('reply_attachments').insert(rows);
+    if (error) console.warn('could not record inbound attachments:', error.message);
+  }
+  return rows.length;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Webhook authenticity                                                       */
@@ -111,7 +241,9 @@ const bareAddress = (s: string) => (s.match(/<([^>]+)>/)?.[1] ?? s).trim().toLow
 /** Pull the delivery id back out of `reply-<uuid>@domain`. */
 function tokenFrom(addresses: string[]) {
   for (const a of addresses) {
-    const m = bareAddress(a).match(/^reply-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@/);
+    const m = bareAddress(a).match(
+      /^reply-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})@/,
+    );
     if (m) return m[1];
   }
   return null;
@@ -294,11 +426,7 @@ Deno.serve(async (req) => {
 
   const [{ data: student }, { data: teacher }, { data: messageGroup }] = await Promise.all([
     delivery.student_id
-      ? db
-          .from('students')
-          .select('name, parent_name')
-          .eq('id', delivery.student_id)
-          .maybeSingle()
+      ? db.from('students').select('name, parent_name').eq('id', delivery.student_id).maybeSingle()
       : Promise.resolve({ data: null }),
     db
       .from('teachers')
@@ -356,19 +484,32 @@ Deno.serve(async (req) => {
   }
   if (!body) body = '(empty reply)';
 
-  const { error } = await db.from('replies').insert({
-    teacher_id: delivery.teacher_id,
-    student_id: delivery.student_id,
-    author_name: authorName,
-    context,
-    body,
-    inbound_message_id: event.data.message_id ?? null,
-  });
+  const { data: reply, error } = await db
+    .from('replies')
+    .insert({
+      teacher_id: delivery.teacher_id,
+      student_id: delivery.student_id,
+      author_name: authorName,
+      context,
+      body,
+      inbound_message_id: event.data.message_id ?? null,
+    })
+    .select('id')
+    .single();
 
   // 23505 is a unique violation: this webhook has been delivered before and the
   // reply is already in the inbox. That is a success, not a failure.
   if (error && error.code !== '23505') return json({ error: error.message }, 500);
   if (error) return json({ duplicate: true });
+
+  const inbound = event.data.attachments ?? [];
+  if (reply?.id && inbound.length) {
+    await storeInboundAttachments(db, {
+      replyId: reply.id as string,
+      teacherId: delivery.teacher_id,
+      attachments: inbound,
+    });
+  }
 
   if (teacher?.email) {
     await forwardToTeacher({
@@ -397,10 +538,7 @@ Deno.serve(async (req) => {
       // FCM says the app is gone or the token rotated. Clear it, or every
       // future reply retries a token that can never work again.
       if (stale.length) {
-        await db
-          .from('teachers')
-          .update({ push_token: null })
-          .eq('id', delivery.teacher_id);
+        await db.from('teachers').update({ push_token: null }).eq('id', delivery.teacher_id);
       }
     } catch (e) {
       // The reply is recorded and forwarded; a failed notification must not

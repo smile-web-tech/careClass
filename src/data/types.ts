@@ -75,6 +75,8 @@ export type Audience = 'students' | 'parents' | 'both';
 export type Channel = 'sms' | 'email' | 'push';
 
 export type Message = {
+  /** Homework sent from the Assignments screen, with files attached. */
+  isAssignment?: boolean;
   id: string;
   /** Empty means "all groups" — an announcement. */
   groupIds: string[];

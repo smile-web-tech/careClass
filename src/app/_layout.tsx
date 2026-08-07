@@ -189,6 +189,7 @@ function RootNavigator() {
         <Stack.Screen name="student/[id]" />
         <Stack.Screen name="attendance" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="assignment" options={{ presentation: 'modal' }} />
         <Stack.Screen name="student/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="student/edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/new" options={{ presentation: 'modal' }} />

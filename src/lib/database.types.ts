@@ -106,6 +106,7 @@ export type MessageRow = {
   audience: MessageAudienceRow;
   channels: MessageChannelRow[];
   announcement: boolean;
+  is_assignment: boolean;
   sent_at: string;
 };
 

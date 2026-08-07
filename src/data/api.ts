@@ -87,6 +87,7 @@ const toMessage = (
   delivered,
   total,
   announcement: row.announcement,
+  isAssignment: row.is_assignment ?? false,
 });
 
 const toReply = (row: ReplyRow, accent: Reply['accent']): Reply => ({
@@ -649,6 +650,13 @@ export async function sendMessage(input: {
   channels: Channel[];
   body: string;
   announcement?: boolean;
+  /**
+   * Storage paths in the `attachments` bucket, never URLs — the function signs
+   * them itself after checking they belong to this teacher.
+   */
+  attachments?: { path: string; filename: string; mimeType: string; size: number }[];
+  /** Marks the row as homework rather than an ordinary message. */
+  isAssignment?: boolean;
 }) {
   const { data, error } = await supabase.functions.invoke('send-message', {
     body: input,
@@ -752,6 +760,45 @@ async function functionErrorMessage(error: unknown) {
     }
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+export type StoredAttachment = {
+  id: string;
+  storagePath: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+};
+
+/**
+ * Files a student sent back with their reply.
+ *
+ * Fetched per reply rather than joined onto the inbox: most replies carry
+ * nothing, and pulling every attachment row on every refresh to display a
+ * paperclip on two of them is the wrong trade on a slow connection.
+ */
+export async function fetchReplyAttachments(replyId: string): Promise<StoredAttachment[]> {
+  const rows = unwrap(
+    await supabase
+      .from('reply_attachments')
+      .select('*')
+      .eq('reply_id', replyId)
+      .order('created_at'),
+  ) as {
+    id: string;
+    storage_path: string;
+    filename: string;
+    mime_type: string;
+    size_bytes: number;
+  }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    storagePath: r.storage_path,
+    filename: r.filename,
+    mimeType: r.mime_type,
+    size: r.size_bytes,
+  }));
 }
 
 export async function markRepliesRead() {

@@ -36,9 +36,14 @@ export default function Messages() {
   const removeMessage = useStore((s) => s.removeMessage);
   const removeReply = useStore((s) => s.removeReply);
 
-  const [tab, setTab] = useState<'sent' | 'replies'>('sent');
+  const [tab, setTab] = useState<'sent' | 'assignments' | 'replies'>('sent');
   const [refreshing, setRefreshing] = useState(false);
   const unread = replies.filter((r) => r.unread).length;
+  // Homework is looked for on its own — "what did I set last week" is a
+  // different question from "what did I send", and an outbox mixing the two
+  // answers neither.
+  const sent = messages.filter((m) => !m.isAssignment);
+  const assignments = messages.filter((m) => m.isAssignment);
 
   /**
    * Pull to refresh.
@@ -70,12 +75,21 @@ export default function Messages() {
             iconSize={19}
             tint={color.primary}
             fg="#fff"
-            onPress={() => router.push('/compose')}
+            onPress={() => router.push(tab === 'assignments' ? '/assignment' : '/compose')}
           />
         </View>
 
         <View style={styles.tabRow}>
-          <TabLink label={t('messages.sent')} active={tab === 'sent'} onPress={() => setTab('sent')} />
+          <TabLink
+            label={t('messages.sent')}
+            active={tab === 'sent'}
+            onPress={() => setTab('sent')}
+          />
+          <TabLink
+            label={t('assign.title')}
+            active={tab === 'assignments'}
+            onPress={() => setTab('assignments')}
+          />
           <TabLink
             label={unread ? `${t('messages.replies')} · ${unread}` : t('messages.replies')}
             active={tab === 'replies'}
@@ -101,9 +115,9 @@ export default function Messages() {
           />
         }
         showsVerticalScrollIndicator={false}>
-        {tab === 'sent' ? (
-          messages.length ? (
-            messages.map((m) => (
+        {tab === 'sent' || tab === 'assignments' ? (
+          (tab === 'sent' ? sent : assignments).length ? (
+            (tab === 'sent' ? sent : assignments).map((m) => (
               <SwipeToDelete
                 key={m.id}
                 what="this message"
@@ -115,7 +129,10 @@ export default function Messages() {
               </SwipeToDelete>
             ))
           ) : (
-            <EmptyState title={t('messages.nothingSent')} hint={t('messages.outboxHint')} />
+            <EmptyState
+              title={tab === 'assignments' ? t('assign.title') : t('messages.nothingSent')}
+              hint={tab === 'assignments' ? t('assign.subtitle') : t('messages.outboxHint')}
+            />
           )
         ) : replies.length ? (
           replies.map((r) => (

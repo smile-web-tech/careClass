@@ -24,7 +24,20 @@ type Payload = {
   channels: Channel[];
   body: string;
   announcement?: boolean;
+  /**
+   * Storage paths inside the `attachments` bucket, never URLs.
+   *
+   * Deliberately not a URL: accepting one would let any signed-in caller point
+   * Resend at an arbitrary host and have our sender fetch it. The path is
+   * checked against this teacher's own folder below and signed here.
+   */
+  attachments?: { path: string; filename: string; mimeType: string; size: number }[];
+  /** An assignment is a message with work attached, sent to students only. */
+  isAssignment?: boolean;
 };
+
+/** What Resend is handed once the paths above have been signed. */
+type ResolvedAttachment = { filename: string; path: string };
 
 type Recipient = {
   studentId: string;
@@ -190,8 +203,9 @@ function sendSms(phone: string, text: string) {
 }
 
 const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
 
 /**
@@ -315,6 +329,8 @@ async function sendEmail(opts: {
   replyTo?: string;
   /** Kept off the tokenised address: an unsubscribe belongs with a human. */
   unsubscribeTo?: string;
+  /** Signed URLs Resend fetches for itself — see `Payload.attachments`. */
+  attachments?: ResolvedAttachment[];
 }) {
   // Deliberately no fallback to `onboarding@resend.dev`. That sandbox sender
   // exists to let you prove your API key works, and Resend refuses every
@@ -351,6 +367,7 @@ async function sendEmail(opts: {
       text: opts.text,
       html: opts.html,
       ...(replyTo ? { reply_to: replyTo } : {}),
+      ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
       headers: {
         // Required of bulk senders by Gmail and Yahoo. `mailto:` alone is a
         // valid List-Unsubscribe; one-click (RFC 8058) additionally needs an
@@ -419,6 +436,42 @@ Deno.serve(async (req) => {
   if (!template?.trim()) return json({ error: 'Message body is empty' }, 400);
   if (!channels?.length) return json({ error: 'Pick at least one channel' }, 400);
 
+  /* ---------------------------------------------------------------------- *
+   * Attachments.
+   *
+   * The caller sends storage paths; the signing happens here, with the
+   * service key, after checking each path belongs to this teacher. That check
+   * is the whole security boundary: without it a signed-in teacher could name
+   * another teacher's path and have the file mailed to their own class.
+   *
+   * Signed once and reused for every recipient — a class of thirty is thirty
+   * emails pointing at one URL, not thirty signatures.
+   * ---------------------------------------------------------------------- */
+  const requested = payload.attachments ?? [];
+  if (requested.length > 5) return json({ error: 'At most 5 files per message' }, 400);
+
+  const attachments: ResolvedAttachment[] = [];
+  for (const item of requested) {
+    const path = String(item?.path ?? '');
+    // `..` would climb out of the folder that the prefix check just granted.
+    if (!path.startsWith(`${teacherId}/`) || path.includes('..')) {
+      return json({ error: 'An attachment path is not yours' }, 403);
+    }
+    const { data: signed, error: signError } = await db.storage
+      .from('attachments')
+      .createSignedUrl(path, 60 * 60 * 6);
+    if (signError || !signed?.signedUrl) {
+      return json({ error: `Could not read attachment: ${item?.filename ?? path}` }, 400);
+    }
+    attachments.push({ filename: String(item?.filename ?? 'file'), path: signed.signedUrl });
+  }
+
+  // SMS carries text and nothing else. Saying so up front beats a teacher
+  // discovering it from a student who never got the homework.
+  if (attachments.length && !channels.includes('email')) {
+    return json({ error: 'Files can only be sent by email. Tick the email channel.' }, 400);
+  }
+
   // Resolve the target groups. An announcement means "every active group".
   const groupQuery = db
     .from('groups')
@@ -477,7 +530,8 @@ Deno.serve(async (req) => {
   const now = new Date();
   const groupById = new Map(groups.map((g) => [g.id, g]));
   const groupOfStudent = new Map<string, string>();
-  for (const l of links ?? []) if (!groupOfStudent.has(l.student_id)) groupOfStudent.set(l.student_id, l.group_id);
+  for (const l of links ?? [])
+    if (!groupOfStudent.has(l.student_id)) groupOfStudent.set(l.student_id, l.group_id);
 
   // Build the recipient list. "Both" produces two rows for the same student —
   // one to them, one to their guardian — each rendered with its own name.
@@ -564,10 +618,27 @@ Deno.serve(async (req) => {
       audience,
       channels,
       announcement: !!announcement,
+      is_assignment: !!payload.isAssignment,
     })
     .select()
     .single();
   if (messageError) return json({ error: messageError.message }, 400);
+
+  if (requested.length) {
+    // Recorded so the log can say what went out. A failure here must not fail
+    // the send — the files are already uploaded and the message is going.
+    const { error: attachError } = await db.from('message_attachments').insert(
+      requested.map((a) => ({
+        message_id: message.id,
+        teacher_id: teacherId,
+        storage_path: a.path,
+        filename: a.filename,
+        mime_type: a.mimeType || 'application/octet-stream',
+        size_bytes: Number.isFinite(a.size) ? a.size : 0,
+      })),
+    );
+    if (attachError) console.warn('could not record attachments:', attachError.message);
+  }
 
   if (!announcement) {
     await db
@@ -624,6 +695,7 @@ Deno.serve(async (req) => {
             // straight to the teacher exactly as before.
             replyTo: replyAddressFor(d.id) ?? teacherEmail,
             unsubscribeTo: teacherEmail,
+            attachments,
           });
         } else return; // Push is batched below.
 
