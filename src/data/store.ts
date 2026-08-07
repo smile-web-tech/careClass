@@ -401,9 +401,16 @@ export const useStore = create<State>()(
       setLanguage: (language) => {
         setActiveLanguage(language);
         set({ language, languageChosen: true });
-        // Mirrored so the Edge Functions can write a student's email in the same
-        // language the teacher reads the app in.
-        mirror.setLanguage?.(language);
+
+        // Only mirrored once there is an account to mirror it *to*. The picker
+        // also appears on the welcome screen, before anyone has signed in, and
+        // queueing a write there produced "session expired, nothing saved" as
+        // the first thing a new teacher ever saw — a real error about a real
+        // failed write, for a preference that had in fact been saved locally
+        // and belongs to the device until an account exists.
+        //
+        // `hydrate` pushes the pending choice up at sign-in, so nothing is lost.
+        if (get().signedIn) mirror.setLanguage?.(language);
       },
 
       markRepliesRead: () => {

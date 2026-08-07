@@ -155,7 +155,7 @@ export default function Register() {
       const msg = e instanceof Error ? e.message : String(e);
       setFormError(
         /password/i.test(msg) && /weak|short|length/i.test(msg)
-          ? `That password was rejected by the server. Use at least ${MIN_LENGTH} characters.`
+          ? t('auth.serverRejectedPassword', { count: MIN_LENGTH })
           : msg,
       );
     } finally {
@@ -282,7 +282,7 @@ export default function Register() {
     return (
       <AuthScreen
         title={t('auth.choosePassword')}
-        subtitle={`This is what you will sign in with, alongside ${email.trim().toLowerCase()}.`}
+        subtitle={t('auth.signInWithAlongside', { email: email.trim().toLowerCase() })}
         step={2}
         steps={3}
         onBack={back}>
@@ -296,7 +296,7 @@ export default function Register() {
           meter
           personal={[name, email.split('@')[0] ?? '']}
           showProblems={!!touched.password || password.length >= MIN_LENGTH}
-          placeholder={`At least ${MIN_LENGTH} characters`}
+          placeholder={t('auth.minChars', { count: MIN_LENGTH })}
           autoComplete="new-password"
           textContentType="newPassword"
           returnKeyType="next"
@@ -336,7 +336,7 @@ export default function Register() {
   return (
     <AuthScreen
       title={t('auth.confirmEmail')}
-      subtitle={`We sent a six-digit code to ${email.trim().toLowerCase()}. It expires in 10 minutes.`}
+      subtitle={t('auth.codeSentTo', { email: email.trim().toLowerCase() })}
       step={3}
       steps={3}
       onBack={back}>

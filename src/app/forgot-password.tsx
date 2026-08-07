@@ -123,7 +123,7 @@ export default function ForgotPassword() {
   return (
     <AuthScreen
       title={t('auth.chooseNewPassword')}
-      subtitle={`If ${email.trim().toLowerCase()} has an account, a code is on its way.`}
+      subtitle={t('auth.codeOnItsWay', { email: email.trim().toLowerCase() })}
       onBack={() => {
         setStep('email');
         setCode('');
@@ -152,7 +152,7 @@ export default function ForgotPassword() {
         onChangeText={setPassword}
         meter
         personal={[email.split('@')[0] ?? '']}
-        placeholder={`At least ${MIN_LENGTH} characters`}
+        placeholder={t('auth.minChars', { count: MIN_LENGTH })}
         autoComplete="new-password"
         textContentType="newPassword"
         returnKeyType="go"

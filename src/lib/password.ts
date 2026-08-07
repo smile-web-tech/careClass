@@ -11,20 +11,41 @@
  * purpose: telling someone their password is merely "fair" and then refusing it
  * without saying why is the single most infuriating thing a signup form does.
  */
+import type { TranslationKey } from '@/i18n';
 
 export const MIN_LENGTH = 8;
 
 /** 0 unusable … 4 strong. Indexes straight into the meter's colours. */
 export type Score = 0 | 1 | 2 | 3 | 4;
 
+/**
+ * A phrase this module wants shown, named rather than written.
+ *
+ * Keys, not sentences. This file has no business knowing which language the
+ * teacher reads — and it cannot ask, because it is called during render from a
+ * component that must re-run when the language changes. Returning a key lets
+ * `PasswordField` translate it with a subscribed `useT`, so switching language
+ * updates the meter along with everything else.
+ */
+export type Phrase = { key: TranslationKey; vars?: Record<string, string | number> };
+
 export type Strength = {
   score: Score;
-  label: string;
+  /** Empty for an empty password, where a rating would be meaningless. */
+  labelKey: TranslationKey | null;
   /** Blocking. Registration stays disabled while this is non-empty. */
-  problems: string[];
+  problems: Phrase[];
   /** The single most useful next step, or null once there is nothing to add. */
-  tip: string | null;
+  tip: Phrase | null;
 };
+
+const LABEL_KEYS = [
+  'password.tooWeak',
+  'password.weak',
+  'password.fair',
+  'password.good',
+  'password.strong',
+] as const satisfies readonly TranslationKey[];
 
 const CLASSES: { test: RegExp; pool: number }[] = [
   { test: /[a-z]/, pool: 26 },
@@ -124,14 +145,19 @@ function hasWalk(lower: string) {
  * by anyone holding the other fields, which in a breach is everyone.
  */
 export function scorePassword(password: string, personal: string[] = []): Strength {
-  const problems: string[] = [];
+  const problems: Phrase[] = [];
 
   if (password.length === 0) {
-    return { score: 0, label: '', problems: ['Choose a password.'], tip: null };
+    return {
+      score: 0,
+      labelKey: null,
+      problems: [{ key: 'password.choose' }],
+      tip: null,
+    };
   }
 
   if (password.length < MIN_LENGTH) {
-    problems.push(`Use at least ${MIN_LENGTH} characters.`);
+    problems.push({ key: 'password.useAtLeast', vars: { count: MIN_LENGTH } });
   }
 
   const lower = password.toLowerCase();
@@ -141,13 +167,13 @@ export function scorePassword(password: string, personal: string[] = []): Streng
   // `teacheri`, which matches nothing, so the plain form has to be tried too.
   const candidates = [lower, stripTrim(lower), deLeet(password), stripTrim(deLeet(password))];
   if (candidates.some((c) => COMMON.has(c))) {
-    problems.push('Too close to a password attackers try first. Pick another.');
+    problems.push({ key: 'password.tooCommon' });
   }
 
   for (const raw of personal) {
     const token = raw.trim().toLowerCase();
     if (token.length >= 4 && lower.includes(token)) {
-      problems.push('Leave your name and email out of your password.');
+      problems.push({ key: 'password.noPersonal' });
       break;
     }
   }
@@ -170,23 +196,21 @@ export function scorePassword(password: string, personal: string[] = []): Streng
   // printed next to it.
   const score: Score = problems.length > 0 ? 0 : graded;
   if (problems.length === 0 && graded < 2) {
-    problems.push('This one is too easy to guess. Make it longer or less predictable.');
+    problems.push({ key: 'password.tooGuessable' });
   }
 
-  const label = ['Too weak', 'Weak', 'Fair', 'Good', 'Strong'][score];
-
-  let tip: string | null = null;
+  let tip: Phrase | null = null;
   if (score < 4) {
     // Below the hard minimum, say *that* — advice about reaching twelve is
     // noise when the password is not yet long enough to be accepted at all.
-    if (password.length < MIN_LENGTH) tip = `At least ${MIN_LENGTH} characters.`;
-    else if (password.length < 12) tip = 'Longer is stronger — aim for 12 or more.';
-    else if (used < 3) tip = 'Mix in capitals, numbers or a symbol.';
-    else if (hasWalk(lower)) tip = 'Avoid runs like 1234 or qwerty.';
-    else tip = 'A few unrelated words make a long password easy to remember.';
+    if (password.length < MIN_LENGTH) tip = { key: 'auth.minChars', vars: { count: MIN_LENGTH } };
+    else if (password.length < 12) tip = { key: 'password.tipLonger' };
+    else if (used < 3) tip = { key: 'password.tipMix' };
+    else if (hasWalk(lower)) tip = { key: 'password.tipRuns' };
+    else tip = { key: 'password.tipWords' };
   }
 
-  return { score, label, problems, tip };
+  return { score, labelKey: LABEL_KEYS[score], problems, tip };
 }
 
 /**

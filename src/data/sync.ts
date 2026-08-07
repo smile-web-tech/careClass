@@ -9,7 +9,7 @@ import type {
   MessageTemplate,
   Student,
 } from '@/data/types';
-import type { Language } from '@/i18n';
+import { isLanguage, setActiveLanguage, type Language } from '@/i18n';
 import { describeError, isOfflineError } from '@/lib/errors';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
@@ -230,6 +230,34 @@ export async function hydrate() {
       teacherProvider: teacher.provider,
     }),
   });
+
+  if (teacher) reconcileLanguage(teacher.language);
+}
+
+/**
+ * Settle which language wins once an account is in the picture.
+ *
+ * Before sign-in the picker writes locally only — see `setLanguage` — so this
+ * is where a choice made on the welcome screen finally reaches the account.
+ * Without it that choice would live on the device forever and the Edge
+ * Functions would keep writing to parents in the wrong language.
+ *
+ * A deliberate pick beats the stored value, including on a second device: the
+ * teacher changing it is a newer statement of intent than a column written
+ * months ago. Only an untouched install adopts what the server holds.
+ */
+function reconcileLanguage(remote: string | null) {
+  const { language, languageChosen } = useStore.getState();
+
+  if (languageChosen) {
+    if (remote !== language) enqueue(() => api.updateTeacher({ language }), 'Language');
+    return;
+  }
+
+  if (remote && remote !== language && isLanguage(remote)) {
+    setActiveLanguage(remote);
+    useStore.setState({ language: remote, languageChosen: true });
+  }
 }
 
 export const remote: StoreMirror = {

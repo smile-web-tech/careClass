@@ -202,6 +202,8 @@ export type TeacherProfile = {
   /** 'google' | 'apple' | 'email' — how this session was established. */
   provider: string;
   createdAt: string;
+  /** Null until the teacher picks one; the device's choice then fills it in. */
+  language: string | null;
 };
 
 export async function fetchTeacher(): Promise<TeacherProfile | null> {
@@ -226,6 +228,8 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
       timezone: 'UTC',
       provider: auth.user.app_metadata?.provider ?? 'email',
       createdAt: auth.user.created_at,
+      // A row that does not exist yet has chosen nothing; the device's pick wins.
+      language: null,
     };
 
     // Create it rather than returning a convincing-looking profile that exists
@@ -260,6 +264,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
     timezone: row.timezone,
     provider: auth.user.app_metadata?.provider ?? 'email',
     createdAt: row.created_at,
+    language: row.language ?? null,
   };
 }
 

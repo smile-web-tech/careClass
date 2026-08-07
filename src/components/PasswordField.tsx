@@ -16,6 +16,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AuthField, type AuthFieldProps } from '@/components/AuthForm';
 import { Press } from '@/components/ui';
+import { useT } from '@/i18n/useT';
 import { scorePassword, type Strength } from '@/lib/password';
 import { useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
@@ -36,6 +37,7 @@ export const PasswordField = forwardRef<
   ref,
 ) {
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   const [revealed, setRevealed] = useState(false);
 
   // Scored on every keystroke rather than memoised: `personal` is a fresh array
@@ -59,10 +61,12 @@ export const PasswordField = forwardRef<
           <Press
             onPress={() => setRevealed((r) => !r)}
             accessibilityRole="button"
-            accessibilityLabel={revealed ? 'Hide password' : 'Show password'}
+            accessibilityLabel={revealed ? t('password.hide') : t('password.show')}
             hitSlop={10}
             style={styles.reveal}>
-            <Text style={styles.revealLabel}>{revealed ? 'Hide' : 'Show'}</Text>
+            <Text style={styles.revealLabel}>
+              {revealed ? t('password.hide') : t('password.show')}
+            </Text>
           </Press>
         }
         {...rest}
@@ -84,6 +88,10 @@ function StrengthReadout({
 }) {
   const { color, accents } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  // Subscribed, not read once: the meter has to re-translate when the teacher
+  // switches language, and `scorePattern` above returns keys precisely so it
+  // can. See the `Phrase` type in `lib/password.ts`.
+  const t = useT();
 
   // Red through amber to green, so the colour says the same thing as the count.
   const scale = [color.danger, color.danger, accents.amber.dot, accents.lime.dot, color.success];
@@ -100,17 +108,19 @@ function StrengthReadout({
             />
           ))}
         </View>
-        <Text style={[styles.meterLabel, { color: tint }]}>{strength.label}</Text>
+        <Text style={[styles.meterLabel, { color: tint }]}>
+          {strength.labelKey ? t(strength.labelKey) : ''}
+        </Text>
       </View>
 
       {showProblems && strength.problems.length > 0 ? (
         strength.problems.map((p) => (
-          <Text key={p} style={styles.problem}>
-            {p}
+          <Text key={p.key} style={styles.problem}>
+            {t(p.key, p.vars)}
           </Text>
         ))
       ) : strength.tip ? (
-        <Text style={styles.tip}>{strength.tip}</Text>
+        <Text style={styles.tip}>{t(strength.tip.key, strength.tip.vars)}</Text>
       ) : null}
     </View>
   );

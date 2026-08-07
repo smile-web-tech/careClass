@@ -25,6 +25,16 @@ export const LANGUAGES: { code: Language; label: string; english: string }[] = [
 export const DEFAULT_LANGUAGE: Language = 'tk';
 
 /**
+ * Whether a string from outside the app is a language we actually have.
+ *
+ * The database column is `text` with a check constraint, which the client sees
+ * as a plain string. Trusting it directly would let a value written by a newer
+ * build put this one into a language whose catalogue does not exist.
+ */
+export const isLanguage = (value: unknown): value is Language =>
+  LANGUAGES.some((l) => l.code === value);
+
+/**
  * The language, readable without importing the store.
  *
  * `lib/date.ts` needs it to name months and weekdays, and the store already
