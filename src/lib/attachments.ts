@@ -8,6 +8,7 @@
  * connection that is the difference between one upload and two, and it keeps
  * a 10 MB PDF away from a request body limit measured in single megabytes.
  */
+import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
 
 import { supabase } from '@/lib/supabase';
@@ -177,7 +178,11 @@ export async function uploadAttachments(
   const teacherId = auth.user?.id;
   if (!teacherId) throw new Error('Not signed in');
 
-  const batch = crypto.randomUUID();
+  // `expo-crypto`, not the global `crypto`. Hermes has no Web Crypto, so
+  // `crypto.randomUUID()` is a ReferenceError on device — and this line only
+  // runs once a file has been picked, so it broke the send rather than the
+  // screen and nothing caught it before a real upload.
+  const batch = Crypto.randomUUID();
   const uploaded: UploadedAttachment[] = [];
 
   for (const item of picked) {
