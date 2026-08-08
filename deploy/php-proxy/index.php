@@ -136,21 +136,32 @@ foreach (request_headers() as $name => $value) {
 $forward[] = 'Expect:';
 
 /**
- * Writing a file is not the same shape of request as reading a row.
+ * Some requests are legitimately slow, and 30 seconds calls them dead.
  *
- * A REST call is a few kilobytes and should fail fast if the upstream is
- * unwell. Pushing an attachment up to storage is megabytes, and 30 seconds is
- * a limit a photograph will hit on an ordinary connection — which surfaces to
- * the teacher as "Upstream unreachable", a message that sounds like the server
- * is down when in truth it was still busy transferring.
+ * Two kinds:
+ *
+ *   Storage writes  — megabytes going up. Measured at ~5s for 6 MB from a
+ *                     decent connection, but a phone on mobile data is a
+ *                     different story.
+ *   Edge Functions  — `send-message` renders and posts one email per
+ *                     recipient, and when the message carries an attachment
+ *                     Resend fetches that file for *each* of them. A class of
+ *                     twenty is comfortably past thirty seconds, and the proxy
+ *                     hanging up mid-flight is what surfaced to the teacher as
+ *                     "Upstream unreachable" — while the emails were in fact
+ *                     still going out.
+ *
+ * Everything else keeps the short timeout, so a genuinely sick upstream still
+ * fails fast rather than leaving the app spinning.
  */
-$isUpload = str_starts_with($path, '/storage/v1')
-    && in_array($method, ['POST', 'PUT', 'PATCH'], true);
+$isSlow = (str_starts_with($path, '/storage/v1')
+        && in_array($method, ['POST', 'PUT', 'PATCH'], true))
+    || str_starts_with($path, '/functions/v1');
 
 // Belt and braces. Time spent waiting on a socket does not count towards
 // max_execution_time on Linux, but shared hosts vary and being killed
 // mid-upload would look exactly like the timeout we just raised.
-if ($isUpload) {
+if ($isSlow) {
     @set_time_limit(360);
 }
 
@@ -165,7 +176,7 @@ curl_setopt_array($ch, [
     CURLOPT_FOLLOWLOCATION => false,
     CURLOPT_ENCODING       => '',
     CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_TIMEOUT        => $isUpload ? 300 : 30,
+    CURLOPT_TIMEOUT        => $isSlow ? 300 : 30,
     CURLOPT_SSL_VERIFYPEER => true,
     CURLOPT_SSL_VERIFYHOST => 2,
 ]);
