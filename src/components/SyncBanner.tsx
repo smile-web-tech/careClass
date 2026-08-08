@@ -55,7 +55,8 @@ export function SyncBanner() {
       <View style={[styles.bar, { backgroundColor: skin.bg, borderColor: skin.fg + '33' }]}>
         <Icon name="warning" size={16} color={skin.fg} />
         <Text style={[styles.label, { color: skin.fg }]} numberOfLines={2}>
-          {failure ?? t(pending > 0 ? 'sync.offlinePending' : 'sync.offline')}
+          {failure ??
+            (pending > 0 ? t('sync.offlinePending', { count: pending }) : t('sync.offline'))}
         </Text>
 
         {failure ? (

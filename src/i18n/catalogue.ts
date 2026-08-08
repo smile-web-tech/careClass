@@ -302,6 +302,8 @@ const tk = {
   'attach.openElsewhere': 'Bu faýly açmak üçin başga programma gerek.',
   'attach.localOnly': 'Bu faýl ugradylanda goşular.',
   'reply.attachments': 'Goşundylar',
+  'replies.parent': 'Ene-atasy',
+  'replies.parentOf': 'Ene-atasy: {name}',
   'reply.openFile': 'Aç',
   'reply.cannotOpen': 'Faýly açyp bolmady.',
 
@@ -574,7 +576,8 @@ const tk = {
 
   /* --------------------------------------------------------------- Sync */
   'sync.offline': 'Internet ýok. Işläbermeli, üýtgeşmeler telefonda saklanýar.',
-  'sync.offlinePending': 'Telefonda ýatda saklandy. Internet gelende özi ugradylar.',
+  'sync.offlinePending':
+    'Telefonda saklandy. Ugradylmaly {count} üýtgeşme bar, internet gelende özi ugradylar.',
   'sync.couldNotSave': '{what} ýatda saklanmady. {reason}',
   'auth.signOutUnsent':
     'Ugradylmadyk {count} üýtgeşme bar. Çyksaň, olar ýitýär. Ilki internete birigip, Ugrat düwmesine bas.',
@@ -918,6 +921,8 @@ const ru: Record<TranslationKey, string> = {
   'attach.openElsewhere': 'Для этого файла нужно другое приложение.',
   'attach.localOnly': 'Этот файл уйдёт вместе с сообщением.',
   'reply.attachments': 'Вложения',
+  'replies.parent': 'Родитель',
+  'replies.parentOf': 'Родитель: {name}',
   'reply.openFile': 'Открыть',
   'reply.cannotOpen': 'Не удалось открыть файл.',
 
@@ -1190,7 +1195,8 @@ const ru: Record<TranslationKey, string> = {
 
   /* --------------------------------------------------------------- Sync */
   'sync.offline': 'Нет интернета. Можно работать, всё сохраняется на телефоне.',
-  'sync.offlinePending': 'Сохранено на телефоне. Отправится само, когда появится связь.',
+  'sync.offlinePending':
+    'Сохранено на телефоне. Ждёт отправки: {count}. Уйдёт само, когда появится связь.',
   'sync.couldNotSave': 'Не удалось сохранить: {what}. {reason}',
   'auth.signOutUnsent':
     'Есть {count} неотправленных изменений. При выходе они пропадут. Сначала подключитесь к интернету и нажмите «Отправить».',
@@ -1530,6 +1536,8 @@ const en: Record<TranslationKey, string> = {
   'attach.openElsewhere': 'This file needs another app to open it.',
   'attach.localOnly': 'This file goes out with the message.',
   'reply.attachments': 'Attachments',
+  'replies.parent': 'Parent',
+  'replies.parentOf': 'Parent of {name}',
   'reply.openFile': 'Open',
   'reply.cannotOpen': 'Could not open the file.',
 
@@ -1800,7 +1808,8 @@ const en: Record<TranslationKey, string> = {
 
   /* --------------------------------------------------------------- Sync */
   'sync.offline': 'No internet. Keep working, everything is saved on this phone.',
-  'sync.offlinePending': 'Saved on this phone. It will sync on its own once you are back online.',
+  'sync.offlinePending':
+    'Saved on this phone. {count} waiting, and it will sync on its own once you are back online.',
   'sync.couldNotSave': '{what} could not be saved. {reason}',
   'auth.signOutUnsent':
     'You have {count} changes that have not reached the server. Signing out loses them. Get online and press Sync first.',

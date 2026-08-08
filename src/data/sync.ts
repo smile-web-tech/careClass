@@ -340,13 +340,112 @@ async function drain(): Promise<void> {
   }
 }
 
+/**
+ * Does this change completely replace one already waiting?
+ *
+ * A register the teacher corrects four times before leaving the room is one
+ * pending change, not four: the last save contains everything the earlier ones
+ * said. Without this the count on the home screen climbs with every tap and
+ * reads as a backlog, when it is one register — and on a connection that is
+ * down all afternoon, four copies of the same write go up instead of one.
+ *
+ * Only ever applied to writes where the newer one is a complete statement of
+ * the same target. Creates, deletes and sends are never folded: each is a
+ * separate act with its own effect.
+ */
+function supersedes(a: Op, b: Op): boolean {
+  if (a.kind !== b.kind) return false;
+
+  switch (a.kind) {
+    case 'attendance.save':
+      return a.key === (b as typeof a).key;
+    case 'teacher.language':
+    case 'replies.read':
+      return true;
+    case 'reply.read':
+      return a.id === (b as typeof a).id;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Fold a patch into one already queued for the same row.
+ *
+ * `group.update` and friends carry a partial, so the newer one does not
+ * necessarily contain the older — a rename followed by a room change must keep
+ * both. Merging in order is what preserves that while still counting as one
+ * pending change.
+ */
+function mergePatch(existing: Op, incoming: Op): Op | null {
+  if (existing.kind !== incoming.kind) return null;
+
+  switch (existing.kind) {
+    case 'group.update':
+    case 'student.update':
+    case 'template.update':
+    case 'event.update': {
+      const next = incoming as typeof existing;
+      if (existing.id !== next.id) return null;
+      return { ...existing, patch: { ...existing.patch, ...next.patch } } as Op;
+    }
+    default:
+      return null;
+  }
+}
+
 /** Queue a change for the server, and try to push it straight away. */
 function enqueue(op: Op) {
   if (!hasSupabase) return;
+
+  /*
+    The head of the queue is in flight while draining, so it is not ours to
+    rewrite — the request may already be on the wire. Everything behind it is
+    still just an intention.
+  */
+  const firstFree = draining ? 1 : 0;
+
+  for (let i = queue.length - 1; i >= firstFree; i--) {
+    const queued = queue[i];
+
+    if (supersedes(op, queued.op)) {
+      queued.op = op;
+      queued.attempts = 0;
+      persistQueue();
+      publish();
+      void drain();
+      return;
+    }
+
+    const merged = mergePatch(queued.op, op);
+    if (merged) {
+      queued.op = merged;
+      queued.attempts = 0;
+      persistQueue();
+      publish();
+      void drain();
+      return;
+    }
+
+    // Only fold into the most recent write touching the same thing. Scanning
+    // past an unrelated op is fine; scanning past one that reorders the result
+    // is not, so stop at anything that touches the same row in another way.
+    if (touchesSameTarget(op, queued.op)) break;
+  }
+
   queue.push({ op, attempts: 0 });
   persistQueue();
   publish();
   void drain();
+}
+
+/** Whether two ops are about the same row, whatever they do to it. */
+function touchesSameTarget(a: Op, b: Op): boolean {
+  const idOf = (op: Op): string | null =>
+    'id' in op ? op.id : 'group' in op ? op.group.id : 'student' in op ? op.student.id : null;
+
+  const target = idOf(a);
+  return target !== null && target === idOf(b);
 }
 
 /**

@@ -20,6 +20,7 @@ import { useT } from '@/i18n/useT';
 import type { Message, Reply } from '@/data/types';
 import { timeAgo } from '@/lib/date';
 import { audienceKey, channelKey } from '@/lib/messageLabels';
+import { replyContextLabel } from '@/lib/replyContext';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -467,13 +468,14 @@ function SentCard({ message }: { message: Message }) {
 
 function ReplyCard({ reply }: { reply: Reply }) {
   const styles = useThemedStyles(makeStyles);
+  const t = useT();
   return (
     <Card style={[styles.replyCard, !reply.unread && { opacity: 0.75 }]}>
       <Avatar name={reply.authorName} accent={reply.accent} size={42} radius={radius.button} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.replyHead}>
           <Text style={styles.replyName}>{reply.authorName}</Text>
-          <Text style={styles.replyContext}>{reply.context}</Text>
+          <Text style={styles.replyContext}>{replyContextLabel(reply.context, t)}</Text>
           {reply.unread ? <View style={styles.unreadDot} /> : null}
         </View>
         <Text style={styles.replyBody}>{reply.body}</Text>

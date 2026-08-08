@@ -107,10 +107,24 @@ function unwrap<T>({ data, error }: { data: T | null; error: { message: string }
   return data as T;
 }
 
+/**
+ * Who is signed in, without asking the server.
+ *
+ * `getUser()` looks local and is not: it posts to `/auth/v1/user` on every
+ * call to have the token validated. On a connection that is down — which for
+ * these teachers is a normal Tuesday — that request fails, the user comes back
+ * null, and this threw "Not signed in", which `describeError` classifies as an
+ * auth failure and puts on screen as a session that has expired. Nothing had
+ * expired. The phone simply could not reach the internet.
+ *
+ * `getSession()` reads the stored session and only touches the network when
+ * the access token has actually aged out, which is the question being asked.
+ */
 const requireUser = async () => {
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) throw new Error('Not signed in');
-  return data.user.id;
+  const { data } = await supabase.auth.getSession();
+  const id = data.session?.user?.id;
+  if (!id) throw new Error('Not signed in');
+  return id;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -209,8 +223,12 @@ export type TeacherProfile = {
 };
 
 export async function fetchTeacher(): Promise<TeacherProfile | null> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  // The stored session, not `getUser()`, for the same reason as `requireUser`:
+  // that call goes to the network and turns a dropped connection into a
+  // teacher with no account.
+  const { data: auth } = await supabase.auth.getSession();
+  const user = auth.session?.user;
+  if (!user) return null;
 
   // `maybeSingle`, not `single`: a missing row is a state to handle, and
   // `single` reports it as an error. That turned "no profile row" into a
@@ -218,18 +236,18 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
   // it — so the app silently stopped reconciling with the server entirely and
   // ran on local state forever. The fallback below was never reached.
   const row = unwrap(
-    await supabase.from('teachers').select('*').eq('id', auth.user.id).maybeSingle(),
+    await supabase.from('teachers').select('*').eq('id', user.id).maybeSingle(),
   ) as TeacherRow | null;
 
   if (!row) {
     const profile = {
-      id: auth.user.id,
-      name: (auth.user.user_metadata?.full_name as string) ?? '',
-      email: auth.user.email ?? null,
-      avatarUrl: (auth.user.user_metadata?.avatar_url as string) ?? null,
+      id: user.id,
+      name: (user.user_metadata?.full_name as string) ?? '',
+      email: user.email ?? null,
+      avatarUrl: (user.user_metadata?.avatar_url as string) ?? null,
       timezone: 'UTC',
-      provider: auth.user.app_metadata?.provider ?? 'email',
-      createdAt: auth.user.created_at,
+      provider: user.app_metadata?.provider ?? 'email',
+      createdAt: user.created_at,
       // A row that does not exist yet has chosen nothing; the device's pick wins.
       language: null,
     };
@@ -260,11 +278,11 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
     id: row.id,
     // The trigger copies the name from the provider at signup, but Apple only
     // sends it once — fall back to whatever auth still holds.
-    name: row.name || (auth.user.user_metadata?.full_name as string) || '',
-    email: row.email ?? auth.user.email ?? null,
-    avatarUrl: row.avatar_url ?? (auth.user.user_metadata?.avatar_url as string) ?? null,
+    name: row.name || (user.user_metadata?.full_name as string) || '',
+    email: row.email ?? user.email ?? null,
+    avatarUrl: row.avatar_url ?? (user.user_metadata?.avatar_url as string) ?? null,
     timezone: row.timezone,
-    provider: auth.user.app_metadata?.provider ?? 'email',
+    provider: user.app_metadata?.provider ?? 'email',
     createdAt: row.created_at,
     language: row.language ?? null,
   };

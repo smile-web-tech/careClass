@@ -39,6 +39,20 @@ const isSlowPath = (url: string) =>
   url.includes('/functions/v1') || url.includes('/storage/v1/object');
 
 /**
+ * Never send an auth write twice.
+ *
+ * A refresh token is single-use: the moment `/auth/v1/token` accepts one it
+ * issues a new pair and marks the old one spent. If the reply is lost on the
+ * way back and the request is repeated, the second attempt presents a token
+ * the server has already consumed, gets "Invalid Refresh Token: Already Used",
+ * and gotrue-js ends the session. On a connection that loses replies for a
+ * living, a retry here is not resilience — it is the cause of the "session
+ * expired" the teacher keeps seeing. Sign-in and sign-up are excluded for the
+ * same reason: repeating them can send a second OTP or create a second row.
+ */
+const isAuthWrite = (url: string, method: string) => url.includes('/auth/v1') && method !== 'GET';
+
+/**
  * Can this be sent again without changing what the server ends up holding?
  *
  * Reads always. Writes never — not because retrying is likely to duplicate
@@ -62,6 +76,7 @@ export async function resilientFetch(
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const method = (init.method ?? 'GET').toUpperCase();
   const timeout = isSlowPath(url) ? SLOW_TIMEOUT_MS : READ_TIMEOUT_MS;
+  const neverRepeat = isAuthWrite(url, method);
 
   let lastError: unknown;
 
@@ -83,7 +98,12 @@ export async function resilientFetch(
       const response = await fetch(input, { ...init, signal: controller.signal });
 
       // A retryable status, on something safe to repeat, with an attempt left.
-      if (RETRYABLE_STATUS.has(response.status) && isRead(method) && attempt < MAX_ATTEMPTS) {
+      if (
+        RETRYABLE_STATUS.has(response.status) &&
+        isRead(method) &&
+        !neverRepeat &&
+        attempt < MAX_ATTEMPTS
+      ) {
         await sleep(backoff(attempt));
         continue;
       }
@@ -103,7 +123,7 @@ export async function resilientFetch(
         delivered anything, whereas a timeout may well mean the server is
         working on it right now and a second copy would be applied too.
       */
-      const worthRetrying = isRead(method) || (attempt === 1 && !timedOut);
+      const worthRetrying = !neverRepeat && (isRead(method) || (attempt === 1 && !timedOut));
 
       if (!worthRetrying || attempt === MAX_ATTEMPTS) {
         if (timedOut) {

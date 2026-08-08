@@ -26,6 +26,7 @@ import { useT } from '@/i18n/useT';
 import { formatBytes } from '@/lib/attachments';
 import { longDateTime } from '@/lib/date';
 import { audienceKey, channelKey } from '@/lib/messageLabels';
+import { replyContextLabel } from '@/lib/replyContext';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -86,7 +87,9 @@ export default function MessageDetail() {
             <Avatar name={reply.authorName} accent={reply.accent} size={52} radius={radius.tile} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.authorName}>{reply.authorName}</Text>
-              {reply.context ? <Text style={styles.authorContext}>{reply.context}</Text> : null}
+              {reply.context ? (
+                <Text style={styles.authorContext}>{replyContextLabel(reply.context, t)}</Text>
+              ) : null}
               <Text style={styles.when}>{longDateTime(reply.at)}</Text>
             </View>
           </View>

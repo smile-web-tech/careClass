@@ -183,8 +183,11 @@ export async function uploadAttachments(
   picked: PickedAttachment[],
   onProgress?: (done: number, total: number) => void,
 ): Promise<UploadedAttachment[]> {
-  const { data: auth } = await supabase.auth.getUser();
-  const teacherId = auth.user?.id;
+  // `getSession`, not `getUser`: the latter posts to the auth server to have
+  // the token checked, so a slow connection here reported the teacher as
+  // signed out on the way to an upload that would have worked.
+  const { data: auth } = await supabase.auth.getSession();
+  const teacherId = auth.session?.user?.id;
   if (!teacherId) throw new Error('Not signed in');
 
   // `expo-crypto`, not the global `crypto`. Hermes has no Web Crypto, so
