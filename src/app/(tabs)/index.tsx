@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AngledGradient, Ring } from '@/components/decor';
 import { Icon } from '@/components/Icon';
 import { PageHeading, Screen, useTabInset } from '@/components/layout';
+import { SyncPill } from '@/components/SyncPill';
 import { Avatar, Card, EmptyState, IconButton, initialsOf, Press, Txt } from '@/components/ui';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Group, Student } from '@/data/types';
@@ -79,8 +80,15 @@ export default function Home() {
               <Text style={styles.teacherInitials}>{initialsOf(teacherName)}</Text>
             </Press>
           }
-          style={{ paddingBottom: 16 }}
+          style={{ paddingBottom: 10 }}
         />
+
+        {/*
+          Directly under the greeting, above everything the teacher came here to
+          do. Sync state is not worth a screen of its own and it is not worth
+          hunting for in Profile — it belongs where the eye already lands.
+        */}
+        <SyncPill style={styles.syncPill} />
 
         <View style={styles.searchWrap}>
           <View style={styles.search}>
@@ -292,7 +300,6 @@ function GroupRow({
   const next = nextSessionForGroup(group, now);
   const slot = next ? relativeSlot(at(next.date, next.start), now) : null;
 
-
   return (
     <Press onPress={onPress} style={styles.groupRow}>
       <View style={[styles.countTile, { backgroundColor: a.tint }]}>
@@ -375,6 +382,7 @@ const makeStyles = ({ color, shadow }: Theme) =>
     },
     teacherInitials: { fontFamily: display[600], fontSize: 15, color: '#fff' },
 
+    syncPill: { marginLeft: space.gutter - 6, marginBottom: 12 },
     searchWrap: { paddingHorizontal: space.gutter, paddingBottom: 18 },
     search: {
       flexDirection: 'row',

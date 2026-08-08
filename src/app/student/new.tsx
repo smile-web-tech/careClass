@@ -2,12 +2,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { showAlert } from '@/components/Dialog';
 import { useT } from '@/i18n/useT';
 import { StudentForm, type StudentDraft } from '@/components/StudentForm';
 import { Card, Toggle } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
-import { isReachable } from '@/data/sync';
 import { smsNumber } from '@/lib/contact';
 import { slotDaysLabel, slotTimeLabel } from '@/lib/schedule';
 import { useThemedStyles, type Theme } from '@/theme';
@@ -23,23 +21,16 @@ export default function NewStudent() {
   const addStudent = useStore((s) => s.addStudent);
 
   const [welcome, setWelcome] = useState(true);
-  const [checking, setChecking] = useState(false);
 
   /**
-   * Refuse to create a student the server has not heard of — same reasoning as
-   * the group screen. Everything the app does afterwards refers to this student
-   * by id, so one that exists only on the phone breaks messaging and attendance
-   * later, at a point where nothing connects it back to a lost connection now.
+   * Commit the student, then do whatever the caller wanted next.
+   *
+   * This used to check the connection first and refuse when it was down. It no
+   * longer needs to: the id is minted on the device and the write is queued to
+   * disk, so a student added between lessons is real whether or not there is
+   * any signal in the room.
    */
-  const guarded = async (draft: StudentDraft, then: () => void) => {
-    setChecking(true);
-    const online = await isReachable();
-    setChecking(false);
-
-    if (!online) {
-      await showAlert(t('common.noInternet'), t('students.noInternetCreate'), 'danger');
-      return false;
-    }
+  const guarded = (draft: StudentDraft, then: () => void) => {
     commit(draft);
     then();
     return true;
@@ -67,8 +58,7 @@ export default function NewStudent() {
   return (
     <StudentForm
       title={t('students.new')}
-      submitLabel={checking ? t('common.checking') : t('common.save')}
-      busy={checking}
+      submitLabel={t('common.save')}
       preselectGroups={params.group ? [params.group] : []}
       secondary={{
         label: t('students.saveAndAddAnother'),

@@ -63,7 +63,9 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return asked.granted;
 }
 
-export async function notificationPermissionStatus(): Promise<'granted' | 'denied' | 'undetermined'> {
+export async function notificationPermissionStatus(): Promise<
+  'granted' | 'denied' | 'undetermined'
+> {
   if (!Device.isDevice) return 'denied';
   const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
   if (granted) return 'granted';
@@ -212,9 +214,7 @@ export async function getDevicePushToken(): Promise<string | null> {
  * Play Services, a teacher who declined notifications — none of those are
  * errors worth interrupting anyone over, and all of them simply mean no push.
  */
-export async function registerForPush(
-  save: (token: string) => Promise<unknown>,
-): Promise<boolean> {
+export async function registerForPush(save: (token: string) => Promise<unknown>): Promise<boolean> {
   try {
     const token = await getDevicePushToken();
     if (!token) return false;

@@ -80,10 +80,7 @@ function stricter(a: ThrottleState, b: ThrottleState): ThrottleState {
 
 /** Whether a sign-in may be attempted right now, and if not, for how long. */
 export async function loginGate(email: string): Promise<ThrottleState> {
-  const [byAddress, byDevice] = await Promise.all([
-    read(addressScope(email)),
-    read(DEVICE_SCOPE),
-  ]);
+  const [byAddress, byDevice] = await Promise.all([read(addressScope(email)), read(DEVICE_SCOPE)]);
   return stricter(toState(byAddress), toState(byDevice));
 }
 

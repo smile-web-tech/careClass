@@ -50,7 +50,10 @@ export function LanguagePicker({
               accessibilityRole="radio"
               accessibilityState={{ selected: on }}
               accessibilityLabel={option.english}
-              style={[styles.card, on && { borderColor: color.primary, backgroundColor: color.primaryTint }]}>
+              style={[
+                styles.card,
+                on && { borderColor: color.primary, backgroundColor: color.primaryTint },
+              ]}>
               <Text style={[styles.cardLabel, on && { color: color.primaryInk }]}>
                 {option.label}
               </Text>
@@ -75,9 +78,7 @@ export function LanguagePicker({
             accessibilityState={{ selected: on }}
             accessibilityLabel={option.english}
             style={[styles.row, i > 0 && styles.rowBordered]}>
-            <Text style={[styles.rowLabel, on && { color: color.primaryInk }]}>
-              {option.label}
-            </Text>
+            <Text style={[styles.rowLabel, on && { color: color.primaryInk }]}>{option.label}</Text>
             {on ? <Icon name="check" size={16} color={color.primary} /> : null}
           </Press>
         );

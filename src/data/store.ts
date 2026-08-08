@@ -67,6 +67,17 @@ type NewStudent = {
 
 type State = {
   signedIn: boolean;
+  /**
+   * The Supabase user id the persisted data belongs to.
+   *
+   * Load-bearing, not bookkeeping. Everything below is one account's data held
+   * on the device, and signing out only flipped `signedIn` — so signing back in
+   * as somebody else showed the previous teacher's groups and students until
+   * the first hydrate finished, and any slice the new account had none of (no
+   * templates, no events) kept the old one's forever. Comparing this against
+   * the session's id is what makes a switch a switch.
+   */
+  teacherId: string | null;
   teacherName: string;
   teacherEmail: string | null;
   teacherAvatarUrl: string | null;
@@ -104,6 +115,11 @@ type State = {
 
   signIn: (name?: string) => void;
   signOut: () => void;
+  /**
+   * Throw away everything that belongs to an account, keeping only what belongs
+   * to the device — the language, and whether the welcome screen has been seen.
+   */
+  resetAccount: () => void;
 
   addGroup: (g: Omit<Group, 'id' | 'accent'> & { accent?: Group['accent'] }) => string;
   updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
@@ -213,6 +229,7 @@ export const useStore = create<State>()(
   persist(
     (set, get) => ({
       signedIn: false,
+      teacherId: null,
       // Empty, not seeded. A public build must never show a new teacher a class
       // of invented students — they look real, they are indistinguishable from
       // a sync that half-worked, and one of them ending up in a message would
@@ -236,7 +253,37 @@ export const useStore = create<State>()(
       reminderLead: 15,
 
       signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
-      signOut: () => set({ signedIn: false }),
+
+      // Signing out clears the account's data as well as the flag. Leaving it
+      // in place meant the next teacher to sign in on this phone saw the last
+      // one's classes — and a shared staffroom phone is exactly how this app
+      // gets used.
+      signOut: () => {
+        get().resetAccount();
+        set({ signedIn: false });
+      },
+
+      resetAccount: () =>
+        set({
+          teacherId: null,
+          teacherName: '',
+          teacherEmail: null,
+          teacherAvatarUrl: null,
+          teacherProvider: 'email',
+          groups: [],
+          students: [],
+          attendance: {},
+          messages: [],
+          replies: [],
+          events: [],
+          assessments: [],
+          grades: [],
+          templates: [],
+          // Reminders are scheduled against groups that have just been dropped,
+          // so the schedule is meaningless now. `useClassReminders` re-plans
+          // from whatever the next account turns out to have.
+          remindersOn: false,
+        }),
 
       addGroup: (g) => {
         const id = uid();
@@ -528,6 +575,7 @@ export const useStore = create<State>()(
       // Seeded collections are code, not user data — only persist what changed.
       partialize: (s) => ({
         signedIn: s.signedIn,
+        teacherId: s.teacherId,
         teacherName: s.teacherName,
         teacherEmail: s.teacherEmail,
         teacherAvatarUrl: s.teacherAvatarUrl,

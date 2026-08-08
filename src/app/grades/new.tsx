@@ -24,17 +24,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { showAlert } from '@/components/Dialog';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
-import {
-  Avatar,
-  Button,
-  Card,
-  Divider,
-  FieldRow,
-  Overline,
-  Segmented,
-} from '@/components/ui';
+import { Avatar, Button, Card, Divider, FieldRow, Overline, Segmented } from '@/components/ui';
 import { useStore, useStudents } from '@/data/store';
-import { isReachable } from '@/data/sync';
 import type { Assessment, AssessmentKind } from '@/data/types';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
@@ -102,15 +93,6 @@ export default function RecordGrades() {
 
   const save = async () => {
     if (!ready || !groupId) return;
-
-    setSaving(true);
-    const online = await isReachable();
-    setSaving(false);
-
-    if (!online) {
-      await showAlert(t('common.noInternet'), t('grades.noInternetSave'), 'danger');
-      return;
-    }
 
     const assessment: Assessment = {
       id: existing?.id ?? Crypto.randomUUID(),
@@ -182,9 +164,7 @@ export default function RecordGrades() {
               keyboardType="numeric"
             />
           </Card>
-          {!maxValid ? (
-            <Text style={styles.error}>{t('grades.maxScoreError')}</Text>
-          ) : null}
+          {!maxValid ? <Text style={styles.error}>{t('grades.maxScoreError')}</Text> : null}
 
           <View style={styles.rosterHead}>
             <Overline>{group.name}</Overline>
@@ -198,8 +178,7 @@ export default function RecordGrades() {
               const value = scores[s.id] ?? '';
               const n = Number(value);
               const bad =
-                value.trim() !== '' &&
-                (!Number.isFinite(n) || n < 0 || (maxValid && n > max));
+                value.trim() !== '' && (!Number.isFinite(n) || n < 0 || (maxValid && n > max));
 
               return (
                 <View key={s.id}>
@@ -244,18 +223,14 @@ export default function RecordGrades() {
             </Text>
           ) : null}
 
-          <Text style={styles.footnote}>
-            {t('grades.emptyIsNotZero')}
-          </Text>
+          <Text style={styles.footnote}>{t('grades.emptyIsNotZero')}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
 
       <StickyFooter>
         <Button
           grow
-          label={
-            saving ? t('common.checking') : t(existing ? 'common.saveChanges' : 'common.save')
-          }
+          label={saving ? t('common.checking') : t(existing ? 'common.saveChanges' : 'common.save')}
           height={50}
           onPress={save}
           disabled={!ready || saving}

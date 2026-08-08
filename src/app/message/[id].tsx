@@ -20,25 +20,14 @@ import { confirm } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
 import { Avatar, Badge, Button, Card, Divider, Overline, Press, Txt } from '@/components/ui';
-import {
-  fetchMessageAttachments,
-  fetchReplyAttachments,
-  type StoredAttachment,
-} from '@/data/api';
+import { fetchMessageAttachments, fetchReplyAttachments, type StoredAttachment } from '@/data/api';
 import { useGroups, useStore } from '@/data/store';
 import { useT } from '@/i18n/useT';
 import { formatBytes } from '@/lib/attachments';
 import { longDateTime } from '@/lib/date';
+import { audienceKey, channelKey } from '@/lib/messageLabels';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
-
-const AUDIENCE_LABEL = {
-  students: 'Students',
-  parents: 'Parents',
-  both: 'Students + parents',
-} as const;
-
-const CHANNEL_LABEL = { sms: 'SMS', email: 'Email', push: 'Push' } as const;
 
 export default function MessageDetail() {
   const t = useT();
@@ -154,7 +143,7 @@ export default function MessageDetail() {
               />
             ))
           )}
-          <Badge label={AUDIENCE_LABEL[message.audience]} bg={color.bg} fg={color.muted} />
+          <Badge label={t(audienceKey(message.audience))} bg={color.bg} fg={color.muted} />
         </View>
 
         <Text style={styles.when}>{longDateTime(message.sentAt)}</Text>
@@ -191,7 +180,7 @@ export default function MessageDetail() {
               <Icon name="send" size={15} color={color.inkSoft} />
             </View>
             <Text style={styles.rowLabel}>
-              {message.channels.map((c) => CHANNEL_LABEL[c]).join(' + ') || t('messages.noChannel')}
+              {message.channels.map((c) => t(channelKey(c))).join(' + ') || t('messages.noChannel')}
             </Text>
           </View>
         </Card>
@@ -222,7 +211,13 @@ export default function MessageDetail() {
  * teacher's only copy of what the class was actually given, and until now it
  * showed nothing at all.
  */
-function StoredAttachments({ load, id }: { load: (id: string) => Promise<StoredAttachment[]>; id: string }) {
+function StoredAttachments({
+  load,
+  id,
+}: {
+  load: (id: string) => Promise<StoredAttachment[]>;
+  id: string;
+}) {
   const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);

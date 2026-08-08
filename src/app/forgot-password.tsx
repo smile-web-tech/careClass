@@ -95,9 +95,7 @@ export default function ForgotPassword() {
 
   if (step === 'email') {
     return (
-      <AuthScreen
-        title={t('auth.resetPassword')}
-        subtitle={t('auth.resetSubtitle')}>
+      <AuthScreen title={t('auth.resetPassword')} subtitle={t('auth.resetSubtitle')}>
         {error ? <AuthNotice>{error}</AuthNotice> : null}
 
         <AuthField
@@ -115,7 +113,12 @@ export default function ForgotPassword() {
           autoFocus
         />
 
-        <AuthButton label={t('auth.sendCode')} onPress={() => void send()} disabled={!emailOk} busy={busy} />
+        <AuthButton
+          label={t('auth.sendCode')}
+          onPress={() => void send()}
+          disabled={!emailOk}
+          busy={busy}
+        />
       </AuthScreen>
     );
   }

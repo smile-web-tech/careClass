@@ -26,11 +26,7 @@ const open = async (url: string, what: string) => {
   try {
     await Linking.openURL(url);
   } catch {
-    showAlert(
-      translateNow('error.cannotOpen'),
-      translateNow('error.noAppFor', { what }),
-      'danger',
-    );
+    showAlert(translateNow('error.cannotOpen'), translateNow('error.noAppFor', { what }), 'danger');
   }
 };
 

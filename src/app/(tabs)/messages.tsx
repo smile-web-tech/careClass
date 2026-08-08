@@ -19,16 +19,9 @@ import {
 import { useT } from '@/i18n/useT';
 import type { Message, Reply } from '@/data/types';
 import { timeAgo } from '@/lib/date';
+import { audienceKey, channelKey } from '@/lib/messageLabels';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
-
-const AUDIENCE_LABEL = {
-  students: 'Students',
-  parents: 'Parents',
-  both: 'Students + parents',
-} as const;
-
-const CHANNEL_LABEL = { sms: 'SMS', email: 'Email', push: 'Push' } as const;
 
 export default function Messages() {
   const t = useT();
@@ -435,8 +428,8 @@ function SentCard({ message }: { message: Message }) {
         <Badge
           label={
             message.announcement || targets.length === 0
-              ? `All groups · ${AUDIENCE_LABEL[message.audience]}`
-              : AUDIENCE_LABEL[message.audience]
+              ? `${t('messages.allGroups')} · ${t(audienceKey(message.audience))}`
+              : t(audienceKey(message.audience))
           }
           bg={color.bg}
           fg={color.muted}
@@ -460,12 +453,12 @@ function SentCard({ message }: { message: Message }) {
               { color: partial ? color.warningDeep : color.successDeep },
             ]}>
             {partial
-              ? `${message.delivered} of ${message.total} delivered`
-              : `Delivered ${message.delivered}/${message.total}`}
+              ? t('messages.deliveredOf', { delivered: message.delivered, total: message.total })
+              : t('messages.deliveredAll', { total: message.total })}
           </Text>
         </View>
         <Text style={styles.channels}>
-          {message.channels.map((c) => CHANNEL_LABEL[c]).join(' + ')}
+          {message.channels.map((c) => t(channelKey(c))).join(' + ')}
         </Text>
       </View>
     </Card>

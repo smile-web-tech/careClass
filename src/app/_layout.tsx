@@ -25,7 +25,15 @@ import { Intro } from '@/components/Intro';
 import { SyncBanner } from '@/components/SyncBanner';
 import { updateTeacher } from '@/data/api';
 import { useGroups, useStore } from '@/data/store';
-import { flushWrites, hydrate, installSync, refreshInbox, watchInbox } from '@/data/sync';
+import {
+  clearQueue,
+  flushWrites,
+  hydrate,
+  installSync,
+  refreshInbox,
+  restoreQueue,
+  watchInbox,
+} from '@/data/sync';
 import { registerForPush, rescheduleClassReminders } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -46,15 +54,40 @@ function useSupabaseSession() {
 
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       const signedIn = !!session;
+      const userId = session?.user.id ?? null;
+
+      /*
+        A different account than the one this device holds data for.
+
+        Everything persisted — groups, students, registers, the outbox — belongs
+        to one teacher, and `hydrate()` only overwrites the collections the
+        server has rows for. So signing in as somebody else used to show the
+        previous teacher's classes until the pull finished, and anything the new
+        account had none of stayed on screen indefinitely. Clearing first makes
+        the switch clean, and clearing the outbox as well is the important half:
+        replaying one teacher's unsent writes under another's token would file
+        their students into the wrong account.
+      */
+      if (signedIn && userId && userId !== useStore.getState().teacherId) {
+        useStore.getState().resetAccount();
+        void clearQueue();
+      }
+
       useStore.setState({
         signedIn,
+        ...(userId ? { teacherId: userId } : {}),
         teacherName:
           (session?.user.user_metadata?.full_name as string | undefined) ??
           useStore.getState().teacherName,
       });
 
       if (signedIn && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-        hydrate().catch((e) => console.warn('[classcare] hydrate failed:', e));
+        // Bring back what was still unsent when the app last closed, then pull.
+        // In that order, always — `hydrate` overwrites local collections, so
+        // pulling first would discard a register taken on a dead connection.
+        restoreQueue(userId)
+          .then(() => hydrate())
+          .catch((e) => console.warn('[classcare] hydrate failed:', e));
         // Store this device's push token against the account, so the server can
         // tell them a parent replied. Nothing did this before, which is why
         // `teachers.push_token` was always null however well FCM was set up.

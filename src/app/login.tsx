@@ -193,7 +193,9 @@ export default function Login() {
       </View>
 
       <AuthButton
-        label={locked ? t('auth.lockedButton', { time: formatWait(gate!.msLeft) }) : t('auth.signIn')}
+        label={
+          locked ? t('auth.lockedButton', { time: formatWait(gate!.msLeft) }) : t('auth.signIn')
+        }
         onPress={() => void submit()}
         disabled={!ready}
         busy={busy}

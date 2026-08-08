@@ -15,19 +15,27 @@ const tr = (key: Parameters<typeof translate>[1], vars?: Record<string, string |
  * Read through `useStore` at call time rather than passed in, because these are
  * used by plain formatting helpers that screens call inline.
  */
-const NAMES: Record<Language, { dowShort: string[]; dowLong: string[]; monthShort: string[]; monthLong: string[] }> = {
+const NAMES: Record<
+  Language,
+  { dowShort: string[]; dowLong: string[]; monthShort: string[]; monthLong: string[] }
+> = {
   tk: {
     dowShort: ['Ýek', 'Duş', 'Siş', 'Çar', 'Pen', 'Ann', 'Şen'],
-    dowLong: [
-      'Ýekşenbe',
-      'Duşenbe',
-      'Sişenbe',
-      'Çarşenbe',
-      'Penşenbe',
-      'Anna',
-      'Şenbe',
+    dowLong: ['Ýekşenbe', 'Duşenbe', 'Sişenbe', 'Çarşenbe', 'Penşenbe', 'Anna', 'Şenbe'],
+    monthShort: [
+      'Ýan',
+      'Few',
+      'Mart',
+      'Apr',
+      'Maý',
+      'Iýun',
+      'Iýul',
+      'Awg',
+      'Sen',
+      'Okt',
+      'Noý',
+      'Dek',
     ],
-    monthShort: ['Ýan', 'Few', 'Mart', 'Apr', 'Maý', 'Iýun', 'Iýul', 'Awg', 'Sen', 'Okt', 'Noý', 'Dek'],
     monthLong: [
       'Ýanwar',
       'Fewral',
@@ -45,16 +53,21 @@ const NAMES: Record<Language, { dowShort: string[]; dowLong: string[]; monthShor
   },
   ru: {
     dowShort: ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'],
-    dowLong: [
-      'Воскресенье',
-      'Понедельник',
-      'Вторник',
-      'Среда',
-      'Четверг',
-      'Пятница',
-      'Суббота',
+    dowLong: ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'],
+    monthShort: [
+      'Янв',
+      'Фев',
+      'Мар',
+      'Апр',
+      'Май',
+      'Июн',
+      'Июл',
+      'Авг',
+      'Сен',
+      'Окт',
+      'Ноя',
+      'Дек',
     ],
-    monthShort: ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'],
     monthLong: [
       'Январь',
       'Февраль',
@@ -73,7 +86,20 @@ const NAMES: Record<Language, { dowShort: string[]; dowLong: string[]; monthShor
   en: {
     dowShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
     dowLong: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    monthShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    monthShort: [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ],
     monthLong: [
       'January',
       'February',

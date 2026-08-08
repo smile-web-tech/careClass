@@ -48,7 +48,11 @@ export default function Welcome() {
       />
       <Glow size={300} tint={color.primary} style={{ left: -70, top: -50 }} />
 
-      <View style={[styles.content, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 28 }]}>
+      <View
+        style={[
+          styles.content,
+          { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 28 },
+        ]}>
         <Logo size={68} />
         <Text style={styles.title}>{t('auth.welcomeTitle')}</Text>
         <Text style={styles.subtitle}>{t('auth.welcomeSubtitle')}</Text>

@@ -27,7 +27,11 @@ export default function EditGroup() {
 
   if (!group) {
     return (
-      <GroupForm title={t('groups.edit')} submitLabel={t('common.save')} onSubmit={() => router.back()} />
+      <GroupForm
+        title={t('groups.edit')}
+        submitLabel={t('common.save')}
+        onSubmit={() => router.back()}
+      />
     );
   }
 
@@ -84,7 +88,9 @@ function DangerZone({ onDelete }: { onDelete: () => void }) {
             <Icon name="close" size={15} color={color.dangerDeep} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.label, { color: color.dangerDeep }]}>{t('groups.deleteThis')}</Text>
+            <Text style={[styles.label, { color: color.dangerDeep }]}>
+              {t('groups.deleteThis')}
+            </Text>
             <Text style={styles.hint} numberOfLines={2}>
               {t('groups.deleteHint')}
             </Text>

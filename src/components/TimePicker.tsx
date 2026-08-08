@@ -100,7 +100,9 @@ function Column({
               ref.current?.scrollTo({ y: values.indexOf(v) * ITEM_HEIGHT, animated: true });
             }}
             style={styles.item}>
-            <Text style={[styles.itemLabel, { color: on ? color.ink : color.mutedLight }]}>{v}</Text>
+            <Text style={[styles.itemLabel, { color: on ? color.ink : color.mutedLight }]}>
+              {v}
+            </Text>
           </Press>
         );
       })}

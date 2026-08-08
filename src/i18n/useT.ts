@@ -21,8 +21,7 @@ export function useLanguage(): Language {
 export function useT() {
   const language = useLanguage();
   return useCallback(
-    (key: TranslationKey, vars?: Record<string, string | number>) =>
-      translate(language, key, vars),
+    (key: TranslationKey, vars?: Record<string, string | number>) => translate(language, key, vars),
     [language],
   );
 }

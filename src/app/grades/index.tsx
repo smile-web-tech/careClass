@@ -96,19 +96,19 @@ export default function Grades() {
   );
 
   const ranked = useMemo(() => {
-    return roster
-      .map((s) => ({
-        student: s,
-        average: averagePercent(s.id, grades, assessments, { groupId: groupId ?? undefined }),
-        marked: grades.filter(
-          (g) =>
-            g.studentId === s.id &&
-            groupAssessments.some((a) => a.id === g.assessmentId),
-        ).length,
-      }))
-      // Ungraded students sink to the bottom: they are not doing badly, there
-      // is simply nothing to say about them yet.
-      .sort((a, b) => (b.average ?? -1) - (a.average ?? -1));
+    return (
+      roster
+        .map((s) => ({
+          student: s,
+          average: averagePercent(s.id, grades, assessments, { groupId: groupId ?? undefined }),
+          marked: grades.filter(
+            (g) => g.studentId === s.id && groupAssessments.some((a) => a.id === g.assessmentId),
+          ).length,
+        }))
+        // Ungraded students sink to the bottom: they are not doing badly, there
+        // is simply nothing to say about them yet.
+        .sort((a, b) => (b.average ?? -1) - (a.average ?? -1))
+    );
   }, [assessments, grades, groupAssessments, groupId, roster]);
 
   const graded = ranked.filter((r) => r.average !== null);
@@ -119,9 +119,7 @@ export default function Grades() {
 
   const unreported = useMemo(
     () =>
-      groupAssessments.filter((a) =>
-        grades.some((g) => g.assessmentId === a.id && !g.notifiedAt),
-      ),
+      groupAssessments.filter((a) => grades.some((g) => g.assessmentId === a.id && !g.notifiedAt)),
     [grades, groupAssessments],
   );
 
@@ -150,10 +148,9 @@ export default function Grades() {
       const lines = [
         t('grades.notifiedCount', { count: report.notified }),
         report.skipped
-          ? t(
-              audience === 'parents' ? 'grades.skippedNoParentEmail' : 'grades.skippedNoEmail',
-              { count: report.skipped },
-            )
+          ? t(audience === 'parents' ? 'grades.skippedNoParentEmail' : 'grades.skippedNoEmail', {
+              count: report.skipped,
+            })
           : '',
         report.failed ? t('grades.failedCount', { count: report.failed }) : '',
         ...report.errors,
@@ -204,7 +201,10 @@ export default function Grades() {
         }}
         showsVerticalScrollIndicator={false}>
         {groups.length === 0 ? (
-          <EmptyState title={t('groups.noneYet')} hint={t('grades.addStudentsFirst', { name: '' })} />
+          <EmptyState
+            title={t('groups.noneYet')}
+            hint={t('grades.addStudentsFirst', { name: '' })}
+          />
         ) : (
           <>
             <Overline style={styles.label}>{t('grades.group')}</Overline>
@@ -251,7 +251,9 @@ export default function Grades() {
               disabled={!groupId || roster.length === 0}
             />
             {roster.length === 0 && groupId ? (
-              <Text style={styles.hint}>{t('grades.addStudentsFirst', { name: group?.name ?? '' })}</Text>
+              <Text style={styles.hint}>
+                {t('grades.addStudentsFirst', { name: group?.name ?? '' })}
+              </Text>
             ) : null}
 
             {unreported.length ? (
@@ -300,9 +302,7 @@ export default function Grades() {
                         </View>
                         {row.average !== null && skin && standing ? (
                           <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                            <Text style={[styles.average, { color: skin.fg }]}>
-                              {row.average}%
-                            </Text>
+                            <Text style={[styles.average, { color: skin.fg }]}>{row.average}%</Text>
                             <Badge
                               label={t(STANDING_KEY[standing])}
                               bg={skin.bg}
@@ -324,7 +324,9 @@ export default function Grades() {
 
             {groupAssessments.length ? (
               <>
-                <Overline style={[styles.label, { marginTop: 24 }]}>{t('grades.assessments')}</Overline>
+                <Overline style={[styles.label, { marginTop: 24 }]}>
+                  {t('grades.assessments')}
+                </Overline>
                 <Card style={{ overflow: 'hidden' }}>
                   {groupAssessments.map((a, i) => {
                     const marks = grades.filter((g) => g.assessmentId === a.id);

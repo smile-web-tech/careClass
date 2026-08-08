@@ -14,13 +14,7 @@
 import { translateNow } from '@/i18n/useT';
 
 export type ErrorKind =
-  | 'offline'
-  | 'auth'
-  | 'permission'
-  | 'notFound'
-  | 'conflict'
-  | 'server'
-  | 'unknown';
+  'offline' | 'auth' | 'permission' | 'notFound' | 'conflict' | 'server' | 'unknown';
 
 export type AppError = {
   kind: ErrorKind;
@@ -35,7 +29,8 @@ export type AppError = {
 const textOf = (e: unknown): string => {
   if (typeof e === 'string') return e;
   if (e instanceof Error) return e.message;
-  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message);
+  if (e && typeof e === 'object' && 'message' in e)
+    return String((e as { message: unknown }).message);
   return String(e ?? '');
 };
 
@@ -166,7 +161,10 @@ export function describeError(e: unknown): AppError {
   // instance — is better than anything this function could invent. The test is
   // crude but effective: real sentences, no stack-trace punctuation.
   const looksHuman =
-    detail.length > 0 && detail.length < 400 && / /.test(detail) && !/[{}<>]|\bat \w+\./.test(detail);
+    detail.length > 0 &&
+    detail.length < 400 &&
+    / /.test(detail) &&
+    !/[{}<>]|\bat \w+\./.test(detail);
 
   return {
     kind: 'unknown',

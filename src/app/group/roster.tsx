@@ -119,11 +119,7 @@ export default function GroupRoster() {
         ListEmptyComponent={
           <EmptyState
             title={t(students.length === 0 ? 'students.noneYet' : 'students.nobodyMatches')}
-            hint={
-              students.length === 0
-                ? t('students.addFirst')
-                : t('students.tryAnother')
-            }
+            hint={students.length === 0 ? t('students.addFirst') : t('students.tryAnother')}
           />
         }
         renderItem={({ item }) => (

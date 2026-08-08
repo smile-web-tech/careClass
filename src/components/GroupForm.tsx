@@ -160,7 +160,11 @@ export function GroupForm({
 
           <Overline style={styles.label}>{t('calendar.when')}</Overline>
           <Card style={styles.group}>
-            <TimeField label={t('groups.starts')} value={start} onPress={() => setPicking('start')} />
+            <TimeField
+              label={t('groups.starts')}
+              value={start}
+              onPress={() => setPicking('start')}
+            />
             <Divider inset={15} />
             <TimeField label={t('groups.ends')} value={end} onPress={() => setPicking('end')} />
           </Card>
@@ -185,7 +189,9 @@ export function GroupForm({
                     },
                   ]}>
                   <View style={[styles.swatchDot, { backgroundColor: accents[a].dot }]} />
-                  {on ? <View style={[styles.swatchRing, { borderColor: accents[a].dot }]} /> : null}
+                  {on ? (
+                    <View style={[styles.swatchRing, { borderColor: accents[a].dot }]} />
+                  ) : null}
                 </Press>
               );
             })}

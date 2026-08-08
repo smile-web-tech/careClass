@@ -11,7 +11,8 @@ import { Screen, TopBar } from '@/components/layout';
 import { Button, Card, Divider, Overline, Press, StatTile, Toggle } from '@/components/ui';
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
-import { hydrate } from '@/data/sync';
+import { clearQueue, hydrate } from '@/data/sync';
+import { useSyncStatus } from '@/data/syncStatus';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { SUPPORT_EMAIL } from '@/lib/brand';
@@ -80,9 +81,18 @@ export default function Profile() {
   };
 
   const confirmSignOut = async () => {
+    /*
+      Signing out throws away this device's copy of the account, including
+      anything still queued for the server. On a connection that comes and goes
+      that queue can be a whole afternoon of registers, and losing it silently
+      would be the worst bug in the app — so when there is unsent work the
+      warning says so plainly instead of the usual one.
+    */
+    const unsent = useSyncStatus.getState().pending;
+
     const yes = await confirm({
       title: t('auth.signOutTitle'),
-      message: t('auth.signOutMessage'),
+      message: unsent > 0 ? t('auth.signOutUnsent', { count: unsent }) : t('auth.signOutMessage'),
       confirmLabel: t('auth.signOut'),
     });
     if (!yes) return;
@@ -94,6 +104,7 @@ export default function Profile() {
         // Even if the network call fails, drop the local session.
       }
     }
+    await clearQueue();
     doSignOut();
     router.replace('/sign-in');
   };

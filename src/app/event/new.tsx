@@ -6,14 +6,7 @@
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { confirm } from '@/components/Dialog';
@@ -143,7 +136,11 @@ export default function EventForm() {
             {!allDay ? (
               <>
                 <Divider inset={15} />
-                <TimeField label={t('groups.starts')} value={start} onPress={() => setPicking('start')} />
+                <TimeField
+                  label={t('groups.starts')}
+                  value={start}
+                  onPress={() => setPicking('start')}
+                />
                 <Divider inset={15} />
                 <TimeField label={t('groups.ends')} value={end} onPress={() => setPicking('end')} />
               </>

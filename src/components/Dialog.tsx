@@ -106,7 +106,11 @@ export async function confirm(opts: {
     tone: opts.tone ?? 'danger',
     dismissable: false,
     actions: [
-      { label: opts.cancelLabel ?? translateNow('common.cancel'), value: 'cancel', intent: 'quiet' },
+      {
+        label: opts.cancelLabel ?? translateNow('common.cancel'),
+        value: 'cancel',
+        intent: 'quiet',
+      },
       {
         label: opts.confirmLabel ?? translateNow('common.ok'),
         value: 'confirm',
@@ -199,8 +203,7 @@ export function DialogHost() {
 
   // Two short buttons sit side by side; anything longer stacks, because a
   // truncated "Delete group" is how people tap the wrong one.
-  const sideBySide =
-    actions.length === 2 && actions.every((a) => a.label.length <= 12);
+  const sideBySide = actions.length === 2 && actions.every((a) => a.label.length <= 12);
 
   return (
     <Modal

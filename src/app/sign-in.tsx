@@ -170,8 +170,6 @@ export default function SignIn() {
         </View>
 
         <Text style={styles.terms}>{t('auth.terms')}</Text>
-
-
       </View>
     </View>
   );

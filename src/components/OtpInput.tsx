@@ -70,10 +70,7 @@ export function OtpInput({
   const caretAt = Math.min(value.length, length - 1);
 
   return (
-    <Pressable
-      onPress={() => ref.current?.focus()}
-      accessibilityRole="none"
-      style={styles.row}>
+    <Pressable onPress={() => ref.current?.focus()} accessibilityRole="none" style={styles.row}>
       {boxes.map((i) => {
         const char = value[i] ?? '';
         const active = editable && focused && i === caretAt;
@@ -132,6 +129,12 @@ const makeStyles = ({ color }: Theme) =>
     boxFilled: { borderColor: color.borderStrong, backgroundColor: color.surface },
     boxInvalid: { borderColor: color.danger, backgroundColor: color.surface },
     digit: { fontFamily: display[600], fontSize: 24, color: color.ink },
-    caret: { position: 'absolute', width: 2, height: 24, borderRadius: 1, backgroundColor: color.primary },
+    caret: {
+      position: 'absolute',
+      width: 2,
+      height: 24,
+      borderRadius: 1,
+      backgroundColor: color.primary,
+    },
     hidden: { position: 'absolute', opacity: 0, height: 1, width: 1, top: -100 },
   });

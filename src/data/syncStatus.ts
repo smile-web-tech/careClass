@@ -19,6 +19,15 @@ export type SyncState = {
   offline: boolean;
   /** A write that failed for a reason retrying will not fix. */
   failure: string | null;
+  /** A push or pull is in flight right now. Drives the spinner on the button. */
+  syncing: boolean;
+  /**
+   * When something last reached the server, as `Date.now()`.
+   *
+   * Not persisted, like everything else here. "Last synced 3 days ago" after a
+   * relaunch would be a claim about a queue this process has never seen.
+   */
+  lastSyncedAt: number | null;
 };
 
 type SyncStore = SyncState & {
@@ -30,6 +39,8 @@ export const useSyncStatus = create<SyncStore>()((set) => ({
   pending: 0,
   offline: false,
   failure: null,
+  syncing: false,
+  lastSyncedAt: null,
   report: (patch) => set(patch),
   clearFailure: () => set({ failure: null }),
 }));

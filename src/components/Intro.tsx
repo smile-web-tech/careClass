@@ -92,7 +92,10 @@ export function Intro({ onDone }: { onDone: () => void }) {
       );
       wordShift.value = reduced
         ? 0
-        : withDelay(markMs * 0.55, withTiming(0, { duration: wordMs, easing: Easing.out(Easing.quad) }));
+        : withDelay(
+            markMs * 0.55,
+            withTiming(0, { duration: wordMs, easing: Easing.out(Easing.quad) }),
+          );
 
       // The fade of the whole overlay is the last thing to run; `finish` is what
       // unmounts it, so it must fire on the JS thread.
