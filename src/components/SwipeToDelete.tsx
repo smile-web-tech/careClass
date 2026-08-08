@@ -24,13 +24,20 @@ const ACTION_WIDTH = 92;
 
 export function SwipeToDelete({
   children,
-  /** Shown in the confirm — "this message", "Gulnora's reply". */
-  what,
+  /**
+   * The confirm's title, already translated.
+   *
+   * Deliberately a whole sentence rather than a noun interpolated into a
+   * template. The template took "this message" from the caller and produced
+   * «this message» pozulsynmy? — a Turkmen sentence with an English subject —
+   * because there is nowhere for an untranslated fragment to hide.
+   */
+  title,
   message,
   onDelete,
 }: {
   children: React.ReactNode;
-  what: string;
+  title: string;
   message?: string;
   onDelete: () => void;
 }) {
@@ -41,7 +48,7 @@ export function SwipeToDelete({
 
   const ask = async () => {
     const yes = await confirm({
-      title: t('calendar.deleteTitle', { title: what }),
+      title,
       message: message ?? t('calendar.cannotUndo'),
       confirmLabel: t('common.delete'),
     });

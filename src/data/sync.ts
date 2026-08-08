@@ -293,8 +293,7 @@ export const remote: StoreMirror = {
       useStore.setState({ messages: await api.fetchMessages() });
     }, 'Your message'),
 
-  setLanguage: (language: Language) =>
-    enqueue(() => api.updateTeacher({ language }), 'Language'),
+  setLanguage: (language: Language) => enqueue(() => api.updateTeacher({ language }), 'Language'),
 
   markRepliesRead: () => enqueue(() => api.markRepliesRead(), 'Marking replies read'),
 
@@ -303,6 +302,8 @@ export const remote: StoreMirror = {
   deleteReply: (id: string) => enqueue(() => api.deleteReply(id), 'Deleting the reply'),
 
   deleteMessage: (id: string) => enqueue(() => api.deleteMessage(id), 'Deleting the message'),
+  deleteReplies: (ids: string[]) => enqueue(() => api.deleteReplies(ids), 'Deleting replies'),
+  deleteMessages: (ids: string[]) => enqueue(() => api.deleteMessages(ids), 'Deleting messages'),
 
   saveAssessment: (assessment: Assessment, scores: { studentId: string; score: number }[]) =>
     enqueue(() => api.saveAssessment(assessment, scores), 'Grades'),

@@ -28,6 +28,7 @@ import type {
 } from '@/lib/database.types';
 import { AppState } from 'react-native';
 
+import { translateNow } from '@/i18n/useT';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -754,6 +755,9 @@ async function functionErrorMessage(error: unknown) {
   if (response && typeof response.json === 'function') {
     try {
       const body = await response.json();
+      // A `code` means the server anticipated this and the app has words for
+      // it; the English `error` is the fallback for anything it has not met.
+      if (body?.code === 'sms_not_configured') return translateNow('sms.notConfigured');
       if (body?.error) return String(body.error);
     } catch {
       // Body was not JSON, or already consumed — fall back to the generic text.
@@ -838,6 +842,25 @@ export async function deleteReply(id: string) {
 export async function deleteMessage(id: string) {
   const teacherId = await requireUser();
   unwrap(await supabase.from('messages').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+/**
+ * Delete many at once.
+ *
+ * One statement rather than a loop of single deletes: clearing a term's worth
+ * of history over a Turkmen mobile connection would otherwise be forty round
+ * trips, any of which can fail and leave the list half-cleared.
+ */
+export async function deleteMessages(ids: string[]) {
+  if (!ids.length) return;
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('messages').delete().in('id', ids).eq('teacher_id', teacherId));
+}
+
+export async function deleteReplies(ids: string[]) {
+  if (!ids.length) return;
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('replies').delete().in('id', ids).eq('teacher_id', teacherId));
 }
 
 /* -------------------------------------------------------------------------- */

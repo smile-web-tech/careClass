@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { confirm } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { SwipeToDelete } from '@/components/SwipeToDelete';
@@ -35,15 +36,67 @@ export default function Messages() {
   const replies = useStore((s) => s.replies);
   const removeMessage = useStore((s) => s.removeMessage);
   const removeReply = useStore((s) => s.removeReply);
+  const removeMessages = useStore((s) => s.removeMessages);
+  const removeReplies = useStore((s) => s.removeReplies);
 
   const [tab, setTab] = useState<'sent' | 'assignments' | 'replies'>('sent');
   const [refreshing, setRefreshing] = useState(false);
+
   const unread = replies.filter((r) => r.unread).length;
   // Homework is looked for on its own — "what did I set last week" is a
   // different question from "what did I send", and an outbox mixing the two
   // answers neither.
   const sent = messages.filter((m) => !m.isAssignment);
   const assignments = messages.filter((m) => m.isAssignment);
+
+  /**
+   * Selection mode.
+   *
+   * Off by default and entered deliberately, because the alternative — rows
+   * that are always selectable — turns every mis-tap while scrolling a term of
+   * history into a tick the teacher has to notice and undo. A long press works
+   * too, which is what people try first.
+   */
+  const [picking, setPicking] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+
+  const leaveSelection = () => {
+    setPicking(false);
+    setChosen(new Set());
+  };
+
+  const toggleChosen = (id: string) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const beginPicking = (id: string) => {
+    setPicking(true);
+    setChosen(new Set([id]));
+  };
+
+  /** Rows the selection applies to — whichever tab is showing. */
+  const visible = tab === 'sent' ? sent : tab === 'assignments' ? assignments : replies;
+
+  const deleteChosen = async () => {
+    const ids = [...chosen];
+    if (!ids.length) return;
+
+    const yes = await confirm({
+      title: t('messages.deleteSelectedTitle', { count: ids.length }),
+      message:
+        tab === 'replies' ? t('messages.deleteRepliesHint') : t('messages.deleteMessageHint'),
+      confirmLabel: t('common.delete'),
+    });
+    if (!yes) return;
+
+    if (tab === 'replies') removeReplies(ids);
+    else removeMessages(ids);
+    leaveSelection();
+  };
 
   /**
    * Pull to refresh.
@@ -69,31 +122,84 @@ export default function Messages() {
     <Screen>
       <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headerRow}>
-          <Text style={[text.pageTitle, styles.ink]}>{t('messages.title')}</Text>
-          <IconButton
-            name="plusLarge"
-            iconSize={19}
-            tint={color.primary}
-            fg="#fff"
-            onPress={() => router.push(tab === 'assignments' ? '/assignment' : '/compose')}
-          />
+          <Text style={[text.pageTitle, styles.ink]} numberOfLines={1}>
+            {picking ? t('messages.selectedCount', { count: chosen.size }) : t('messages.title')}
+          </Text>
+
+          {picking ? (
+            <View style={styles.headerActions}>
+              <Press onPress={leaveSelection} hitSlop={8} style={styles.headerLink}>
+                <Text style={styles.headerLinkLabel}>{t('common.cancel')}</Text>
+              </Press>
+              <IconButton
+                name="close"
+                iconSize={17}
+                tint={chosen.size ? color.danger : color.fill}
+                fg={chosen.size ? '#fff' : color.faint}
+                onPress={() => void deleteChosen()}
+              />
+            </View>
+          ) : (
+            <View style={styles.headerActions}>
+              {visible.length ? (
+                <Press onPress={() => setPicking(true)} hitSlop={8} style={styles.headerLink}>
+                  <Text style={styles.headerLinkLabel}>{t('messages.select')}</Text>
+                </Press>
+              ) : null}
+              <IconButton
+                name="plusLarge"
+                iconSize={19}
+                tint={color.primary}
+                fg="#fff"
+                onPress={() => router.push(tab === 'assignments' ? '/assignment' : '/compose')}
+              />
+            </View>
+          )}
         </View>
+
+        {/* Select-all sits under the title so it cannot be hit by accident. */}
+        {picking ? (
+          <View style={styles.selectBar}>
+            <Press
+              onPress={() =>
+                setChosen(
+                  chosen.size === visible.length ? new Set() : new Set(visible.map((x) => x.id)),
+                )
+              }
+              hitSlop={8}>
+              <Text style={styles.headerLinkLabel}>
+                {chosen.size === visible.length
+                  ? t('messages.clearSelection')
+                  : t('messages.selectAll')}
+              </Text>
+            </Press>
+          </View>
+        ) : null}
 
         <View style={styles.tabRow}>
           <TabLink
             label={t('messages.sent')}
             active={tab === 'sent'}
-            onPress={() => setTab('sent')}
+            onPress={() => {
+              leaveSelection();
+              setTab('sent');
+            }}
           />
           <TabLink
             label={t('assign.title')}
             active={tab === 'assignments'}
-            onPress={() => setTab('assignments')}
+            onPress={() => {
+              leaveSelection();
+              setTab('assignments');
+            }}
           />
           <TabLink
             label={unread ? `${t('messages.replies')} · ${unread}` : t('messages.replies')}
             active={tab === 'replies'}
-            onPress={() => setTab('replies')}
+            onPress={() => {
+              leaveSelection();
+              setTab('replies');
+            }}
           />
         </View>
       </View>
@@ -130,17 +236,28 @@ export default function Messages() {
 
         {tab === 'sent' || tab === 'assignments' ? (
           (tab === 'sent' ? sent : assignments).length ? (
-            (tab === 'sent' ? sent : assignments).map((m) => (
-              <SwipeToDelete
-                key={m.id}
-                what="this message"
-                message="This removes it from your history. Messages already sent cannot be recalled."
-                onDelete={() => removeMessage(m.id)}>
-                <Press onPress={() => router.push(`/message/${m.id}?kind=sent`)}>
-                  <SentCard message={m} />
+            (tab === 'sent' ? sent : assignments).map((m) =>
+              picking ? (
+                <Press key={m.id} onPress={() => toggleChosen(m.id)} style={styles.pickRow}>
+                  <Tick on={chosen.has(m.id)} />
+                  <View style={{ flex: 1 }}>
+                    <SentCard message={m} />
+                  </View>
                 </Press>
-              </SwipeToDelete>
-            ))
+              ) : (
+                <SwipeToDelete
+                  key={m.id}
+                  title={t('messages.deleteMessageTitle')}
+                  message={t('messages.deleteMessageHint')}
+                  onDelete={() => removeMessage(m.id)}>
+                  <Press
+                    onPress={() => router.push(`/message/${m.id}?kind=sent`)}
+                    onLongPress={() => beginPicking(m.id)}>
+                    <SentCard message={m} />
+                  </Press>
+                </SwipeToDelete>
+              ),
+            )
           ) : (
             <EmptyState
               title={tab === 'assignments' ? t('assign.title') : t('messages.nothingSent')}
@@ -148,21 +265,44 @@ export default function Messages() {
             />
           )
         ) : replies.length ? (
-          replies.map((r) => (
-            <SwipeToDelete
-              key={r.id}
-              what={`${r.authorName}'s reply`}
-              onDelete={() => removeReply(r.id)}>
-              <Press onPress={() => router.push(`/message/${r.id}?kind=reply`)}>
-                <ReplyCard reply={r} />
+          replies.map((r) =>
+            picking ? (
+              <Press key={r.id} onPress={() => toggleChosen(r.id)} style={styles.pickRow}>
+                <Tick on={chosen.has(r.id)} />
+                <View style={{ flex: 1 }}>
+                  <ReplyCard reply={r} />
+                </View>
               </Press>
-            </SwipeToDelete>
-          ))
+            ) : (
+              <SwipeToDelete
+                key={r.id}
+                title={t('messages.deleteReplyTitle', { name: r.authorName })}
+                message={t('messages.deleteRepliesHint')}
+                onDelete={() => removeReply(r.id)}>
+                <Press
+                  onPress={() => router.push(`/message/${r.id}?kind=reply`)}
+                  onLongPress={() => beginPicking(r.id)}>
+                  <ReplyCard reply={r} />
+                </Press>
+              </SwipeToDelete>
+            ),
+          )
         ) : (
           <EmptyState title={t('messages.noReplies')} hint={t('messages.repliesHint')} />
         )}
       </ScrollView>
     </Screen>
+  );
+}
+
+/** Selection tick. Empty ring until chosen, so the state is readable at a glance. */
+function Tick({ on }: { on: boolean }) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={[styles.tick, on && styles.tickOn]}>
+      {on ? <Icon name="check" size={13} color="#fff" /> : null}
+    </View>
   );
 }
 
@@ -282,6 +422,22 @@ function ReplyCard({ reply }: { reply: Reply }) {
 
 const makeStyles = ({ color }: Theme) =>
   StyleSheet.create({
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    headerLink: { paddingHorizontal: 8, paddingVertical: 6 },
+    headerLinkLabel: { fontFamily: body[700], fontSize: 14, color: color.primary },
+    selectBar: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 2 },
+    pickRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    tick: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: color.borderStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    tickOn: { backgroundColor: color.primary, borderColor: color.primary },
+
     newAssignment: {
       flexDirection: 'row',
       alignItems: 'center',

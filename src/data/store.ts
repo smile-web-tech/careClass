@@ -128,11 +128,11 @@ type State = {
   markReplyRead: (id: string) => void;
   removeReply: (id: string) => void;
   removeMessage: (id: string) => void;
+  /** Bulk delete from the selection mode on the Messages tab. */
+  removeReplies: (ids: string[]) => void;
+  removeMessages: (ids: string[]) => void;
 
-  saveAssessment: (
-    assessment: Assessment,
-    scores: { studentId: string; score: number }[],
-  ) => void;
+  saveAssessment: (assessment: Assessment, scores: { studentId: string; score: number }[]) => void;
   removeAssessment: (id: string) => void;
 
   addTemplate: (title: string, body: string) => string;
@@ -192,10 +192,9 @@ export type StoreMirror = {
   markReplyRead: (id: string) => void;
   deleteReply: (id: string) => void;
   deleteMessage: (id: string) => void;
-  saveAssessment: (
-    assessment: Assessment,
-    scores: { studentId: string; score: number }[],
-  ) => void;
+  deleteReplies: (ids: string[]) => void;
+  deleteMessages: (ids: string[]) => void;
+  saveAssessment: (assessment: Assessment, scores: { studentId: string; score: number }[]) => void;
   deleteAssessment: (id: string) => void;
   createTemplate: (template: MessageTemplate) => void;
   updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) => void;
@@ -445,6 +444,18 @@ export const useStore = create<State>()(
         mirror.deleteMessage?.(id);
       },
 
+      removeReplies: (ids) => {
+        const gone = new Set(ids);
+        set((s) => ({ replies: s.replies.filter((r) => !gone.has(r.id)) }));
+        mirror.deleteReplies?.(ids);
+      },
+
+      removeMessages: (ids) => {
+        const gone = new Set(ids);
+        set((s) => ({ messages: s.messages.filter((m) => !gone.has(m.id)) }));
+        mirror.deleteMessages?.(ids);
+      },
+
       /**
        * Save an assessment and its marks together.
        *
@@ -458,10 +469,7 @@ export const useStore = create<State>()(
             s.grades.filter((g) => g.assessmentId === assessment.id).map((g) => [g.studentId, g]),
           );
           return {
-            assessments: [
-              assessment,
-              ...s.assessments.filter((a) => a.id !== assessment.id),
-            ],
+            assessments: [assessment, ...s.assessments.filter((a) => a.id !== assessment.id)],
             grades: [
               ...others,
               ...scores.map(({ studentId, score }) => {

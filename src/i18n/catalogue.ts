@@ -239,8 +239,7 @@ const tk = {
   'students.contactsNeeded': 'Kontaktlara rugsat gerek',
   'students.contactsNeededMessage':
     'Formany awtomatik doldurmak üçin ClassCare-a kontaktlaryňy okamaga rugsat ber.',
-  'students.noInternetCreate':
-    'Täze okuwçy sunuwça ýetmeli. Internete birleşip, gaýtadan synanyş.',
+  'students.noInternetCreate': 'Täze okuwçy sunuwça ýetmeli. Internete birleşip, gaýtadan synanyş.',
 
   /* ---------------------------------------------------------- Attendance */
   'attendance.title': 'Gatnaşyk',
@@ -307,15 +306,20 @@ const tk = {
   'reply.cannotOpen': 'Faýly açyp bolmady.',
 
   /* ----------------------------------------------- SMS from this phone */
+  'sms.notConfigured':
+    'Internet arkaly SMS ugratmak sazlanmadyk. Habaryň ýanyndaky “SMS nireden ugradylsyn” bölüminden “Bu telefondan” saýla, ýa-da diňe e-poçta bilen ugrat.',
   'sms.transport': 'SMS nireden ugradylsyn',
   'sms.viaPhone': 'Bu telefondan',
   'sms.viaGateway': 'Internet arkaly',
   'sms.viaPhoneHint': 'Öz SIM kartyňdan ugradylýar. Operatoryň nyrhy boýunça tölenýär.',
   'sms.permissionTitle': 'SMS ugratmaga rugsat gerek',
-  'sms.permissionBody': 'ClassCare okuwçylaryňa SMS-i seniň öz belgiňden ugradýar. Şonuň üçin Android-den rugsat soralýar.',
-  'sms.permissionDenied': 'Rugsat berilmedi. Sazlamalar → Programmalar → ClassCare → Rugsatlar bölüminden açyp bilersiň.',
+  'sms.permissionBody':
+    'ClassCare okuwçylaryňa SMS-i seniň öz belgiňden ugradýar. Şonuň üçin Android-den rugsat soralýar.',
+  'sms.permissionDenied':
+    'Rugsat berilmedi. Sazlamalar → Programmalar → ClassCare → Rugsatlar bölüminden açyp bilersiň.',
   'sms.manyTitle': '{count} SMS ugradylmakçy',
-  'sms.manyBody': 'Android bir sagatda takmynan 30 SMS-den soň her habar üçin tassyklama soraýar. Ekrandan gitme — soralsa "Rugsat ber" diý.',
+  'sms.manyBody':
+    'Android bir sagatda takmynan 30 SMS-den soň her habar üçin tassyklama soraýar. Ekrandan gitme — soralsa "Rugsat ber" diý.',
   'sms.continue': 'Dowam et',
   'sms.sendingTitle': 'SMS ugradylýar',
   'sms.sendingHint': 'Programmadan çykma. Her habar nobat bilen ugradylýar.',
@@ -349,6 +353,15 @@ const tk = {
     '{count} sanysynyň e-poçtasy ýok, olara e-poçta gitmez. Goşmak üçin okuwça e-poçta ýaz.',
   'messages.nothingSentTitle': 'Hiç zat ugradylmady',
   'messages.sentOf': '{sent} / {total} ugradyldy',
+  'messages.deleteMessageTitle': 'Bu habar pozulsynmy?',
+  'messages.deleteReplyTitle': '{name} jogaby pozulsynmy?',
+  'messages.select': 'Saýla',
+  'messages.selectedCount': '{count} saýlandy',
+  'messages.selectAll': 'Ählisini saýla',
+  'messages.clearSelection': 'Saýlawy aýyr',
+  'messages.deleteSelected': 'Saýlananlary poz',
+  'messages.deleteSelectedTitle': '{count} sany pozulsynmy?',
+  'messages.deleteRepliesHint': 'Diňe seniň gelen habarlaryňdan pozulýar.',
   'messages.deleteMessage': 'Bu habary poz',
   'messages.deleteMessageHint':
     'Diňe seniň taryhyňdan pozulýar. Eýýäm ugradylan habarlary yzyna almak mümkin däl.',
@@ -394,8 +407,7 @@ const tk = {
   'grades.sendResultsTo': '{count} okuwça netijeleri ugrat',
   'grades.sendAgain': 'Netijeleri ýene ugrat',
   'grades.sendTitle': '«{title}» netijeleri ugradylsynmy?',
-  'grades.sendMessage':
-    'Her alyjy diňe öz bahasyny görýär. Hiç kim başga biriniňkini görmeýär.',
+  'grades.sendMessage': 'Her alyjy diňe öz bahasyny görýär. Hiç kim başga biriniňkini görmeýär.',
   'grades.resultsSent': 'Netijeler ugradyldy',
   'grades.notifiedCount': '{count} ugradyldy.',
   'grades.skippedNoEmail': '{count} goýberildi, e-poçtasy ýok.',
@@ -403,8 +415,7 @@ const tk = {
   'grades.failedCount': '{count} başartmady.',
   'grades.couldNotSend': 'Netijeleri ugradyp bolmady',
   'grades.deleteAssessment': '«{title}» pozulsynmy?',
-  'grades.deleteAssessmentMessage':
-    'Onuň ähli bahalary hem pozulýar. Yzyna gaýtaryp bolmaz.',
+  'grades.deleteAssessmentMessage': 'Onuň ähli bahalary hem pozulýar. Yzyna gaýtaryp bolmaz.',
   'grades.noInternetSave':
     'Bahalar sunuwça ýetmeli, şonda okuwçylara habar berip bolar. Internete birleşip, gaýtadan synanyş.',
 
@@ -500,9 +511,11 @@ const tk = {
   'template.remindTitle': 'Sapak ýatlatmasy',
   'template.remindBody': 'Salam {name}, ýatlatma: {group} bu gün sagat {time} başlaýar.',
   'template.cancelTitle': 'Sapak ýatyryldy',
-  'template.cancelBody': 'Salam {name}, bu günki {group} sapagy ({time}) ýatyryldy. Täze wagtyny soň habar ederin.',
+  'template.cancelBody':
+    'Salam {name}, bu günki {group} sapagy ({time}) ýatyryldy. Täze wagtyny soň habar ederin.',
   'template.absenceTitle': 'Gelmedik okuwçy',
-  'template.absenceBody': 'Salam, {name} bu günki {group} sapagyna gelmedi. Ýagdaýyň gowudygyny habar beräýiň.',
+  'template.absenceBody':
+    'Salam, {name} bu günki {group} sapagyna gelmedi. Ýagdaýyň gowudygyny habar beräýiň.',
   'template.homeworkTitle': 'Öý işi',
   'template.homeworkBody': 'Salam {name}, {group} boýunça öý işi indiki sapaga taýýar bolmaly.',
   'template.new': 'Täze nusga',
@@ -519,16 +532,19 @@ const tk = {
 
   'about.title': 'Programma barada',
   'about.tagline': 'Mugallymlar üçin ýönekeý gural.',
-  'about.intro': 'ClassCare toparlaryňy, okuwçylaryňy we olar bilen gatnaşygyňy bir ýerde saklaýar. Kagyz depder, dargap giden belgiler we ýatdan çykan habarlar ýerine ählisi telefonyňda.',
+  'about.intro':
+    'ClassCare toparlaryňy, okuwçylaryňy we olar bilen gatnaşygyňy bir ýerde saklaýar. Kagyz depder, dargap giden belgiler we ýatdan çykan habarlar ýerine ählisi telefonyňda.',
   'about.f1Title': 'Toparlar we sapak tertibi',
   'about.f1Body': 'Her topary hepdelik sapak tertibi bilen ýaz. Sapakdan öň telefonyň ýatladar.',
   'about.f2Title': 'Gatnaşyk',
   'about.f2Body': 'Sapagyň gatnaşygyny 30 sekuntda belle. Internet bolmasa-da işleýär.',
   'about.f3Title': 'Habarlar',
-  'about.f3Body': 'Bir topara SMS ýa-da e-poçta ugrat. Her okuwçy öz adyny görýär, jogaplary bolsa programmada okarsyň.',
+  'about.f3Body':
+    'Bir topara SMS ýa-da e-poçta ugrat. Her okuwçy öz adyny görýär, jogaplary bolsa programmada okarsyň.',
   'about.f4Title': 'Bahalar',
   'about.f4Body': 'Test, synag we jemleýji bahalary ýaz. Her okuwça diňe öz bahasy iberilýär.',
-  'about.privacy': 'Maglumatlaryň diňe öz hasabyňda saklanýar. Başga hiç bir mugallym olary görüp bilmeýär.',
+  'about.privacy':
+    'Maglumatlaryň diňe öz hasabyňda saklanýar. Başga hiç bir mugallym olary görüp bilmeýär.',
   'about.developer': 'Işläp düzüji',
   'about.contact': 'Habarlaşmak',
   'about.support': 'Goldaw bilen habarlaş',
@@ -555,8 +571,7 @@ const tk = {
   'error.conflictTitle': 'Eýýäm bar',
   'error.conflictMessage': 'Şeýle maglumat eýýäm ýazylan.',
   'error.linkTitle': 'Ýatda saklap bolmady',
-  'error.linkMessage':
-    'Baglanyşykly maglumat ýok. Hasapdan çykyp, gaýtadan girip synanyş.',
+  'error.linkMessage': 'Baglanyşykly maglumat ýok. Hasapdan çykyp, gaýtadan girip synanyş.',
   'error.serverTitle': 'Sunuwça näsazlygy',
   'error.serverMessage': 'Sunuwça bilen kynçylyk boldy. Biraz soň synanyş.',
   'error.unknownTitle': 'Bir zat ýalňyş gitdi',
@@ -626,7 +641,8 @@ const ru: Record<TranslationKey, string> = {
   'auth.resendIn': 'Повтор через {count} с',
   'auth.resendCode': 'Отправить код снова',
   'auth.badCredentials': 'Почта и пароль не совпадают.',
-  'auth.needsConfirm': 'Аккаунт ещё не подтверждён. Зарегистрируйтесь снова, чтобы получить новый код.',
+  'auth.needsConfirm':
+    'Аккаунт ещё не подтверждён. Зарегистрируйтесь снова, чтобы получить новый код.',
   'auth.tooManyAttempts': 'Слишком много попыток. Подождите {time} и попробуйте снова.',
   'auth.lockedButton': 'Подождите {time}',
   'auth.attemptsLeft': 'Осталось попыток: {count}.',
@@ -680,7 +696,8 @@ const ru: Record<TranslationKey, string> = {
   'auth.codeOnItsWay': 'Если у {email} есть аккаунт, код уже отправлен.',
   'auth.signInWithAlongside': 'С этим паролем вы будете входить вместе с {email}.',
   'auth.codeSentTo': 'Мы отправили шестизначный код на {email}. Он действует 10 минут.',
-  'auth.serverRejectedPassword': 'Сервер отклонил этот пароль. Используйте не менее {count} символов.',
+  'auth.serverRejectedPassword':
+    'Сервер отклонил этот пароль. Используйте не менее {count} символов.',
   'auth.minChars': 'Не менее {count} символов',
   'password.show': 'Показать',
   'password.hide': 'Скрыть',
@@ -688,7 +705,8 @@ const ru: Record<TranslationKey, string> = {
   'password.useAtLeast': 'Используйте не менее {count} символов.',
   'password.tooCommon': 'Слишком близко к паролям, которые подбирают первыми. Выберите другой.',
   'password.noPersonal': 'Не используйте имя и почту в пароле.',
-  'password.tooGuessable': 'Такой пароль легко угадать. Сделайте его длиннее или менее предсказуемым.',
+  'password.tooGuessable':
+    'Такой пароль легко угадать. Сделайте его длиннее или менее предсказуемым.',
   'password.tooWeak': 'Очень слабый',
   'password.weak': 'Слабый',
   'password.fair': 'Средний',
@@ -803,7 +821,8 @@ const ru: Record<TranslationKey, string> = {
   'students.count': 'учеников: {count}',
   'groups.upNext': 'Далее',
 
-  'attendance.cycleHint': 'Нажимайте на ученика, чтобы менять статус: присутствовал, опоздал, отсутствовал.',
+  'attendance.cycleHint':
+    'Нажимайте на ученика, чтобы менять статус: присутствовал, опоздал, отсутствовал.',
   'attendance.addStudentsFirst': 'Добавьте учеников в группу, чтобы отмечать посещаемость.',
   'attendance.fullAttendance': 'Все на месте, уведомления не нужны',
   'auth.chooseNewPassword': 'Придумайте новый пароль',
@@ -862,15 +881,20 @@ const ru: Record<TranslationKey, string> = {
   'reply.cannotOpen': 'Не удалось открыть файл.',
 
   /* ----------------------------------------------- SMS from this phone */
+  'sms.notConfigured':
+    'Отправка SMS через интернет не настроена. В сообщении выберите «Откуда отправлять SMS» → «С этого телефона», либо отправьте только по эл. почте.',
   'sms.transport': 'Откуда отправлять SMS',
   'sms.viaPhone': 'С этого телефона',
   'sms.viaGateway': 'Через интернет',
   'sms.viaPhoneHint': 'Отправка с вашей SIM-карты. Оплачивается по тарифу оператора.',
   'sms.permissionTitle': 'Нужно разрешение на отправку SMS',
-  'sms.permissionBody': 'ClassCare отправляет SMS ученикам с вашего номера. Поэтому Android запрашивает разрешение.',
-  'sms.permissionDenied': 'Разрешение не выдано. Включить можно в Настройки → Приложения → ClassCare → Разрешения.',
+  'sms.permissionBody':
+    'ClassCare отправляет SMS ученикам с вашего номера. Поэтому Android запрашивает разрешение.',
+  'sms.permissionDenied':
+    'Разрешение не выдано. Включить можно в Настройки → Приложения → ClassCare → Разрешения.',
   'sms.manyTitle': 'Будет отправлено {count} SMS',
-  'sms.manyBody': 'После примерно 30 сообщений в час Android спрашивает подтверждение для каждого. Не уходите с экрана — нажимайте «Разрешить».',
+  'sms.manyBody':
+    'После примерно 30 сообщений в час Android спрашивает подтверждение для каждого. Не уходите с экрана — нажимайте «Разрешить».',
   'sms.continue': 'Продолжить',
   'sms.sendingTitle': 'Отправка SMS',
   'sms.sendingHint': 'Не закрывайте приложение. Сообщения уходят по очереди.',
@@ -904,6 +928,15 @@ const ru: Record<TranslationKey, string> = {
     'У {count} нет адреса почты, письмо им не уйдёт. Добавьте адрес в карточке ученика.',
   'messages.nothingSentTitle': 'Ничего не отправлено',
   'messages.sentOf': 'Отправлено {sent} из {total}',
+  'messages.deleteMessageTitle': 'Удалить это сообщение?',
+  'messages.deleteReplyTitle': 'Удалить ответ от {name}?',
+  'messages.select': 'Выбрать',
+  'messages.selectedCount': 'Выбрано: {count}',
+  'messages.selectAll': 'Выбрать все',
+  'messages.clearSelection': 'Снять выбор',
+  'messages.deleteSelected': 'Удалить выбранные',
+  'messages.deleteSelectedTitle': 'Удалить {count}?',
+  'messages.deleteRepliesHint': 'Удаляется только из вашего почтового ящика.',
   'messages.deleteMessage': 'Удалить это сообщение',
   'messages.deleteMessageHint':
     'Удаляется только из вашей истории. Уже отправленные сообщения вернуть нельзя.',
@@ -949,8 +982,7 @@ const ru: Record<TranslationKey, string> = {
   'grades.sendResultsTo': 'Отправить результаты {count} ученикам',
   'grades.sendAgain': 'Отправить результаты снова',
   'grades.sendTitle': 'Отправить результаты «{title}»?',
-  'grades.sendMessage':
-    'Каждый получатель видит только свою оценку. Чужие оценки никто не увидит.',
+  'grades.sendMessage': 'Каждый получатель видит только свою оценку. Чужие оценки никто не увидит.',
   'grades.resultsSent': 'Результаты отправлены',
   'grades.notifiedCount': 'Отправлено: {count}.',
   'grades.skippedNoEmail': 'Пропущено {count}, нет адреса почты.',
@@ -1051,11 +1083,14 @@ const ru: Record<TranslationKey, string> = {
   'template.remindTitle': 'Напоминание о занятии',
   'template.remindBody': 'Здравствуйте, {name}! Напоминаем: {group} сегодня в {time}.',
   'template.cancelTitle': 'Занятие отменено',
-  'template.cancelBody': 'Здравствуйте, {name}! Сегодняшнее занятие {group} в {time} отменено. О переносе сообщу отдельно.',
+  'template.cancelBody':
+    'Здравствуйте, {name}! Сегодняшнее занятие {group} в {time} отменено. О переносе сообщу отдельно.',
   'template.absenceTitle': 'Пропуск занятия',
-  'template.absenceBody': 'Здравствуйте! {name} пропустил сегодняшнее занятие {group}. Сообщите, всё ли в порядке.',
+  'template.absenceBody':
+    'Здравствуйте! {name} пропустил сегодняшнее занятие {group}. Сообщите, всё ли в порядке.',
   'template.homeworkTitle': 'Домашнее задание',
-  'template.homeworkBody': 'Здравствуйте, {name}! Домашнее задание по {group} нужно сдать к следующему занятию.',
+  'template.homeworkBody':
+    'Здравствуйте, {name}! Домашнее задание по {group} нужно сдать к следующему занятию.',
   'template.new': 'Новый шаблон',
   'template.edit': 'Изменить шаблон',
   'template.title': 'Название',
@@ -1070,16 +1105,21 @@ const ru: Record<TranslationKey, string> = {
 
   'about.title': 'О приложении',
   'about.tagline': 'Простой инструмент для преподавателей.',
-  'about.intro': 'ClassCare хранит ваши группы, учеников и связь с ними в одном месте. Вместо бумажного журнала, разрозненных номеров и забытых сообщений всё в телефоне.',
+  'about.intro':
+    'ClassCare хранит ваши группы, учеников и связь с ними в одном месте. Вместо бумажного журнала, разрозненных номеров и забытых сообщений всё в телефоне.',
   'about.f1Title': 'Группы и расписание',
-  'about.f1Body': 'Запишите каждую группу с недельным расписанием. Телефон напомнит перед занятием.',
+  'about.f1Body':
+    'Запишите каждую группу с недельным расписанием. Телефон напомнит перед занятием.',
   'about.f2Title': 'Посещаемость',
   'about.f2Body': 'Отметьте присутствующих за 30 секунд. Работает и без интернета.',
   'about.f3Title': 'Сообщения',
-  'about.f3Body': 'Отправьте SMS или письмо всей группе. Каждый видит своё имя, а ответы приходят в приложение.',
+  'about.f3Body':
+    'Отправьте SMS или письмо всей группе. Каждый видит своё имя, а ответы приходят в приложение.',
   'about.f4Title': 'Оценки',
-  'about.f4Body': 'Ведите оценки за тесты, экзамены и итоговые работы. Каждый ученик получает только свою.',
-  'about.privacy': 'Ваши данные хранятся только в вашем аккаунте. Другие преподаватели их не видят.',
+  'about.f4Body':
+    'Ведите оценки за тесты, экзамены и итоговые работы. Каждый ученик получает только свою.',
+  'about.privacy':
+    'Ваши данные хранятся только в вашем аккаунте. Другие преподаватели их не видят.',
   'about.developer': 'Разработчик',
   'about.contact': 'Связаться',
   'about.support': 'Написать в поддержку',
@@ -1229,7 +1269,8 @@ const en: Record<TranslationKey, string> = {
   'auth.codeOnItsWay': 'If {email} has an account, a code is on its way.',
   'auth.signInWithAlongside': 'This is what you will sign in with, alongside {email}.',
   'auth.codeSentTo': 'We sent a six-digit code to {email}. It expires in 10 minutes.',
-  'auth.serverRejectedPassword': 'That password was rejected by the server. Use at least {count} characters.',
+  'auth.serverRejectedPassword':
+    'That password was rejected by the server. Use at least {count} characters.',
   'auth.minChars': 'At least {count} characters',
   'password.show': 'Show',
   'password.hide': 'Hide',
@@ -1307,8 +1348,7 @@ const en: Record<TranslationKey, string> = {
   'groups.keepIt': 'Keep it',
   'groups.noneYet': 'No groups yet',
   'groups.gone': 'That group no longer exists',
-  'groups.noInternetCreate':
-    'A new group has to reach the server. Connect and try again.',
+  'groups.noInternetCreate': 'A new group has to reach the server. Connect and try again.',
 
   /* ------------------------------------------------------------ Students */
   'students.title': 'Students',
@@ -1343,8 +1383,7 @@ const en: Record<TranslationKey, string> = {
   'students.contactsNeeded': 'Contacts access needed',
   'students.contactsNeededMessage':
     'Allow ClassCare to read your contacts to fill this form automatically.',
-  'students.noInternetCreate':
-    'A new student has to reach the server. Connect and try again.',
+  'students.noInternetCreate': 'A new student has to reach the server. Connect and try again.',
 
   /* ---------------------------------------------------------- Attendance */
   'attendance.title': 'Attendance',
@@ -1411,15 +1450,20 @@ const en: Record<TranslationKey, string> = {
   'reply.cannotOpen': 'Could not open the file.',
 
   /* ----------------------------------------------- SMS from this phone */
+  'sms.notConfigured':
+    'Sending SMS over the internet is not set up. Choose “This phone” under Send SMS from, or send by email only.',
   'sms.transport': 'Send SMS from',
   'sms.viaPhone': 'This phone',
   'sms.viaGateway': 'Over the internet',
   'sms.viaPhoneHint': 'Sent from your own SIM, at your operator’s rate.',
   'sms.permissionTitle': 'Permission to send SMS',
-  'sms.permissionBody': 'ClassCare sends messages to your students from your own number, so Android has to ask first.',
-  'sms.permissionDenied': 'Permission was not granted. You can turn it on in Settings → Apps → ClassCare → Permissions.',
+  'sms.permissionBody':
+    'ClassCare sends messages to your students from your own number, so Android has to ask first.',
+  'sms.permissionDenied':
+    'Permission was not granted. You can turn it on in Settings → Apps → ClassCare → Permissions.',
   'sms.manyTitle': '{count} messages to send',
-  'sms.manyBody': 'After roughly 30 messages an hour, Android asks you to confirm each one. Stay on this screen and tap Allow when it does.',
+  'sms.manyBody':
+    'After roughly 30 messages an hour, Android asks you to confirm each one. Stay on this screen and tap Allow when it does.',
   'sms.continue': 'Continue',
   'sms.sendingTitle': 'Sending SMS',
   'sms.sendingHint': 'Keep the app open. Messages go out one at a time.',
@@ -1453,6 +1497,15 @@ const en: Record<TranslationKey, string> = {
     '{count} of them have no email address on file and will not be emailed. Add one on the student to include them.',
   'messages.nothingSentTitle': 'Nothing was sent',
   'messages.sentOf': 'Sent to {sent} of {total}',
+  'messages.deleteMessageTitle': 'Delete this message?',
+  'messages.deleteReplyTitle': 'Delete the reply from {name}?',
+  'messages.select': 'Select',
+  'messages.selectedCount': '{count} selected',
+  'messages.selectAll': 'Select all',
+  'messages.clearSelection': 'Clear',
+  'messages.deleteSelected': 'Delete selected',
+  'messages.deleteSelectedTitle': 'Delete {count}?',
+  'messages.deleteRepliesHint': 'This only removes them from your inbox.',
   'messages.deleteMessage': 'Delete this message',
   'messages.deleteMessageHint':
     'Deleting only clears your own record. Messages already sent cannot be recalled.',
@@ -1493,8 +1546,7 @@ const en: Record<TranslationKey, string> = {
   'grades.noStudentsInGroup': 'This group has nobody in it yet',
   'grades.addStudentsFirst': 'Add students to {name} first.',
   'grades.unreportedOne': '1 assessment has marks the students have not been told about.',
-  'grades.unreportedMany':
-    '{count} assessments have marks the students have not been told about.',
+  'grades.unreportedMany': '{count} assessments have marks the students have not been told about.',
   'grades.sendResults': 'Send results',
   'grades.sendResultsTo': 'Send results to {count} students',
   'grades.sendAgain': 'Send results again',
@@ -1622,13 +1674,16 @@ const en: Record<TranslationKey, string> = {
 
   'about.title': 'About',
   'about.tagline': 'A simple tool for teachers.',
-  'about.intro': 'ClassCare keeps your groups, your students and your contact with them in one place. Instead of a paper register, scattered numbers and forgotten messages, it is all on your phone.',
+  'about.intro':
+    'ClassCare keeps your groups, your students and your contact with them in one place. Instead of a paper register, scattered numbers and forgotten messages, it is all on your phone.',
   'about.f1Title': 'Groups and schedule',
-  'about.f1Body': 'Set up each group with its weekly schedule. Your phone reminds you before class.',
+  'about.f1Body':
+    'Set up each group with its weekly schedule. Your phone reminds you before class.',
   'about.f2Title': 'Attendance',
   'about.f2Body': 'Mark a register in 30 seconds. Works without an internet connection.',
   'about.f3Title': 'Messages',
-  'about.f3Body': 'Send an SMS or email to a whole group. Everyone sees their own name, and replies arrive in the app.',
+  'about.f3Body':
+    'Send an SMS or email to a whole group. Everyone sees their own name, and replies arrive in the app.',
   'about.f4Title': 'Grades',
   'about.f4Body': 'Record quiz, exam and final marks. Each student is only ever sent their own.',
   'about.privacy': 'Your data stays in your own account. No other teacher can see it.',
@@ -1658,8 +1713,7 @@ const en: Record<TranslationKey, string> = {
   'error.conflictTitle': 'Already exists',
   'error.conflictMessage': 'Something with those details is already saved.',
   'error.linkTitle': 'Could not save',
-  'error.linkMessage':
-    'Something it links to is missing. Sign out, sign back in, then try again.',
+  'error.linkMessage': 'Something it links to is missing. Sign out, sign back in, then try again.',
   'error.serverTitle': 'Server problem',
   'error.serverMessage': 'The server had trouble with that. Try again in a moment.',
   'error.unknownTitle': 'Something went wrong',
@@ -1669,4 +1723,3 @@ const en: Record<TranslationKey, string> = {
 };
 
 export const catalogue = { tk, ru, en } as const;
-

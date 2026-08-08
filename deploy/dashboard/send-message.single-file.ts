@@ -188,6 +188,30 @@ async function sendViaEskiz(phone: string, text: string) {
   return String(body?.id ?? '');
 }
 
+/**
+ * Whether the selected gateway actually has credentials.
+ *
+ * Checked before anything is created, because the alternative is what used to
+ * happen: a message row, thirty delivery rows, thirty identical
+ * "Twilio is not configured" failures, and a teacher looking at 0 of 30 sent
+ * with no idea that the problem is on the server and not with their class.
+ */
+function smsConfigured(): boolean {
+  switch (smsProvider()) {
+    case 'telnyx':
+      return !!(Deno.env.get('TELNYX_API_KEY') && Deno.env.get('TELNYX_FROM'));
+    case 'eskiz':
+      return !!(Deno.env.get('ESKIZ_EMAIL') && Deno.env.get('ESKIZ_PASSWORD'));
+    case 'twilio':
+    default:
+      return !!(
+        Deno.env.get('TWILIO_ACCOUNT_SID') &&
+        Deno.env.get('TWILIO_AUTH_TOKEN') &&
+        Deno.env.get('TWILIO_FROM')
+      );
+  }
+}
+
 /** Route one message through whichever gateway is configured. */
 function sendSms(phone: string, text: string) {
   switch (smsProvider()) {
@@ -470,6 +494,23 @@ Deno.serve(async (req) => {
   // discovering it from a student who never got the homework.
   if (attachments.length && !channels.includes('email')) {
     return json({ error: 'Files can only be sent by email. Tick the email channel.' }, 400);
+  }
+
+  // No gateway credentials means every SMS delivery would fail identically.
+  // Refuse the whole send rather than half-completing it: the `code` lets the
+  // app say this in the teacher's own language, and point at the setting that
+  // sends from their own SIM instead.
+  if (channels.includes('sms') && !smsConfigured()) {
+    return json(
+      {
+        code: 'sms_not_configured',
+        error:
+          `No SMS gateway is set up on the server (SMS_PROVIDER=${smsProvider()}). ` +
+          'Send SMS from the phone instead, or set the provider credentials with ' +
+          '`supabase secrets set`.',
+      },
+      400,
+    );
   }
 
   // Resolve the target groups. An announcement means "every active group".
