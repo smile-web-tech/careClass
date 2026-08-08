@@ -352,17 +352,20 @@ function enqueue(op: Op) {
 /**
  * Can the server be reached right now?
  *
- * Used to refuse a create outright rather than accepting it locally and finding
- * out later. Attendance is different and stays optimistic — marking a register
- * on classroom wifi is the whole reason the app works offline — but a group or
- * a student created on a dead connection is a trap: it looks saved, and the
- * failure surfaces days later as "that group does not exist on the server".
+ * Nothing is refused on the strength of this any more — every write is kept
+ * locally and queued. It answers one question: is it worth trying the queue
+ * right now, or should the Sync button say so and leave the work where it is.
  *
  * `/auth/v1/health` needs no credentials and is one of the paths the PHP
  * reverse proxy carries, so this measures the route the app actually uses
  * rather than the internet in general.
+ *
+ * Twelve seconds, not five. A first request on a Turkmen mobile connection
+ * routinely spends several seconds on DNS and the TLS handshake alone, and
+ * calling that offline is how the app told teachers they had no internet while
+ * everything else was working.
  */
-export async function isReachable(timeoutMs = 5000): Promise<boolean> {
+export async function isReachable(timeoutMs = 12_000): Promise<boolean> {
   if (!hasSupabase) return true;
 
   const abort = new AbortController();

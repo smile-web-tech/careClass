@@ -138,8 +138,8 @@ export default function Home() {
           <Text style={[text.section, styles.ink]}>{t('home.yourGroups')}</Text>
           <Text style={styles.sectionCount}>
             {shown.length === groups.length
-              ? `${groups.length} active`
-              : `${shown.length} of ${groups.length}`}
+              ? t('home.activeCount', { count: groups.length })
+              : t('home.shownOf', { count: shown.length, total: groups.length })}
           </Text>
         </View>
 
@@ -167,7 +167,7 @@ export default function Home() {
         {q && matchedStudents.length > 0 ? (
           <View style={styles.matchedWrap}>
             <Text style={styles.matchedLabel}>
-              {matchedStudents.length} matching{' '}
+              {t('home.matching', { count: matchedStudents.length })}{' '}
               {t('students.count', { count: matchedStudents.length })}
             </Text>
             <View style={styles.matchedRow}>

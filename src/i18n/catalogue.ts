@@ -585,6 +585,9 @@ const tk = {
   'auth.signOutUnsent':
     'Ugradylmadyk {count} üýtgeşme bar. Çyksaň, olar ýitýär. Ilki internete birigip, Ugrat düwmesine bas.',
   'sync.synced': 'Ählisi ugradyldy',
+  'home.activeCount': '{count} işjeň',
+  'home.shownOf': '{count} / {total}',
+  'home.matching': 'gabat gelýän {count}',
   'sync.waiting': '{count} garaşýar',
   'sync.syncing': 'Ugradylýar…',
   'sync.offlineShort': 'Internet ýok',
@@ -1205,6 +1208,9 @@ const ru: Record<TranslationKey, string> = {
   'auth.signOutUnsent':
     'Есть {count} неотправленных изменений. При выходе они пропадут. Сначала подключитесь к интернету и нажмите «Отправить».',
   'sync.synced': 'Всё сохранено',
+  'home.activeCount': '{count} активных',
+  'home.shownOf': '{count} из {total}',
+  'home.matching': 'найдено: {count}',
   'sync.waiting': '{count} ждёт отправки',
   'sync.syncing': 'Отправляем…',
   'sync.offlineShort': 'Нет интернета',
@@ -1817,6 +1823,9 @@ const en: Record<TranslationKey, string> = {
   'auth.signOutUnsent':
     'You have {count} changes that have not reached the server. Signing out loses them. Get online and press Sync first.',
   'sync.synced': 'All synced',
+  'home.activeCount': '{count} active',
+  'home.shownOf': '{count} of {total}',
+  'home.matching': '{count} matching',
   'sync.waiting': '{count} waiting',
   'sync.syncing': 'Syncing…',
   'sync.offlineShort': 'No internet',

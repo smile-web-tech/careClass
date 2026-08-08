@@ -4,6 +4,7 @@ import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
 import type { Database } from '@/lib/database.types';
+import { resilientFetch } from '@/lib/resilientFetch';
 
 /**
  * Supabase client.
@@ -28,6 +29,14 @@ export const supabaseUrl = url ?? '';
 
 function build(): SupabaseClient<Database> {
   const client = createClient<Database>(url!, publishableKey!, {
+    global: {
+      // Every call the SDK makes — REST, Auth, Storage, Functions — goes
+      // through a fetch with a deadline and a retry, because on a Turkmen
+      // connection the usual failure is a request that stalls rather than one
+      // that is refused. See `resilientFetch` for which requests may be
+      // repeated and why the rest may not.
+      fetch: resilientFetch,
+    },
     auth: {
       // On web the SDK uses localStorage and reads the OAuth code out of the
       // URL; on native it needs an explicit store and must not touch `window`.

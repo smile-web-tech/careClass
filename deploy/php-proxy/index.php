@@ -184,50 +184,117 @@ if ($isSlow) {
     @set_time_limit(360);
 }
 
-$ch = curl_init($target);
-curl_setopt_array($ch, [
-    CURLOPT_CUSTOMREQUEST  => $method,
-    CURLOPT_HTTPHEADER     => $forward,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HEADER         => false,
-    // Supabase answers auth redirects itself; following them here would hide
-    // the Location header the client needs.
-    CURLOPT_FOLLOWLOCATION => false,
-    CURLOPT_ENCODING       => '',
-    CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_TIMEOUT        => $isSlow ? 300 : 30,
-    CURLOPT_SSL_VERIFYPEER => true,
-    CURLOPT_SSL_VERIFYHOST => 2,
-]);
+/**
+ * Failures worth trying again.
+ *
+ * All of these describe a transport that gave up, not an upstream that
+ * answered. A Supabase 4xx is never in here — that is a real answer and must
+ * reach the app unchanged.
+ *
+ *   6  couldn't resolve host      28 operation timed out
+ *   7  couldn't connect           35 SSL connect error
+ *   16 HTTP/2 framing error       52 empty reply from server
+ *   55 failed sending data        56 failure receiving data
+ */
+const RETRY_ERRNOS = [6, 7, 16, 28, 35, 52, 55, 56];
 
-if ($body !== '' && $body !== false) {
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-}
+/**
+ * Whether repeating this request can change what the upstream ends up holding.
+ *
+ * Reads repeat freely. A write only repeats when cURL never managed to connect,
+ * because then nothing was sent and nothing can have been applied — the
+ * distinction that keeps a retry from filing a register twice.
+ */
+$isRead = in_array($method, ['GET', 'HEAD', 'OPTIONS'], true);
 
-$responseHeaders = [];
-curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($_ch, string $line) use (&$responseHeaders) {
-    $len = strlen($line);
-    $trimmed = trim($line);
-    if ($trimmed !== '' && str_contains($trimmed, ':')) {
-        [$name, $value] = explode(':', $trimmed, 2);
-        $lower = strtolower(trim($name));
-        // Drop hop-by-hop and anything describing an encoding cURL already
-        // undid for us — re-sending those corrupts the response.
-        if (!in_array($lower, HOP_BY_HOP, true)
-            && $lower !== 'content-encoding'
-            && $lower !== 'content-length') {
-            $responseHeaders[] = trim($name) . ': ' . trim($value);
-        }
+$attempts = 0;
+$maxAttempts = 3;
+
+do {
+    $attempts++;
+
+    $ch = curl_init($target);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => $method,
+        CURLOPT_HTTPHEADER     => $forward,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER         => false,
+        // Supabase answers auth redirects itself; following them here would
+        // hide the Location header the client needs.
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_ENCODING       => '',
+        // IPv4 only. Plenty of shared hosts publish an AAAA route that black-
+        // holes; cURL then spends the whole connect timeout on it before
+        // falling back, which the app sees as a dead server rather than as a
+        // slow one. There is nothing IPv6-only upstream to reach.
+        CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,
+        // Short, because a retry is cheaper than a wait. A connection that has
+        // not been established in eight seconds is not about to be.
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_TIMEOUT        => $isSlow ? 300 : 30,
+        // Detect a stalled transfer rather than waiting out the full timeout:
+        // under 200 bytes/sec for 20 seconds is a connection that has died
+        // without saying so, which is the characteristic failure here.
+        CURLOPT_LOW_SPEED_LIMIT => 200,
+        CURLOPT_LOW_SPEED_TIME  => $isSlow ? 60 : 20,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ]);
+
+    if ($body !== '' && $body !== false) {
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
     }
-    return $len;
-});
 
-$result  = curl_exec($ch);
-$status  = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-$error   = curl_error($ch);
-$errno   = curl_errno($ch);
-$elapsed = (float) curl_getinfo($ch, CURLINFO_TOTAL_TIME);
-curl_close($ch);
+    // Reset per attempt, or a retry would append to the failed attempt's set
+    // and send the client two of every header.
+    $responseHeaders = [];
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($_ch, string $line) use (&$responseHeaders) {
+        $len = strlen($line);
+        $trimmed = trim($line);
+        if ($trimmed !== '' && str_contains($trimmed, ':')) {
+            [$name, $value] = explode(':', $trimmed, 2);
+            $lower = strtolower(trim($name));
+            // Drop hop-by-hop and anything describing an encoding cURL already
+            // undid for us — re-sending those corrupts the response.
+            if (!in_array($lower, HOP_BY_HOP, true)
+                && $lower !== 'content-encoding'
+                && $lower !== 'content-length') {
+                $responseHeaders[] = trim($name) . ': ' . trim($value);
+            }
+        }
+        return $len;
+    });
+
+    $result  = curl_exec($ch);
+    $status  = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $error   = curl_error($ch);
+    $errno   = curl_errno($ch);
+    $elapsed = (float) curl_getinfo($ch, CURLINFO_TOTAL_TIME);
+    // Zero means the TCP connection was never established, so the request
+    // never left this server.
+    $connected = ((float) curl_getinfo($ch, CURLINFO_CONNECT_TIME)) > 0;
+    curl_close($ch);
+
+    if ($result !== false) {
+        break;
+    }
+
+    $mayRetry = in_array($errno, RETRY_ERRNOS, true)
+        && ($isRead || !$connected)
+        && $attempts < $maxAttempts;
+
+    if (!$mayRetry) {
+        break;
+    }
+
+    // Brief, and jittered so a class of phones retrying at once does not
+    // arrive back in lockstep.
+    usleep(250_000 * $attempts + random_int(0, 200_000));
+} while (true);
+
+// Useful when someone reports "it just says no internet": the count says
+// whether the proxy fought for the request or gave up on the first try.
+header('X-Proxy-Attempts: ' . $attempts);
 
 if ($result === false) {
     send_cors();
