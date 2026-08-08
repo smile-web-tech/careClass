@@ -203,16 +203,30 @@ curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($_ch, string $line) use (&$re
     return $len;
 });
 
-$result = curl_exec($ch);
-$status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-$error  = curl_error($ch);
+$result  = curl_exec($ch);
+$status  = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+$error   = curl_error($ch);
+$errno   = curl_errno($ch);
+$elapsed = (float) curl_getinfo($ch, CURLINFO_TOTAL_TIME);
 curl_close($ch);
 
 if ($result === false) {
     send_cors();
     header('Content-Type: application/json');
     http_response_code(502);
-    echo json_encode(['error' => 'Upstream unreachable', 'detail' => $error]);
+    // The reason goes in `error`, not only in `detail`. Clients surface the
+    // message and drop the rest, so "Upstream unreachable" was all anyone ever
+    // saw — a sentence that names no cause and sent us round three wrong
+    // theories. `curl_errno` is included because the text is localised on some
+    // builds but the number never is.
+    $reason = $error !== '' ? $error : 'no response from upstream';
+    echo json_encode([
+        'error'  => 'Upstream unreachable (' . $errno . '): ' . $reason,
+        'detail' => $reason,
+        'errno'  => $errno,
+        'path'   => $path,
+        'seconds' => round($elapsed, 1),
+    ]);
     exit;
 }
 
