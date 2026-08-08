@@ -66,7 +66,16 @@ const BY_EXTENSION: Record<string, string> = {
 export type PickedAttachment = {
   /** Local only, for React keys and removal. */
   id: string;
-  uri: string;
+  /**
+   * The picker's own `File`, held rather than rebuilt from its URI.
+   *
+   * On Android the picker hands back a `content://` URI from the Storage
+   * Access Framework, and `new File('content://…')` is not the same thing as
+   * the handle the picker opened — the permission grant rides on the object.
+   * Reconstructing it was how uploading an assignment failed after the file
+   * had been chosen and shown.
+   */
+  file: File;
   filename: string;
   mimeType: string;
   size: number;
@@ -148,7 +157,7 @@ export async function pickAttachments(alreadyPicked: number): Promise<PickOutcom
 
     accepted.push({
       id: `${Date.now()}-${accepted.length}-${filename}`,
-      uri: file.uri,
+      file,
       filename,
       mimeType,
       size,
@@ -186,7 +195,17 @@ export async function uploadAttachments(
   const uploaded: UploadedAttachment[] = [];
 
   for (const item of picked) {
-    const bytes = await new File(item.uri).arrayBuffer();
+    // Named stages. "Could not upload" on its own sent us hunting through the
+    // proxy, the bucket policy and the picker in turn; the message now says
+    // which of the two things failed and for which file.
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await item.file.arrayBuffer();
+    } catch (e) {
+      throw new Error(
+        `Could not read "${item.filename}": ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
     // The first path segment is the whole access rule — see the storage policy
     // in migration 0010.
     const storagePath = `${teacherId}/outgoing/${batch}/${safeKey(item.filename)}`;
@@ -194,7 +213,9 @@ export async function uploadAttachments(
     const { error } = await supabase.storage
       .from('attachments')
       .upload(storagePath, bytes, { contentType: item.mimeType, upsert: false });
-    if (error) throw error;
+    if (error) {
+      throw new Error(`Could not upload "${item.filename}" (${item.mimeType}): ${error.message}`);
+    }
 
     uploaded.push({
       storagePath,
