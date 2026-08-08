@@ -125,6 +125,25 @@ foreach (request_headers() as $name => $value) {
     if ($lower === 'host' || $lower === 'content-length') {
         continue;
     }
+    // Accept-Encoding is ours to decide, not the client's.
+    //
+    // `CURLOPT_ENCODING => ''` below asks cURL to advertise exactly the
+    // codings this libcurl can decode. Forwarding the client's header
+    // overrides that: React Native's OkHttp asks for `gzip, deflate, br`,
+    // Supabase honours it and answers in brotli, and a libcurl built without
+    // brotli then fails the transfer outright with
+    //
+    //   (61) Unrecognized content encoding type. libcurl understands
+    //        deflate, gzip content encodings.
+    //
+    // which the proxy reported as "Upstream unreachable" — a connection
+    // problem, seemingly, for a response that had arrived perfectly well.
+    // Dropping it costs nothing: cURL decompresses for us and we send the
+    // body on uncompressed, having already stripped Content-Encoding from the
+    // response headers for exactly that reason.
+    if ($lower === 'accept-encoding') {
+        continue;
+    }
     // `apikey` and `authorization` are relayed untouched — they are the
     // caller's own credentials and this proxy has no business rewriting them.
     $forward[] = $name . ': ' . $value;
