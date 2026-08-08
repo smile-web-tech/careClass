@@ -130,6 +130,30 @@ foreach (request_headers() as $name => $value) {
     $forward[] = $name . ': ' . $value;
 }
 
+// cURL adds `Expect: 100-continue` to larger bodies on its own, then waits a
+// full second for a response most servers never send. On an upload that is a
+// second of dead time for nothing.
+$forward[] = 'Expect:';
+
+/**
+ * Writing a file is not the same shape of request as reading a row.
+ *
+ * A REST call is a few kilobytes and should fail fast if the upstream is
+ * unwell. Pushing an attachment up to storage is megabytes, and 30 seconds is
+ * a limit a photograph will hit on an ordinary connection — which surfaces to
+ * the teacher as "Upstream unreachable", a message that sounds like the server
+ * is down when in truth it was still busy transferring.
+ */
+$isUpload = str_starts_with($path, '/storage/v1')
+    && in_array($method, ['POST', 'PUT', 'PATCH'], true);
+
+// Belt and braces. Time spent waiting on a socket does not count towards
+// max_execution_time on Linux, but shared hosts vary and being killed
+// mid-upload would look exactly like the timeout we just raised.
+if ($isUpload) {
+    @set_time_limit(360);
+}
+
 $ch = curl_init($target);
 curl_setopt_array($ch, [
     CURLOPT_CUSTOMREQUEST  => $method,
@@ -141,7 +165,7 @@ curl_setopt_array($ch, [
     CURLOPT_FOLLOWLOCATION => false,
     CURLOPT_ENCODING       => '',
     CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_TIMEOUT        => $isUpload ? 300 : 30,
     CURLOPT_SSL_VERIFYPEER => true,
     CURLOPT_SSL_VERIFYHOST => 2,
 ]);
