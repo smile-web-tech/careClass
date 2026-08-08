@@ -1,7 +1,18 @@
 -- Did the last assignment actually carry its file?
 --
--- Paste into the Supabase SQL Editor and run. Three rows come back, and
--- between them they say which half of the pipeline dropped the attachment.
+-- Run this first. The SQL Editor only ever shows the LAST statement's result,
+-- so this one packs every count into a single row.
+
+select
+  (select count(*) from storage.objects where bucket_id = 'attachments') as bucket_files,
+  (select count(*) from message_attachments)                             as attachment_rows,
+  (select count(*) from messages where is_assignment)                    as assignments,
+  (select count(*) from message_deliveries where channel = 'email')      as email_deliveries;
+
+/* ------------------------------------------------------------------ *
+ * Detail below. Highlight one statement and press Run, or the editor
+ * shows only the last of them.
+ * ------------------------------------------------------------------ */
 
 -- 1. The last five messages, and whether the server recorded any file on them.
 select
