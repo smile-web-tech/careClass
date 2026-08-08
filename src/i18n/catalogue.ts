@@ -48,8 +48,6 @@ const tk = {
   'common.edit': 'Üýtget',
   'common.sending': 'Ugradylýar…',
   'common.checking': 'Barlanýar…',
-  'common.noInternet': 'Internet ýok',
-  'common.tryAgain': 'Internetiňi barlap, gaýtadan synanyş.',
 
   /* ----------------------------------------------------------- Navigation */
   'nav.home': 'Baş sahypa',
@@ -204,7 +202,6 @@ const tk = {
   'groups.keepIt': 'Galsyn',
   'groups.noneYet': 'Entek topar ýok',
   'groups.gone': 'Bu topar indi ýok',
-  'groups.noInternetCreate': 'Täze topar sunuwça ýetmeli. Internete birleşip, gaýtadan synanyş.',
 
   /* ------------------------------------------------------------ Students */
   'students.title': 'Okuwçylar',
@@ -239,7 +236,6 @@ const tk = {
   'students.contactsNeeded': 'Kontaktlara rugsat gerek',
   'students.contactsNeededMessage':
     'Formany awtomatik doldurmak üçin ClassCare-a kontaktlaryňy okamaga rugsat ber.',
-  'students.noInternetCreate': 'Täze okuwçy sunuwça ýetmeli. Internete birleşip, gaýtadan synanyş.',
 
   /* ---------------------------------------------------------- Attendance */
   'attendance.title': 'Gatnaşyk',
@@ -440,8 +436,6 @@ const tk = {
   'grades.couldNotSend': 'Netijeleri ugradyp bolmady',
   'grades.deleteAssessment': '«{title}» pozulsynmy?',
   'grades.deleteAssessmentMessage': 'Onuň ähli bahalary hem pozulýar. Yzyna gaýtaryp bolmaz.',
-  'grades.noInternetSave':
-    'Bahalar sunuwça ýetmeli, şonda okuwçylara habar berip bolar. Internete birleşip, gaýtadan synanyş.',
 
   /* ------------------------------------------------------------ Calendar */
   'calendar.title': 'Senenama',
@@ -666,8 +660,6 @@ const ru: Record<TranslationKey, string> = {
   'common.edit': 'Изменить',
   'common.sending': 'Отправка…',
   'common.checking': 'Проверка…',
-  'common.noInternet': 'Нет интернета',
-  'common.tryAgain': 'Проверьте соединение и попробуйте снова.',
 
   /* ----------------------------------------------------------- Navigation */
   'nav.home': 'Главная',
@@ -825,8 +817,6 @@ const ru: Record<TranslationKey, string> = {
   'groups.keepIt': 'Оставить',
   'groups.noneYet': 'Групп пока нет',
   'groups.gone': 'Этой группы больше нет',
-  'groups.noInternetCreate':
-    'Новая группа должна дойти до сервера. Подключитесь к интернету и попробуйте снова.',
 
   /* ------------------------------------------------------------ Students */
   'students.title': 'Ученики',
@@ -861,8 +851,6 @@ const ru: Record<TranslationKey, string> = {
   'students.contactsNeeded': 'Нужен доступ к контактам',
   'students.contactsNeededMessage':
     'Разрешите ClassCare читать контакты, чтобы форма заполнялась автоматически.',
-  'students.noInternetCreate':
-    'Новый ученик должен дойти до сервера. Подключитесь к интернету и попробуйте снова.',
 
   /* ---------------------------------------------------------- Attendance */
   'attendance.title': 'Посещаемость',
@@ -1065,8 +1053,6 @@ const ru: Record<TranslationKey, string> = {
   'grades.deleteAssessment': 'Удалить «{title}»?',
   'grades.deleteAssessmentMessage':
     'Все выставленные по ней оценки тоже будут удалены. Отменить нельзя.',
-  'grades.noInternetSave':
-    'Оценки должны дойти до сервера, чтобы ученикам можно было сообщить. Подключитесь к интернету и попробуйте снова.',
 
   /* ------------------------------------------------------------ Calendar */
   'calendar.title': 'Календарь',
@@ -1289,8 +1275,6 @@ const en: Record<TranslationKey, string> = {
   'common.edit': 'Edit',
   'common.sending': 'Sending\u2026',
   'common.checking': 'Checking\u2026',
-  'common.noInternet': 'No internet',
-  'common.tryAgain': 'Check your connection and try again.',
 
   /* ----------------------------------------------------------- Navigation */
   'nav.home': 'Home',
@@ -1446,7 +1430,6 @@ const en: Record<TranslationKey, string> = {
   'groups.keepIt': 'Keep it',
   'groups.noneYet': 'No groups yet',
   'groups.gone': 'That group no longer exists',
-  'groups.noInternetCreate': 'A new group has to reach the server. Connect and try again.',
 
   /* ------------------------------------------------------------ Students */
   'students.title': 'Students',
@@ -1481,7 +1464,6 @@ const en: Record<TranslationKey, string> = {
   'students.contactsNeeded': 'Contacts access needed',
   'students.contactsNeededMessage':
     'Allow ClassCare to read your contacts to fill this form automatically.',
-  'students.noInternetCreate': 'A new student has to reach the server. Connect and try again.',
 
   /* ---------------------------------------------------------- Attendance */
   'attendance.title': 'Attendance',
@@ -1684,8 +1666,6 @@ const en: Record<TranslationKey, string> = {
   'grades.deleteAssessment': 'Delete \u201c{title}\u201d?',
   'grades.deleteAssessmentMessage':
     'Every mark recorded against it goes too. This cannot be undone.',
-  'grades.noInternetSave':
-    'Marks have to reach the server so students can be told. Connect and try again.',
 
   /* ------------------------------------------------------------ Calendar */
   'calendar.title': 'Calendar',
