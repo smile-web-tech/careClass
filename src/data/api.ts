@@ -842,6 +842,41 @@ export async function fetchReplyAttachments(replyId: string): Promise<StoredAtta
   }));
 }
 
+/**
+ * Files that went out attached to a message the teacher sent.
+ *
+ * The sent-message screen is the only lasting record of what a class was
+ * actually given — the email is in the recipient's inbox, not the teacher's —
+ * so this is what makes "which worksheet did I send them last Tuesday" a
+ * question the app can answer.
+ *
+ * Fetched per message for the same reason as the reply version: most messages
+ * carry nothing.
+ */
+export async function fetchMessageAttachments(messageId: string): Promise<StoredAttachment[]> {
+  const rows = unwrap(
+    await supabase
+      .from('message_attachments')
+      .select('*')
+      .eq('message_id', messageId)
+      .order('created_at'),
+  ) as {
+    id: string;
+    storage_path: string;
+    filename: string;
+    mime_type: string;
+    size_bytes: number;
+  }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    storagePath: r.storage_path,
+    filename: r.filename,
+    mimeType: r.mime_type,
+    size: r.size_bytes,
+  }));
+}
+
 export async function markRepliesRead() {
   unwrap(
     await supabase

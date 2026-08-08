@@ -12,17 +12,22 @@
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { confirm, showAlert } from '@/components/Dialog';
+import { AttachmentPreview, isImage } from '@/components/AttachmentPreview';
+import { confirm } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
 import { Avatar, Badge, Button, Card, Divider, Overline, Press, Txt } from '@/components/ui';
-import { fetchReplyAttachments, type StoredAttachment } from '@/data/api';
+import {
+  fetchMessageAttachments,
+  fetchReplyAttachments,
+  type StoredAttachment,
+} from '@/data/api';
 import { useGroups, useStore } from '@/data/store';
 import { useT } from '@/i18n/useT';
-import { formatBytes, signedAttachmentUrl } from '@/lib/attachments';
+import { formatBytes } from '@/lib/attachments';
 import { longDateTime } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
@@ -103,7 +108,7 @@ export default function MessageDetail() {
             </Text>
           </Card>
 
-          <ReplyAttachments replyId={reply.id} />
+          <StoredAttachments load={fetchReplyAttachments} id={reply.id} />
 
           <Button
             label={t('messages.deleteReply')}
@@ -160,6 +165,8 @@ export default function MessageDetail() {
           </Text>
         </Card>
 
+        <StoredAttachments load={fetchMessageAttachments} id={message.id} />
+
         <Overline style={styles.label}>{t('messages.delivery')}</Overline>
         <Card style={{ overflow: 'hidden' }}>
           <View style={styles.row}>
@@ -203,70 +210,77 @@ export default function MessageDetail() {
 }
 
 /**
- * What the student sent back.
+ * The files on a message, whichever direction it went.
  *
- * Loaded when the reply is opened rather than with the inbox: most replies have
- * nothing attached, and fetching every attachment row on each refresh to render
- * a paperclip on two of them costs more than it is worth on a slow connection.
+ * Loaded when the message is opened rather than with the list: most messages
+ * have nothing attached, and fetching every attachment row on each refresh to
+ * render a paperclip on two of them costs more than it is worth on a slow
+ * connection.
  *
- * Opening hands the file to whatever app the phone uses for it, through a
- * signed URL minted at tap time — a link that expires is the right shape for a
- * photo of somebody's child.
+ * Tapping a row opens the file in the app. That matters more for a sent message
+ * than it looks — the email is in the recipient's inbox, so this screen is the
+ * teacher's only copy of what the class was actually given, and until now it
+ * showed nothing at all.
  */
-function ReplyAttachments({ replyId }: { replyId: string }) {
+function StoredAttachments({ load, id }: { load: (id: string) => Promise<StoredAttachment[]>; id: string }) {
   const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [files, setFiles] = useState<StoredAttachment[]>([]);
-  const [opening, setOpening] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<StoredAttachment | null>(null);
 
   useEffect(() => {
     let alive = true;
-    fetchReplyAttachments(replyId)
+    load(id)
       .then((rows) => alive && setFiles(rows))
       .catch(() => {
         // An empty list and a failed fetch look the same to the teacher, and
-        // neither is worth an alert over the reply they came here to read.
+        // neither is worth an alert over the message they came here to read.
       });
     return () => {
       alive = false;
     };
-  }, [replyId]);
+  }, [id, load]);
 
   if (!files.length) return null;
-
-  const open = async (file: StoredAttachment) => {
-    setOpening(file.id);
-    try {
-      const url = await signedAttachmentUrl(file.storagePath);
-      await Linking.openURL(url);
-    } catch {
-      void showAlert(t('reply.attachments'), t('reply.cannotOpen'), 'danger');
-    } finally {
-      setOpening(null);
-    }
-  };
 
   return (
     <View style={{ marginTop: 18 }}>
       <Overline style={{ marginBottom: 10 }}>{t('reply.attachments')}</Overline>
       {files.map((f) => (
-        <Card key={f.id} style={styles.attachmentRow}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.attachmentName} numberOfLines={1}>
-              {f.filename}
-            </Text>
-            <Text style={styles.attachmentMeta}>{formatBytes(f.size)}</Text>
-          </View>
-          <Press onPress={() => void open(f)} disabled={opening !== null} hitSlop={8}>
-            {opening === f.id ? (
-              <ActivityIndicator color={color.primary} />
-            ) : (
-              <Text style={styles.attachmentOpen}>{t('reply.openFile')}</Text>
-            )}
-          </Press>
-        </Card>
+        <Press key={f.id} onPress={() => setViewing(f)}>
+          <Card style={styles.attachmentRow}>
+            <View style={[styles.attachmentGlyph, { backgroundColor: color.primaryTint }]}>
+              <Icon
+                name={isImage(f.mimeType) ? 'image' : 'paperclip'}
+                size={16}
+                color={color.primaryInk}
+              />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.attachmentName} numberOfLines={1}>
+                {f.filename}
+              </Text>
+              <Text style={styles.attachmentMeta}>{formatBytes(f.size)}</Text>
+            </View>
+            <Text style={styles.attachmentOpen}>{t('attach.view')}</Text>
+          </Card>
+        </Press>
       ))}
+
+      <AttachmentPreview
+        file={
+          viewing
+            ? {
+                filename: viewing.filename,
+                mimeType: viewing.mimeType,
+                size: viewing.size,
+                storagePath: viewing.storagePath,
+              }
+            : null
+        }
+        onClose={() => setViewing(null)}
+      />
     </View>
   );
 }
@@ -318,6 +332,13 @@ const makeStyles = ({ color }: Theme) =>
       gap: 12,
       padding: 14,
       marginBottom: 8,
+    },
+    attachmentGlyph: {
+      width: 38,
+      height: 38,
+      borderRadius: radius.control,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     attachmentName: { fontFamily: body[600], fontSize: 14, color: color.ink },
     attachmentMeta: { fontFamily: body[400], fontSize: 12, color: color.mutedLight, marginTop: 2 },

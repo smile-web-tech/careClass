@@ -10,6 +10,7 @@
  * Email only. SMS cannot carry a file, and the screen says which students have
  * no address on file rather than quietly dropping them.
  */
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import {
@@ -24,6 +25,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AttachmentPreview, isImage } from '@/components/AttachmentPreview';
 import { showAlert, showError } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { FooterSummary, Screen, StickyFooter, TopBar } from '@/components/layout';
@@ -58,6 +60,8 @@ export default function Assignment() {
   const toggleGroup = (id: string) => setPicked({ ...selection, [id]: !selection[id] });
 
   const [files, setFiles] = useState<PickedAttachment[]>([]);
+  /** The picked file being looked at full-screen, if any. */
+  const [viewing, setViewing] = useState<PickedAttachment | null>(null);
   const [instructions, setInstructions] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -204,29 +208,37 @@ export default function Assignment() {
 
         <Overline style={styles.label}>{t('assign.files')}</Overline>
         <View style={styles.fileList}>
+          {/*
+            The row is a button. "photo_2026-08-08.jpg" does not tell one
+            homework scan from another, and a teacher who cannot check what they
+            picked sends the wrong page — so tapping shows the thing itself.
+            Images already have a local URI, so the thumbnail costs nothing.
+          */}
           {files.map((f) => (
-            <Card key={f.id} style={styles.fileRow}>
-              <View style={[styles.fileGlyph, { backgroundColor: color.primaryTint }]}>
-                <Icon
-                  name={f.mimeType.startsWith('image/') ? 'search' : 'envelope'}
-                  size={16}
-                  color={color.primaryInk}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fileName} numberOfLines={1}>
-                  {f.filename}
-                </Text>
-                <Text style={styles.fileMeta}>{formatBytes(f.size)}</Text>
-              </View>
-              <Press
-                onPress={() => setFiles((list) => list.filter((x) => x.id !== f.id))}
-                accessibilityLabel={t('assign.remove')}
-                hitSlop={8}
-                style={styles.fileRemove}>
-                <Icon name="close" size={14} color={color.muted} />
-              </Press>
-            </Card>
+            <Press key={f.id} onPress={() => setViewing(f)}>
+              <Card style={styles.fileRow}>
+                {isImage(f.mimeType) ? (
+                  <Image source={{ uri: f.file.uri }} style={styles.fileThumb} contentFit="cover" />
+                ) : (
+                  <View style={[styles.fileGlyph, { backgroundColor: color.primaryTint }]}>
+                    <Icon name="paperclip" size={16} color={color.primaryInk} />
+                  </View>
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fileName} numberOfLines={1}>
+                    {f.filename}
+                  </Text>
+                  <Text style={styles.fileMeta}>{formatBytes(f.size)}</Text>
+                </View>
+                <Press
+                  onPress={() => setFiles((list) => list.filter((x) => x.id !== f.id))}
+                  accessibilityLabel={t('assign.remove')}
+                  hitSlop={8}
+                  style={styles.fileRemove}>
+                  <Icon name="close" size={14} color={color.muted} />
+                </Press>
+              </Card>
+            </Press>
           ))}
 
           {files.length < MAX_FILES ? (
@@ -270,6 +282,20 @@ export default function Assignment() {
           <Button label={t('assign.send')} icon="send" onPress={send} disabled={!!blocker} />
         )}
       </StickyFooter>
+
+      <AttachmentPreview
+        file={
+          viewing
+            ? {
+                filename: viewing.filename,
+                mimeType: viewing.mimeType,
+                size: viewing.size,
+                uri: viewing.file.uri,
+              }
+            : null
+        }
+        onClose={() => setViewing(null)}
+      />
     </Screen>
   );
 }
@@ -325,6 +351,7 @@ const makeStyles = ({ accents, color }: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    fileThumb: { width: 34, height: 34, borderRadius: radius.md, backgroundColor: color.fill },
     fileName: { fontFamily: body[600], fontSize: 14, color: color.ink },
     fileMeta: { fontFamily: body[400], fontSize: 12, color: color.mutedLight, marginTop: 2 },
     fileRemove: {
