@@ -9,5 +9,3 @@
 
 export const DEVELOPER = 'Baylyyev Kerven';
 export const SUPPORT_EMAIL = 'kervenbalkan@gmail.com';
-/** The domain the app's own email is sent from. Not a support address. */
-export const WEBSITE = 'smiletech.dev';

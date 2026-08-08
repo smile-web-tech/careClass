@@ -18,7 +18,7 @@ import { Screen, TopBar } from '@/components/layout';
 import { Card, Divider, Logo, Overline, Press } from '@/components/ui';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
-import { DEVELOPER, SUPPORT_EMAIL, WEBSITE } from '@/lib/brand';
+import { DEVELOPER, SUPPORT_EMAIL } from '@/lib/brand';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
 
@@ -110,13 +110,6 @@ export default function About() {
             label={t('about.contact')}
             value={SUPPORT_EMAIL}
             onPress={emailSupport}
-          />
-          <Divider inset={15} />
-          <ContactRow
-            icon="disclosure"
-            label={t('about.website')}
-            value={WEBSITE}
-            onPress={() => open(`https://${WEBSITE}`, t('about.website'))}
           />
         </Card>
 
