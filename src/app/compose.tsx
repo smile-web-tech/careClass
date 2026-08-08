@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -27,7 +27,12 @@ import {
   Txt,
 } from '@/components/ui';
 import { SmsRunSheet } from '@/components/SmsRunSheet';
-import { fetchMessages, recordDeviceSms, sendMessage as apiSendMessage } from '@/data/api';
+import {
+  fetchMessages,
+  markSmsDelivery,
+  recordDeviceSms,
+  sendMessage as apiSendMessage,
+} from '@/data/api';
 import { useGroups, useStore, useStudents, useTemplates } from '@/data/store';
 import type { Audience, Channel } from '@/data/types';
 import type { TranslationKey } from '@/i18n';
@@ -37,8 +42,10 @@ import {
   countSegments,
   deviceSmsSupported,
   hasSmsPermission,
+  newSmsBatchId,
   requestSmsPermission,
   sendSmsBatch,
+  subscribeSmsDelivery,
   SYSTEM_CONFIRM_THRESHOLD,
   type SmsOutcome,
 } from '@/lib/deviceSms';
@@ -56,6 +63,27 @@ import { body, text } from '@/theme/type';
  * reported "sent" while reaching nobody. `Channel` keeps `'push'` because the
  * database enum and older message rows still carry it.
  */
+/**
+ * Push one delivery report into the log row the run was written to.
+ *
+ * The recipient key is `${studentId}:${'student' | 'parent'}`, which is exactly
+ * what identifies a delivery row — the same student can be two rows when the
+ * message went to both them and their guardian.
+ */
+const writeDelivery = (
+  messageId: string,
+  report: { key: string; delivered: boolean; reason?: string },
+) => {
+  const [studentId, recipient] = report.key.split(':');
+  return markSmsDelivery({
+    messageId,
+    studentId,
+    recipient: recipient === 'parent' ? 'parent' : 'student',
+    delivered: report.delivered,
+    reason: report.reason,
+  });
+};
+
 const CHANNELS: { key: Channel; labelKey: TranslationKey; icon: IconName }[] = [
   { key: 'sms', labelKey: 'messages.channelSms', icon: 'chat' },
   { key: 'email', labelKey: 'messages.channelEmail', icon: 'envelope' },
@@ -158,6 +186,61 @@ export default function Compose() {
     running: boolean;
   } | null>(null);
   const cancelled = useRef(false);
+
+  /**
+   * The run delivery reports belong to, and the message row they should be
+   * written to. Refs rather than state: reports arrive from a native listener
+   * that must not be torn down and re-subscribed every time a row updates.
+   */
+  const batchId = useRef<string | null>(null);
+  const loggedMessageId = useRef<string | null>(null);
+  const heldReports = useRef<{ key: string; delivered: boolean; reason?: string }[]>([]);
+
+  /**
+   * Delivery reports arrive after the sending is over — seconds later on a good
+   * network, a minute or more otherwise. They are the only signal that
+   * distinguishes "the tower took it" from "the parent's phone got it", which
+   * is what a SIM out of credit or a dead number looks like.
+   *
+   * Subscribed for as long as the composer is open, so the sheet the teacher is
+   * still reading updates underneath them.
+   */
+  useEffect(
+    () =>
+      subscribeSmsDelivery(({ batch, key, delivered, reason }) => {
+        if (batch !== batchId.current) return;
+
+        setRun((r) =>
+          r
+            ? {
+                ...r,
+                results: r.results.map((row) =>
+                  row.key === key
+                    ? {
+                        ...row,
+                        // A report proves the message left, whatever we had
+                        // concluded when nothing answered in time.
+                        state: row.state === 'unknown' ? 'sent' : row.state,
+                        delivery: delivered ? 'delivered' : 'undelivered',
+                        deliveryReason: delivered ? undefined : reason,
+                      }
+                    : row,
+                ),
+              }
+            : r,
+        );
+
+        // The log row is written once the whole batch is done, so early
+        // reports — and on a good network the first one lands within seconds —
+        // have nowhere to go yet. Held rather than dropped.
+        if (!loggedMessageId.current) {
+          heldReports.current.push({ key, delivered, reason });
+          return;
+        }
+        void writeDelivery(loggedMessageId.current, { key, delivered, reason });
+      }),
+    [],
+  );
 
   /** Real gateways are involved only when signed in against a real project. */
   const liveSend = hasSupabase;
@@ -296,21 +379,39 @@ export default function Compose() {
     }
 
     cancelled.current = false;
+    batchId.current = newSmsBatchId();
+    loggedMessageId.current = null;
+    heldReports.current = [];
     setRun({ total: recipients.length, results: [], running: true });
 
     const results = await sendSmsBatch(recipients, {
+      batch: batchId.current,
       shouldStop: () => cancelled.current,
       onProgress: ({ latest }) =>
         setRun((r) => (r ? { ...r, results: [...r.results, latest] } : r)),
     });
 
-    setRun((r) => (r ? { ...r, results, running: false } : r));
+    // Merged rather than replaced: a delivery report can land while the last
+    // few messages are still going out, and overwriting the list with the
+    // batch's own return value would throw those updates away.
+    setRun((r) =>
+      r
+        ? {
+            ...r,
+            running: false,
+            results: results.map((res) => {
+              const seen = r.results.find((row) => row.key === res.key);
+              return seen?.delivery ? { ...res, ...seen } : res;
+            }),
+          }
+        : r,
+    );
 
     // Write the log even when every message failed: "we tried and nobody got
     // it" is exactly the thing a teacher needs to be able to look up later.
     if (liveSend && results.length) {
       try {
-        await recordDeviceSms({
+        loggedMessageId.current = await recordDeviceSms({
           groupIds: selectedGroups.map((g) => g.id),
           audience,
           body,
@@ -319,10 +420,19 @@ export default function Compose() {
             recipient: r.kind,
             destination: r.phone,
             rendered: r.body,
-            state: r.state,
+            // `unknown` is not a state the log has. `queued` says the same
+            // thing — handed over, no answer yet — and a delivery report
+            // arriving later upgrades the row.
+            state: r.state === 'unknown' ? 'queued' : r.state,
             error: r.reason,
           })),
         });
+
+        // Anything the network answered while the batch was still running.
+        const held = heldReports.current;
+        heldReports.current = [];
+        for (const report of held) await writeDelivery(loggedMessageId.current, report);
+
         useStore.setState({ messages: await fetchMessages() });
       } catch (e) {
         // The messages went out. Failing to write them down is worth a line in

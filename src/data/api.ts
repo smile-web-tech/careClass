@@ -689,7 +689,12 @@ export async function recordDeviceSms(input: {
     recipient: 'student' | 'parent';
     destination: string;
     rendered: string;
-    state: 'sent' | 'failed';
+    /**
+     * `queued` is the honest state for a message handed to the radio that never
+     * reported back — cancelled mid-flight, or the network went quiet. It may
+     * still arrive, and `markSmsDelivery` upgrades it if a report turns up.
+     */
+    state: 'sent' | 'failed' | 'queued';
     error?: string;
   }[];
 }): Promise<string> {
@@ -740,6 +745,38 @@ export async function recordDeviceSms(input: {
   }
 
   return message.id;
+}
+
+/**
+ * Record what the network said about one SMS, minutes after it went out.
+ *
+ * The sent-broadcast only proves the tower accepted the message. Whether it
+ * reached the handset is a second answer that arrives later, and it is the one
+ * that catches a SIM out of credit or a number that no longer exists — both of
+ * which look like a clean send at the moment of sending.
+ *
+ * Best-effort by design: the row already says `sent`, the teacher has moved on,
+ * and a failed update here should not surface as an error over their work.
+ */
+export async function markSmsDelivery(input: {
+  messageId: string;
+  studentId: string;
+  recipient: 'student' | 'parent';
+  delivered: boolean;
+  reason?: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('message_deliveries')
+    .update({
+      state: input.delivered ? 'delivered' : 'failed',
+      error: input.delivered ? null : (input.reason ?? 'not_delivered'),
+    })
+    .eq('message_id', input.messageId)
+    .eq('student_id', input.studentId)
+    .eq('recipient', input.recipient)
+    .eq('channel', 'sms');
+
+  if (error) console.warn('[classcare] could not record a delivery report:', error.message);
 }
 
 /**

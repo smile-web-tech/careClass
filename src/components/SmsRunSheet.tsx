@@ -10,7 +10,7 @@
  * not stop the queue, and a half-sent batch the teacher cannot see is the one
  * outcome worse than a failed one.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +31,9 @@ const KNOWN_REASONS = new Set([
   'timeout',
   'no_number',
   'unavailable',
+  'cancelled',
+  'rejected',
+  'not_delivered',
 ]);
 
 export function SmsRunSheet({
@@ -53,9 +56,23 @@ export function SmsRunSheet({
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
 
+  /**
+   * Cancelling used to look like nothing happening, because the queue only
+   * checked between messages and a stuck one held it for two minutes. It now
+   * stops within a fraction of a second — but the label still has to change on
+   * the press, or a teacher whose last message is mid-flight taps it twice.
+   */
+  const [stopping, setStopping] = useState(false);
+  useEffect(() => {
+    if (!visible || !running) setStopping(false);
+  }, [visible, running]);
+
   const sent = results.filter((r) => r.state === 'sent').length;
-  const failed = results.length - sent;
-  const cancelled = running ? 0 : total - results.length;
+  const failed = results.filter((r) => r.state === 'failed').length;
+  const unknown = results.filter((r) => r.state === 'unknown').length;
+  const delivered = results.filter((r) => r.delivery === 'delivered').length;
+  const undelivered = results.filter((r) => r.delivery === 'undelivered').length;
+  const stopped = running ? 0 : total - results.length;
 
   const reasonLabel = (reason?: string) =>
     t(
@@ -63,6 +80,43 @@ export function SmsRunSheet({
         ? `sms.reason.${reason}`
         : 'sms.reason.unknown') as TranslationKey,
     );
+
+  /**
+   * What one row shows, given that a message has two outcomes and the second
+   * one arrives late.
+   *
+   * `state` is what the phone did with it. `delivery` is what the network said
+   * afterwards, and when it says anything it wins — a message the tower
+   * accepted and then failed to deliver is a message the parent never read, and
+   * that is the thing the teacher has to act on.
+   */
+  const rowLook = (r: SmsOutcome) => {
+    if (r.delivery === 'undelivered') {
+      return {
+        icon: 'close' as const,
+        tone: color.dangerDeep,
+        note: reasonLabel(r.deliveryReason ?? 'not_delivered'),
+      };
+    }
+    if (r.delivery === 'delivered') {
+      return { icon: 'check' as const, tone: color.success, note: t('sms.delivered') };
+    }
+    if (r.state === 'sent') {
+      return {
+        icon: 'check' as const,
+        tone: color.success,
+        note: r.parts > 1 ? t('sms.segments', { count: r.parts }) : r.phone,
+      };
+    }
+    if (r.state === 'unknown') {
+      return {
+        icon: 'warning' as const,
+        tone: color.warningDeep,
+        note: reasonLabel(r.reason),
+      };
+    }
+    return { icon: 'close' as const, tone: color.dangerDeep, note: reasonLabel(r.reason) };
+  };
 
   // Newest first: the row that just landed is the one being looked at.
   const rows = useMemo(() => [...results].reverse(), [results]);
@@ -84,9 +138,9 @@ export function SmsRunSheet({
             <ActivityIndicator color={color.primary} />
           ) : (
             <Icon
-              name={failed ? 'warning' : 'check'}
+              name={failed + undelivered + unknown > 0 ? 'warning' : 'check'}
               size={20}
-              color={failed ? color.warningDeep : color.success}
+              color={failed + undelivered + unknown > 0 ? color.warningDeep : color.success}
             />
           )}
           <Text style={[text.sheetTitle, styles.ink]}>
@@ -104,46 +158,75 @@ export function SmsRunSheet({
 
         <View style={styles.tallies}>
           <Tally tone={color.success} label={t('sms.sentCount', { count: sent })} />
+          {delivered > 0 ? (
+            <Tally tone={color.success} label={t('sms.deliveredCount', { count: delivered })} />
+          ) : null}
+          {undelivered > 0 ? (
+            <Tally
+              tone={color.dangerDeep}
+              label={t('sms.undeliveredCount', { count: undelivered })}
+            />
+          ) : null}
           {failed > 0 ? (
             <Tally tone={color.dangerDeep} label={t('sms.failedCount', { count: failed })} />
           ) : null}
-          {cancelled > 0 ? (
-            <Tally tone={color.muted} label={t('sms.stoppedCount', { count: cancelled })} />
+          {unknown > 0 ? (
+            <Tally tone={color.warningDeep} label={t('sms.unknownCount', { count: unknown })} />
+          ) : null}
+          {stopped > 0 ? (
+            <Tally tone={color.muted} label={t('sms.stoppedCount', { count: stopped })} />
           ) : null}
         </View>
 
-        {running ? <Text style={styles.hint}>{t('sms.sendingHint')}</Text> : null}
+        {/*
+          One line, and only the one that is worth acting on. A failed delivery
+          outranks everything: it names a number the teacher has to check or a
+          SIM that has run out, and it is the failure a plain "sent" would have
+          hidden completely.
+        */}
+        {running ? (
+          <Text style={styles.hint}>{t('sms.sendingHint')}</Text>
+        ) : undelivered > 0 ? (
+          <Text style={[styles.hint, styles.hintBad]}>{t('sms.undeliveredHint')}</Text>
+        ) : unknown > 0 ? (
+          <Text style={[styles.hint, styles.hintBad]}>{t('sms.unknownHint')}</Text>
+        ) : sent > 0 && delivered < sent ? (
+          <Text style={styles.hint}>{t('sms.deliveryHint')}</Text>
+        ) : null}
 
         <ScrollView
           style={styles.list}
           contentContainerStyle={{ paddingBottom: 6 }}
           showsVerticalScrollIndicator={false}>
-          {rows.map((r) => (
-            <View key={r.key} style={styles.row}>
-              <Icon
-                name={r.state === 'sent' ? 'check' : 'close'}
-                size={13}
-                color={r.state === 'sent' ? color.success : color.dangerDeep}
-              />
-              <Text style={styles.rowName} numberOfLines={1}>
-                {r.name}
-              </Text>
-              <Text
-                style={[styles.rowNote, r.state === 'failed' && { color: color.dangerDeep }]}
-                numberOfLines={1}>
-                {r.state === 'sent'
-                  ? r.parts > 1
-                    ? t('sms.segments', { count: r.parts })
-                    : r.phone
-                  : reasonLabel(r.reason)}
-              </Text>
-            </View>
-          ))}
+          {rows.map((r) => {
+            const look = rowLook(r);
+            return (
+              <View key={r.key} style={styles.row}>
+                <Icon name={look.icon} size={13} color={look.tone} />
+                <Text style={styles.rowName} numberOfLines={1}>
+                  {r.name}
+                </Text>
+                <Text
+                  style={[styles.rowNote, look.icon !== 'check' && { color: look.tone }]}
+                  numberOfLines={1}>
+                  {look.note}
+                </Text>
+              </View>
+            );
+          })}
         </ScrollView>
 
         {running ? (
-          <Press onPress={onCancel} style={styles.cancel}>
-            <Text style={styles.cancelLabel}>{t('common.cancel')}</Text>
+          <Press
+            onPress={() => {
+              setStopping(true);
+              onCancel();
+            }}
+            disabled={stopping}
+            style={styles.cancel}>
+            <Text style={[styles.cancelLabel, stopping && styles.cancelLabelOff]}>
+              {stopping ? t('sms.stopping') : t('common.cancel')}
+            </Text>
           </Press>
         ) : (
           <Button grow label={t('common.done')} height={50} onPress={onClose} />
@@ -213,6 +296,7 @@ const makeStyles = ({ color }: Theme) =>
       color: color.mutedLight,
       marginTop: 10,
     },
+    hintBad: { color: color.dangerDeep },
 
     // Capped so a class of forty does not push the buttons off the screen.
     list: { maxHeight: 210, marginTop: 14, marginBottom: 14 },
@@ -229,4 +313,5 @@ const makeStyles = ({ color }: Theme) =>
 
     cancel: { height: 50, alignItems: 'center', justifyContent: 'center' },
     cancelLabel: { fontFamily: body[700], fontSize: 15, color: color.dangerDeep },
+    cancelLabelOff: { color: color.mutedLight },
   });
