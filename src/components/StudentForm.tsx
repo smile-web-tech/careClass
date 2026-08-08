@@ -92,7 +92,17 @@ export function StudentForm({
 
   const set = (k: keyof typeof blank) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const ready = form.name.trim().length > 1 && form.phone.trim().length > 5;
+  /*
+    A name, and that is all.
+
+    This used to demand a phone number of more than five characters as well,
+    and the Save button simply sat there greyed out saying nothing — which
+    reads as a broken button, not as a validation message. Plenty of students
+    have no phone of their own and are reached through a parent, and plenty are
+    added mid-lesson to be filled in later. Nothing downstream needs a number:
+    the composer skips recipients without one and says how many it skipped.
+  */
+  const ready = form.name.trim().length > 1;
   const groupIds = groups.filter((g) => picked[g.id]).map((g) => g.id);
 
   const trimmed = (v: string) => v.trim() || undefined;
@@ -231,6 +241,9 @@ export function StudentForm({
       </KeyboardAvoidingView>
 
       <StickyFooter style={{ gap: 10 }}>
+        {/* Say why the button is off. A disabled control with no explanation is
+            indistinguishable from one that does not work. */}
+        {!ready ? <Text style={styles.blocker}>{t('students.needName')}</Text> : null}
         {secondary ? (
           <Press
             onPress={async () => {
@@ -304,5 +317,11 @@ const makeStyles = ({ color }: Theme) =>
       fontFamily: body[600],
       fontSize: 14.5,
       color: color.inkSoft,
+    },
+    blocker: {
+      fontFamily: body[600],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      textAlign: 'center',
     },
   });

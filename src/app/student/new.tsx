@@ -39,7 +39,9 @@ export default function NewStudent() {
   const commit = (draft: StudentDraft) => {
     addStudent(draft);
 
-    if (welcome) {
+    // A number is optional now, so the welcome text can only go where there is
+    // one. Opening the composer addressed to nobody would look like a bug.
+    if (welcome && draft.phone.trim()) {
       const schedule = groups
         .filter((g) => draft.groupIds.includes(g.id))
         .map((g) => `${g.name}: ${slotDaysLabel(g)} ${slotTimeLabel(g)}, ${g.room}`)

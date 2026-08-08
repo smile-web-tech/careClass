@@ -94,7 +94,7 @@ export function SyncPill({ style }: { style?: object }) {
       onPress={() => void run()}
       disabled={busy}
       accessibilityRole="button"
-      accessibilityLabel={`${look.label} — ${t('sync.button')}`}
+      accessibilityLabel={`${look.label}. ${t('sync.button')}`}
       style={[
         styles.pill,
         { backgroundColor: quiet ? 'transparent' : look.tint },
