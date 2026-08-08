@@ -1,15 +1,21 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BackHandler, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { confirm } from '@/components/Dialog';
+import { updateTeacher } from '@/data/api';
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { SwipeToDelete } from '@/components/SwipeToDelete';
 import { Avatar, Badge, Card, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
 import { refreshInbox } from '@/data/sync';
+import {
+  notificationPermissionStatus,
+  registerForPush,
+  requestNotificationPermission,
+} from '@/lib/notifications';
 import { useT } from '@/i18n/useT';
 import type { Message, Reply } from '@/data/types';
 import { timeAgo } from '@/lib/date';
@@ -41,6 +47,32 @@ export default function Messages() {
 
   const [tab, setTab] = useState<'sent' | 'assignments' | 'replies'>('sent');
   const [refreshing, setRefreshing] = useState(false);
+
+  /**
+   * Notifications are only ever offered from Profile, next to class reminders,
+   * and they are the same OS permission — so a teacher who never turns on
+   * reminders is never asked, and silently never hears that a parent wrote
+   * back. This asks where the value is obvious, and only while the answer is
+   * still `undetermined`: granting or denying ends it for good, so it cannot
+   * become a thing that nags.
+   */
+  const [askPush, setAskPush] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void notificationPermissionStatus().then((status) => {
+      if (alive) setAskPush(status === 'undetermined');
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const enablePush = async () => {
+    const ok = await requestNotificationPermission();
+    setAskPush(false);
+    if (ok) void registerForPush((pushToken) => updateTeacher({ pushToken }));
+  };
 
   const unread = replies.filter((r) => r.unread).length;
   // Homework is looked for on its own — "what did I set last week" is a
@@ -287,31 +319,46 @@ export default function Messages() {
               hint={tab === 'assignments' ? t('assign.studentsOnly') : t('messages.outboxHint')}
             />
           )
-        ) : replies.length ? (
-          replies.map((r) =>
-            picking ? (
-              <Press key={r.id} onPress={() => toggleChosen(r.id)} style={styles.pickRow}>
-                <Tick on={chosen.has(r.id)} />
-                <View style={{ flex: 1 }}>
-                  <ReplyCard reply={r} />
-                </View>
-              </Press>
-            ) : (
-              <SwipeToDelete
-                key={r.id}
-                title={t('messages.deleteReplyTitle', { name: r.authorName })}
-                message={t('messages.deleteRepliesHint')}
-                onDelete={() => removeReply(r.id)}>
-                <Press
-                  onPress={() => router.push(`/message/${r.id}?kind=reply`)}
-                  onLongPress={() => beginPicking(r.id)}>
-                  <ReplyCard reply={r} />
-                </Press>
-              </SwipeToDelete>
-            ),
-          )
         ) : (
-          <EmptyState title={t('messages.noReplies')} hint={t('messages.repliesHint')} />
+          <>
+            {askPush ? (
+              <Card style={styles.notify}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.notifyTitle}>{t('messages.notifyTitle')}</Text>
+                  <Text style={styles.notifyBody}>{t('messages.notifyBody')}</Text>
+                </View>
+                <Press onPress={() => void enablePush()} hitSlop={8} style={styles.notifyAction}>
+                  <Text style={styles.notifyActionLabel}>{t('messages.notifyEnable')}</Text>
+                </Press>
+              </Card>
+            ) : null}
+            {replies.length ? (
+              replies.map((r) =>
+                picking ? (
+                  <Press key={r.id} onPress={() => toggleChosen(r.id)} style={styles.pickRow}>
+                    <Tick on={chosen.has(r.id)} />
+                    <View style={{ flex: 1 }}>
+                      <ReplyCard reply={r} />
+                    </View>
+                  </Press>
+                ) : (
+                  <SwipeToDelete
+                    key={r.id}
+                    title={t('messages.deleteReplyTitle', { name: r.authorName })}
+                    message={t('messages.deleteRepliesHint')}
+                    onDelete={() => removeReply(r.id)}>
+                    <Press
+                      onPress={() => router.push(`/message/${r.id}?kind=reply`)}
+                      onLongPress={() => beginPicking(r.id)}>
+                      <ReplyCard reply={r} />
+                    </Press>
+                  </SwipeToDelete>
+                ),
+              )
+            ) : (
+              <EmptyState title={t('messages.noReplies')} hint={t('messages.repliesHint')} />
+            )}
+          </>
         )}
       </ScrollView>
     </Screen>
@@ -445,6 +492,23 @@ function ReplyCard({ reply }: { reply: Reply }) {
 
 const makeStyles = ({ color }: Theme) =>
   StyleSheet.create({
+    notify: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+    notifyTitle: { fontFamily: body[700], fontSize: 14, color: color.ink },
+    notifyBody: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: color.muted,
+      marginTop: 3,
+    },
+    notifyAction: {
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: radius.control,
+      backgroundColor: color.primaryTint,
+    },
+    notifyActionLabel: { fontFamily: body[700], fontSize: 13.5, color: color.primaryInk },
+
     headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     headerLink: { paddingHorizontal: 8, paddingVertical: 6 },
     headerLinkLabel: { fontFamily: body[700], fontSize: 14, color: color.primary },

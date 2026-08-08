@@ -362,6 +362,9 @@ const tk = {
   'messages.deleteSelected': 'Saýlananlary poz',
   'messages.deleteSelectedTitle': '{count} sany pozulsynmy?',
   'messages.deleteRepliesHint': 'Diňe seniň gelen habarlaryňdan pozulýar.',
+  'messages.notifyTitle': 'Jogap gelende habar ber',
+  'messages.notifyBody': 'Ene-ata ýa okuwçy jogap ýazanda telefonyňa bildiriş gelsin.',
+  'messages.notifyEnable': 'Aç',
   'messages.deleteMessage': 'Bu habary poz',
   'messages.deleteMessageHint':
     'Diňe seniň taryhyňdan pozulýar. Eýýäm ugradylan habarlary yzyna almak mümkin däl.',
@@ -937,6 +940,9 @@ const ru: Record<TranslationKey, string> = {
   'messages.deleteSelected': 'Удалить выбранные',
   'messages.deleteSelectedTitle': 'Удалить {count}?',
   'messages.deleteRepliesHint': 'Удаляется только из вашего почтового ящика.',
+  'messages.notifyTitle': 'Уведомлять об ответах',
+  'messages.notifyBody': 'Получайте уведомление, когда родитель или ученик ответит.',
+  'messages.notifyEnable': 'Включить',
   'messages.deleteMessage': 'Удалить это сообщение',
   'messages.deleteMessageHint':
     'Удаляется только из вашей истории. Уже отправленные сообщения вернуть нельзя.',
@@ -1506,6 +1512,9 @@ const en: Record<TranslationKey, string> = {
   'messages.deleteSelected': 'Delete selected',
   'messages.deleteSelectedTitle': 'Delete {count}?',
   'messages.deleteRepliesHint': 'This only removes them from your inbox.',
+  'messages.notifyTitle': 'Get told when someone replies',
+  'messages.notifyBody': 'A notification when a parent or student writes back.',
+  'messages.notifyEnable': 'Turn on',
   'messages.deleteMessage': 'Delete this message',
   'messages.deleteMessageHint':
     'Deleting only clears your own record. Messages already sent cannot be recalled.',
