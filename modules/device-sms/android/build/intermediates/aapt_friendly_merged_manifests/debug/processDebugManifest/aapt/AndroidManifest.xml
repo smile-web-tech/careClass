@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <!--
   The xmlns declaration is load-bearing. The generated scaffold was a bare
   `<manifest></manifest>`, which is valid precisely because it has no
@@ -6,8 +7,11 @@
   rather than this module's build — so the module still compiles clean on its
   own and only a full build catches it.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <!--
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="expo.modules.devicesms" >
+
+    <uses-sdk android:minSdkVersion="24" />
+    <!--
     Declared by the module rather than the app so the permission travels with
     the code that needs it.
 
@@ -15,12 +19,15 @@
     restricted permission. Google only grants it to apps whose core purpose is
     handling SMS, and a class-management app is not that. This is fine for the
     APK teachers install directly; it would not survive Play review.
-  -->
-  <uses-permission android:name="android.permission.SEND_SMS" />
+    -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
 
-  <!--
+    <!--
     Not required, so the app still installs on a tablet with no radio. The
     module reports `isAvailable() === false` there and the UI hides the option.
-  -->
-  <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
 </manifest>

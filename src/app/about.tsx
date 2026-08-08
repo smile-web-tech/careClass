@@ -18,12 +18,9 @@ import { Screen, TopBar } from '@/components/layout';
 import { Card, Divider, Logo, Overline, Press } from '@/components/ui';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
+import { DEVELOPER, SUPPORT_EMAIL, WEBSITE } from '@/lib/brand';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
-
-const DEVELOPER = 'Ysmayyl Mammetgeldiyev';
-const SUPPORT_EMAIL = 'smiletechweb@gmail.com';
-const WEBSITE = 'smiletech.dev';
 
 const FEATURES: { icon: IconName; titleKey: TranslationKey; bodyKey: TranslationKey }[] = [
   { icon: 'tabGroups', titleKey: 'about.f1Title', bodyKey: 'about.f1Body' },

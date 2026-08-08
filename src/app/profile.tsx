@@ -14,6 +14,7 @@ import { useGroups, useStore, useStudents } from '@/data/store';
 import { hydrate } from '@/data/sync';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
+import { SUPPORT_EMAIL } from '@/lib/brand';
 import {
   cancelClassReminders,
   registerForPush,
@@ -197,9 +198,7 @@ export default function Profile() {
 
           <Text style={styles.email}>{email ?? 'No email on file'}</Text>
           <View style={styles.providerPill}>
-            <Text style={styles.providerLabel}>
-              {PROVIDER_LABEL[provider] ?? t('auth.signIn')}
-            </Text>
+            <Text style={styles.providerLabel}>{PROVIDER_LABEL[provider] ?? t('auth.signIn')}</Text>
           </View>
         </View>
 
@@ -261,10 +260,10 @@ export default function Profile() {
             hint={t('about.supportHint')}
             onPress={() =>
               Linking.openURL(
-                `mailto:smiletechweb@gmail.com?subject=${encodeURIComponent(
-                  t('about.supportSubject'),
-                )}`,
-              ).catch(() => showAlert(t('error.cannotOpen'), t('error.noAppFor', { what: 'email' }), 'danger'))
+                `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(t('about.supportSubject'))}`,
+              ).catch(() =>
+                showAlert(t('error.cannotOpen'), t('error.noAppFor', { what: 'email' }), 'danger'),
+              )
             }
           />
         </Card>
@@ -282,9 +281,7 @@ export default function Profile() {
             icon="info"
             label={t('profile.privacy')}
             hint={t('profile.privacyHint')}
-            onPress={() =>
-              showAlert(t('profile.yourData'), t('profile.privacyBody'))
-            }
+            onPress={() => showAlert(t('profile.yourData'), t('profile.privacyBody'))}
           />
         </Card>
 
@@ -496,17 +493,13 @@ function ThemePicker() {
               <View style={[styles.themeIcon, on && styles.themeIconOn]}>
                 <Icon name={opt.icon} size={18} color={on ? color.primaryInk : color.mutedLight} />
               </View>
-              <Text style={[styles.themeLabel, on && styles.themeLabelOn]}>
-                {t(opt.labelKey)}
-              </Text>
+              <Text style={[styles.themeLabel, on && styles.themeLabelOn]}>{t(opt.labelKey)}</Text>
             </Press>
           );
         })}
       </View>
       {/* Only meaningful under `system` — otherwise the chosen card says it. */}
-      {pref === 'system' ? (
-        <Text style={styles.themeFootnote}>{scheme}</Text>
-      ) : null}
+      {pref === 'system' ? <Text style={styles.themeFootnote}>{scheme}</Text> : null}
     </>
   );
 }
@@ -610,32 +603,32 @@ const makeStyles = ({ color, status }: Theme) =>
     providerPillDemo: { backgroundColor: status.late.tint },
 
     toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 13,
-  },
-  leadRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 15, paddingVertical: 12 },
-  leadChip: {
-    flex: 1,
-    height: 38,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  leadLabel: { fontFamily: body[700], fontSize: 12.5 },
-  blockedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 4,
-    marginTop: -14,
-    marginBottom: 18,
-  },
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+    },
+    leadRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 15, paddingVertical: 12 },
+    leadChip: {
+      flex: 1,
+      height: 38,
+      borderRadius: radius.lg,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    leadLabel: { fontFamily: body[700], fontSize: 12.5 },
+    blockedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 4,
+      marginTop: -14,
+      marginBottom: 18,
+    },
 
-  themeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
+    themeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
     themeCard: {
       flex: 1,
       backgroundColor: color.surface,
