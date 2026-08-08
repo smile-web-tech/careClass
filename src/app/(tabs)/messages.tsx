@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { confirm } from '@/components/Dialog';
@@ -77,6 +77,29 @@ export default function Messages() {
     setPicking(true);
     setChosen(new Set([id]));
   };
+
+  /**
+   * Back cancels the selection rather than leaving the screen.
+   *
+   * Selection mode is a mode, and backing out of a mode is what the gesture
+   * means everywhere else on Android. Without this it navigated away with the
+   * ticks still set, so returning to Messages showed rows mysteriously
+   * selected — or worse, looked like the selection had been acted on.
+   *
+   * Scoped to focus so it does not swallow Back while a message detail or the
+   * composer is on top of this tab.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (!picking) return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setPicking(false);
+        setChosen(new Set());
+        return true; // Consumed: do not also pop the screen.
+      });
+      return () => sub.remove();
+    }, [picking]),
+  );
 
   /** Rows the selection applies to — whichever tab is showing. */
   const visible = tab === 'sent' ? sent : tab === 'assignments' ? assignments : replies;
