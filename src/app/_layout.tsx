@@ -25,7 +25,7 @@ import { Intro } from '@/components/Intro';
 import { SyncBanner } from '@/components/SyncBanner';
 import { updateTeacher } from '@/data/api';
 import { useGroups, useStore } from '@/data/store';
-import { flushWrites, hydrate, installSync, watchInbox } from '@/data/sync';
+import { flushWrites, hydrate, installSync, refreshInbox, watchInbox } from '@/data/sync';
 import { registerForPush, rescheduleClassReminders } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -139,14 +139,56 @@ function useNotificationRouting() {
     if (!response || !signedIn) return;
 
     const data = response.notification.request.content.data as
-      | { kind?: string; groupId?: string }
-      | undefined;
+      { kind?: string; groupId?: string; replyId?: string } | undefined;
 
     if (data?.kind === 'class-reminder' && data.groupId) {
       router.push({ pathname: '/group/[id]', params: { id: data.groupId } });
-    } else if (data?.kind === 'reply') {
-      router.push('/(tabs)/messages');
+      return;
     }
+
+    if (data?.kind !== 'reply') return;
+    if (!data.replyId) {
+      // An older server build, which sent no id. The inbox is still better
+      // than nowhere.
+      router.push('/(tabs)/messages');
+      return;
+    }
+
+    /*
+      The reply the notification is about is very often not in the store yet.
+      A cold start has loaded nothing, and even a warm app only learns about a
+      reply through its subscription, which may well lose the race against the
+      teacher's thumb. Opening the detail screen then shows "this message is
+      gone", which is both wrong and alarming.
+
+      So: pull the inbox first when it is missing, and fall back to the list
+      only if it is still not there afterwards.
+    */
+    let alive = true;
+    const open = async () => {
+      if (!useStore.getState().replies.some((r) => r.id === data.replyId)) {
+        try {
+          await refreshInbox();
+        } catch {
+          // Offline, most likely. The fallback below covers it.
+        }
+      }
+      if (!alive) return;
+
+      if (useStore.getState().replies.some((r) => r.id === data.replyId)) {
+        router.push({
+          pathname: '/message/[id]',
+          params: { id: data.replyId!, kind: 'reply' },
+        });
+      } else {
+        router.push('/(tabs)/messages');
+      }
+    };
+    void open();
+
+    return () => {
+      alive = false;
+    };
   }, [response, signedIn]);
 }
 

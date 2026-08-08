@@ -532,7 +532,15 @@ Deno.serve(async (req) => {
         title: authorName,
         // First line only. A notification is a summons, not the message.
         body: body.split('\n')[0].slice(0, 140),
-        data: { kind: 'reply', teacherId: delivery.teacher_id },
+        // `replyId` is what makes the tap land on the message itself rather
+        // than on the inbox. Absent only when the row already existed, which
+        // returns above, so in practice it is always here — but the app falls
+        // back to the list rather than trusting that.
+        data: {
+          kind: 'reply',
+          teacherId: delivery.teacher_id,
+          ...(reply?.id ? { replyId: String(reply.id) } : {}),
+        },
       });
 
       // FCM says the app is gone or the token rotated. Clear it, or every
