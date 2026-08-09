@@ -9,8 +9,8 @@
  * Short on purpose. "No internet. Your changes are saved on this phone and will
  * sync automatically" is true but nobody reads it mid-lesson.
  */
-import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
@@ -20,6 +20,9 @@ import { useT } from '@/i18n/useT';
 import { retryNow } from '@/data/sync';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
+
+/** Long enough to read six words, short enough not to become furniture. */
+const VISIBLE_MS = 2200;
 
 export function SyncBanner() {
   const { color, accents, status } = useTheme();
@@ -33,6 +36,47 @@ export function SyncBanner() {
   const clearFailure = useSyncStatus((s) => s.clearFailure);
 
   const [retrying, setRetrying] = useState(false);
+
+  /*
+    The offline banner announces itself and then gets out of the way.
+
+    It used to sit at the top of the screen for as long as the connection was
+    down, which on these networks can be the whole lesson — a permanent strip
+    over whatever the teacher is doing, saying something they already know.
+    Nothing is lost by hiding it: the work is saved, and the sync row on the
+    home screen carries the state for as long as it is true.
+
+    A rejected write is different and stays. That one is not coming back on its
+    own and has a Dismiss button for exactly that reason.
+  */
+  const [showOffline, setShowOffline] = useState(offline);
+  const fade = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!offline) {
+      setShowOffline(false);
+      return;
+    }
+    setShowOffline(true);
+    const timer = setTimeout(() => setShowOffline(false), VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [offline]);
+
+  // Retrying by hand deserves to be seen through, so the banner comes back for
+  // as long as that takes.
+  useEffect(() => {
+    if (retrying) setShowOffline(true);
+  }, [retrying]);
+
+  const visible = !!failure || showOffline;
+
+  useEffect(() => {
+    Animated.timing(fade, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? 160 : 260,
+      useNativeDriver: true,
+    }).start();
+  }, [fade, visible]);
 
   if (!offline && !failure) return null;
 
@@ -51,8 +95,14 @@ export function SyncBanner() {
     : { bg: accents.amber.tint, fg: accents.amber.ink };
 
   return (
-    <View style={[styles.wrap, { top: insets.top + 6 }]} pointerEvents="box-none">
-      <View style={[styles.bar, { backgroundColor: skin.bg, borderColor: skin.fg + '33' }]}>
+    <View
+      style={[styles.wrap, { top: insets.top + 6 }]}
+      pointerEvents={visible ? 'box-none' : 'none'}>
+      <Animated.View
+        style={[
+          styles.bar,
+          { backgroundColor: skin.bg, borderColor: skin.fg + '33', opacity: fade },
+        ]}>
         <Icon name="warning" size={16} color={skin.fg} />
         <Text style={[styles.label, { color: skin.fg }]} numberOfLines={2}>
           {failure ??
@@ -70,7 +120,7 @@ export function SyncBanner() {
             <Text style={[styles.actionLabel, { color: skin.fg }]}>{t('common.retry')}</Text>
           </Press>
         )}
-      </View>
+      </Animated.View>
     </View>
   );
 }
