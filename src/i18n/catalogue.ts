@@ -308,20 +308,17 @@ const tk = {
   'reply.cannotOpen': 'Faýly açyp bolmady.',
 
   /* ----------------------------------------------- SMS from this phone */
-  'sms.notConfigured':
-    'Internet arkaly SMS ugratmak sazlanmadyk. Habaryň ýanyndaky “SMS nireden ugradylsyn” bölüminden “Bu telefondan” saýla, ýa-da diňe e-poçta bilen ugrat.',
+  'sms.notConfigured': 'Internet arkaly SMS sazlanmadyk. “Bu telefondan” saýla.',
   'sms.transport': 'SMS nireden ugradylsyn',
   'sms.viaPhone': 'Bu telefondan',
   'sms.viaGateway': 'Internet arkaly',
   'sms.viaPhoneHint': 'Öz SIM kartyňdan ugradylýar. Operatoryň nyrhy boýunça tölenýär.',
   'sms.permissionTitle': 'SMS ugratmaga rugsat gerek',
-  'sms.permissionBody':
-    'ClassCare okuwçylaryňa SMS-i seniň öz belgiňden ugradýar. Şonuň üçin Android-den rugsat soralýar.',
+  'sms.permissionBody': 'SMS seniň öz belgiňden ugradylar. Android rugsat soraýar.',
   'sms.permissionDenied':
     'Rugsat berilmedi. Sazlamalar → Programmalar → ClassCare → Rugsatlar bölüminden açyp bilersiň.',
   'sms.manyTitle': '{count} SMS ugradylmakçy',
-  'sms.manyBody':
-    'Android bir sagatda takmynan 30 SMS-den soň her habar üçin tassyklama soraýar. Ekrandan gitme, soralsa "Rugsat ber" diý.',
+  'sms.manyBody': 'Android her SMS üçin tassyklama sorap biler. Ekrandan gitme.',
   'sms.continue': 'Dowam et',
   'sms.sendingTitle': 'SMS ugradylýar',
   'sms.sendingHint': 'Programmadan çykma. Her habar nobat bilen ugradylýar.',
@@ -352,10 +349,8 @@ const tk = {
   'sms.undeliveredCount': '{count} ýetmedi',
   'sms.unknownCount': '{count} näbelli',
   'sms.deliveryHint': 'Ýetendigi barada habar birnäçe minutdan gelip biler.',
-  'sms.undeliveredHint':
-    'Käbir habarlar ýetmedi. Belgileri we SIM kartyňdaky balansy barla, soňra diňe şolara gaýtadan ugrat.',
-  'sms.unknownHint':
-    'Käbir habarlardan jogap gelmedi. Ugradylan bolmagy mümkin. Gaýtadan ugratmazdan öň barla.',
+  'sms.undeliveredHint': 'Käbiri ýetmedi. Belgini we balansy barla.',
+  'sms.unknownHint': 'Käbirinden jogap gelmedi. Ugran bolmagy mümkin.',
   'messages.channelEmail': 'E-poçta',
   'messages.send': 'Ugrat',
   'messages.reaches': '{count} adama ýeter',
@@ -406,7 +401,7 @@ const tk = {
   'grades.assessment': 'Synag',
   'grades.kindQuiz': 'Test',
   'grades.templateDefault':
-    'Salam {name}! {group} toparyndaky "{title}" {kind} netijesi: {student} {max} baldan {score} bal aldy ({percent}%). Senesi: {date}. Sowalyň bolsa, jogap ýaz. {teacher}',
+    'Salam {name}! {student} "{title}" üçin {max} baldan {score} bal aldy ({percent}%). {teacher}',
   'grades.mailWhyStudent': 'Bu hat size {group} toparynda okaýanyňyz üçin ugradyldy.',
   'grades.mailWhyParent':
     'Bu hat size {group} toparyndaky {student} boýunça ene-ata hökmünde ugradyldy.',
@@ -414,7 +409,7 @@ const tk = {
   'grades.mailReply': 'Soragyňyz bolsa, şu hata jogap ýazyň.',
   'grades.templateTitle': 'Netije habarynyň nusgasy',
   'grades.templateHint':
-    'Synag netijeleri ugradylanda şu ýazgy ulanylýar. Aşakdaky bellikler her okuwça görä çalyşýar.',
+    'Netijeler ugradylanda şu ýazgy gider. Bellikler her okuwça görä çalyşýar.',
   'grades.templateEdit': 'Ýazgyny üýtget',
   'grades.templateReset': 'Başdakysyna dolan',
   'grades.templateResetConfirm': 'Öz ýazgyň pozulyp, başdaky ýazgy dikeldiler.',
@@ -426,7 +421,7 @@ const tk = {
   'grades.previewDate': '12-nji mart',
   'grades.previewTeacher': 'Mugallym',
   'grades.channelTitle': 'Netijeler nädip ugradylsyn?',
-  'grades.channelMessage': 'E-poçta internet arkaly, SMS bolsa şu telefondan ugradylýar.',
+  'grades.channelMessage': 'SMS şu telefondan gider.',
   'grades.channelEmail': 'E-poçta',
   'grades.channelSms': 'SMS',
   'grades.channelBoth': 'Ikisi-de',
@@ -602,13 +597,14 @@ const tk = {
   'about.aboutHint': 'ClassCare näme edýär we ony kim ýazdy',
 
   /* --------------------------------------------------------------- Sync */
-  'sync.offline': 'Internet ýok. Işläbermeli, üýtgeşmeler telefonda saklanýar.',
-  'sync.offlinePending':
-    'Telefonda saklandy. Ugradylmaly {count} üýtgeşme bar, internet gelende özi ugradylar.',
+  'sync.offline': 'Internet ýok. Telefonda saklanýar.',
+  'sync.offlinePending': 'Telefonda saklandy. {count} garaşýar.',
   'sync.couldNotSave': '{what} ýatda saklanmady. {reason}',
-  'auth.signOutUnsent':
-    'Ugradylmadyk {count} üýtgeşme bar. Çyksaň, olar ýitýär. Ilki internete birigip, Ugrat düwmesine bas.',
+  'auth.signOutUnsent': 'Ugradylmadyk {count} üýtgeşme ýiter. Ilki Ugrat.',
   'students.needName': 'Okuwçynyň adyny ýaz',
+  'messages.offlineSend': 'Internet ýok. Habar ugradylmady.',
+  'messages.offlineSmsOnly': 'Internet ýok. Diňe SMS ugradylsynmy?',
+  'messages.allRejected': 'Ähli {count} ugratma ret edildi.',
   'sync.synced': 'Ählisi ugradyldy',
   'home.activeCount': '{count} işjeň',
   'home.shownOf': '{count} / {total}',
@@ -617,8 +613,7 @@ const tk = {
   'sync.syncing': 'Ugradylýar…',
   'sync.offlineShort': 'Internet ýok',
   'sync.stillOfflineTitle': 'Internet henizem ýok',
-  'sync.stillOfflineBody':
-    'Üýtgeşmeleriň telefonda ýatda saklandy. Internet gelende özi ugradylar.',
+  'sync.stillOfflineBody': 'Telefonda saklandy. Internet gelende özi ugradylar.',
   'sync.failedTitle': 'Ugradyp bolmady',
   'sync.failedBody': 'Birazdan gaýtadan synanyş.',
   'sync.button': 'Ugrat',
@@ -954,20 +949,17 @@ const ru: Record<TranslationKey, string> = {
   'reply.cannotOpen': 'Не удалось открыть файл.',
 
   /* ----------------------------------------------- SMS from this phone */
-  'sms.notConfigured':
-    'Отправка SMS через интернет не настроена. В сообщении выберите «Откуда отправлять SMS» → «С этого телефона», либо отправьте только по эл. почте.',
+  'sms.notConfigured': 'SMS через интернет не настроены. Выберите «С этого телефона».',
   'sms.transport': 'Откуда отправлять SMS',
   'sms.viaPhone': 'С этого телефона',
   'sms.viaGateway': 'Через интернет',
   'sms.viaPhoneHint': 'Отправка с вашей SIM-карты. Оплачивается по тарифу оператора.',
   'sms.permissionTitle': 'Нужно разрешение на отправку SMS',
-  'sms.permissionBody':
-    'ClassCare отправляет SMS ученикам с вашего номера. Поэтому Android запрашивает разрешение.',
+  'sms.permissionBody': 'SMS уйдут с вашего номера, поэтому Android спрашивает разрешение.',
   'sms.permissionDenied':
     'Разрешение не выдано. Включить можно в Настройки → Приложения → ClassCare → Разрешения.',
   'sms.manyTitle': 'Будет отправлено {count} SMS',
-  'sms.manyBody':
-    'После примерно 30 сообщений в час Android спрашивает подтверждение для каждого. Не уходите с экрана, нажимайте «Разрешить».',
+  'sms.manyBody': 'Android может спрашивать подтверждение. Не уходите с экрана.',
   'sms.continue': 'Продолжить',
   'sms.sendingTitle': 'Отправка SMS',
   'sms.sendingHint': 'Не закрывайте приложение. Сообщения уходят по очереди.',
@@ -998,10 +990,8 @@ const ru: Record<TranslationKey, string> = {
   'sms.undeliveredCount': '{count} не доставлено',
   'sms.unknownCount': '{count} без ответа',
   'sms.deliveryHint': 'Отчёт о доставке может прийти через несколько минут.',
-  'sms.undeliveredHint':
-    'Часть сообщений не дошла. Проверьте номера и баланс SIM-карты, затем отправьте повторно только им.',
-  'sms.unknownHint':
-    'По части сообщений ответа не было. Возможно, они ушли. Проверьте, прежде чем отправлять снова.',
+  'sms.undeliveredHint': 'Часть не дошла. Проверьте номера и баланс.',
+  'sms.unknownHint': 'По части нет ответа. Возможно, они ушли.',
   'messages.channelEmail': 'Эл. почта',
   'messages.send': 'Отправить',
   'messages.reaches': 'Дойдёт до {count}',
@@ -1052,14 +1042,13 @@ const ru: Record<TranslationKey, string> = {
   'grades.assessment': 'Работа',
   'grades.kindQuiz': 'Тест',
   'grades.templateDefault':
-    'Здравствуйте, {name}! Результат по «{title}» ({kind}) в группе {group}: {student} набрал(а) {score} из {max} ({percent}%). Дата: {date}. Если есть вопросы, ответьте на это сообщение. {teacher}',
+    'Здравствуйте, {name}! {student}: {score} из {max} ({percent}%) за «{title}». {teacher}',
   'grades.mailWhyStudent': 'Вы получили это письмо, потому что учитесь в группе {group}.',
   'grades.mailWhyParent': 'Вы получили это письмо как родитель ученика {student} в группе {group}.',
   'grades.mailStop': 'Чтобы не получать такие письма, ответьте «STOP».',
   'grades.mailReply': 'Если есть вопросы, ответьте на это письмо.',
   'grades.templateTitle': 'Шаблон сообщения с результатом',
-  'grades.templateHint':
-    'Этот текст уходит при отправке результатов. Метки ниже подставляются для каждого ученика.',
+  'grades.templateHint': 'Этот текст уходит с результатами. Метки подставляются для каждого.',
   'grades.templateEdit': 'Изменить текст',
   'grades.templateReset': 'Вернуть исходный',
   'grades.templateResetConfirm': 'Ваш текст будет удалён и восстановлен исходный.',
@@ -1071,7 +1060,7 @@ const ru: Record<TranslationKey, string> = {
   'grades.previewDate': '12 марта',
   'grades.previewTeacher': 'Учитель',
   'grades.channelTitle': 'Как отправить результаты?',
-  'grades.channelMessage': 'Эл. почта уходит через интернет, SMS, с этого телефона.',
+  'grades.channelMessage': 'SMS уйдут с этого телефона.',
   'grades.channelEmail': 'Эл. почта',
   'grades.channelSms': 'SMS',
   'grades.channelBoth': 'Оба',
@@ -1247,13 +1236,14 @@ const ru: Record<TranslationKey, string> = {
   'about.aboutHint': 'Что делает ClassCare и кто его написал',
 
   /* --------------------------------------------------------------- Sync */
-  'sync.offline': 'Нет интернета. Можно работать, всё сохраняется на телефоне.',
-  'sync.offlinePending':
-    'Сохранено на телефоне. Ждёт отправки: {count}. Уйдёт само, когда появится связь.',
+  'sync.offline': 'Нет интернета. Сохраняем на телефоне.',
+  'sync.offlinePending': 'Сохранено на телефоне. Ждёт: {count}.',
   'sync.couldNotSave': 'Не удалось сохранить: {what}. {reason}',
-  'auth.signOutUnsent':
-    'Есть {count} неотправленных изменений. При выходе они пропадут. Сначала подключитесь к интернету и нажмите «Отправить».',
+  'auth.signOutUnsent': '{count} неотправленных изменений пропадут. Сначала отправьте.',
   'students.needName': 'Введите имя ученика',
+  'messages.offlineSend': 'Нет интернета. Сообщение не отправлено.',
+  'messages.offlineSmsOnly': 'Нет интернета. Отправить только SMS?',
+  'messages.allRejected': 'Все отправки отклонены: {count}.',
   'sync.synced': 'Всё сохранено',
   'home.activeCount': '{count} активных',
   'home.shownOf': '{count} из {total}',
@@ -1262,8 +1252,7 @@ const ru: Record<TranslationKey, string> = {
   'sync.syncing': 'Отправляем…',
   'sync.offlineShort': 'Нет интернета',
   'sync.stillOfflineTitle': 'Интернета всё ещё нет',
-  'sync.stillOfflineBody':
-    'Изменения сохранены на телефоне. Они уйдут сами, как только появится связь.',
+  'sync.stillOfflineBody': 'Сохранено на телефоне. Уйдёт, когда появится связь.',
   'sync.failedTitle': 'Не удалось отправить',
   'sync.failedBody': 'Попробуйте ещё раз чуть позже.',
   'sync.button': 'Отправить',
@@ -1595,15 +1584,13 @@ const en: Record<TranslationKey, string> = {
   'reply.cannotOpen': 'Could not open the file.',
 
   /* ----------------------------------------------- SMS from this phone */
-  'sms.notConfigured':
-    'Sending SMS over the internet is not set up. Choose “This phone” under Send SMS from, or send by email only.',
+  'sms.notConfigured': 'SMS over the internet is not set up. Choose “This phone”.',
   'sms.transport': 'Send SMS from',
   'sms.viaPhone': 'This phone',
   'sms.viaGateway': 'Over the internet',
   'sms.viaPhoneHint': 'Sent from your own SIM, at your operator’s rate.',
   'sms.permissionTitle': 'Permission to send SMS',
-  'sms.permissionBody':
-    'ClassCare sends messages to your students from your own number, so Android has to ask first.',
+  'sms.permissionBody': 'Texts go from your own number, so Android asks first.',
   'sms.permissionDenied':
     'Permission was not granted. You can turn it on in Settings → Apps → ClassCare → Permissions.',
   'sms.manyTitle': '{count} messages to send',
@@ -1639,10 +1626,8 @@ const en: Record<TranslationKey, string> = {
   'sms.undeliveredCount': '{count} not delivered',
   'sms.unknownCount': '{count} no answer',
   'sms.deliveryHint': 'A delivery report can take a few minutes to arrive.',
-  'sms.undeliveredHint':
-    'Some messages did not arrive. Check the numbers and the credit on your SIM, then re-send to those only.',
-  'sms.unknownHint':
-    'Some messages never answered. They may have gone out. Check before sending them again.',
+  'sms.undeliveredHint': 'Some did not arrive. Check the numbers and your credit.',
+  'sms.unknownHint': 'Some never answered. They may have gone.',
   'messages.channelEmail': 'Email',
   'messages.send': 'Send',
   'messages.reaches': 'Reaches {count}',
@@ -1693,15 +1678,14 @@ const en: Record<TranslationKey, string> = {
   'grades.assessment': 'Assessment',
   'grades.kindQuiz': 'Quiz',
   'grades.templateDefault':
-    'Hi {name}! Result for "{title}" ({kind}) in {group}: {student} scored {score} out of {max} ({percent}%). Sat on {date}. Reply to this message with any questions. {teacher}',
+    'Hi {name}! {student} scored {score} out of {max} ({percent}%) on "{title}". {teacher}',
   'grades.mailWhyStudent': 'You are receiving this because you are enrolled in {group}.',
   'grades.mailWhyParent':
     'You are receiving this because you are the parent or guardian contact for {student} in {group}.',
   'grades.mailStop': 'To stop these, reply STOP.',
   'grades.mailReply': 'Reply to this email if you have a question about it.',
   'grades.templateTitle': 'Result message template',
-  'grades.templateHint':
-    'This is what goes out when you send results. The tags below are filled in for each student.',
+  'grades.templateHint': 'This goes out with every result. The tags are filled in per student.',
   'grades.templateEdit': 'Edit the wording',
   'grades.templateReset': 'Back to the default',
   'grades.templateResetConfirm': 'Your wording will be deleted and the default restored.',
@@ -1713,7 +1697,7 @@ const en: Record<TranslationKey, string> = {
   'grades.previewDate': '12 March',
   'grades.previewTeacher': 'Teacher',
   'grades.channelTitle': 'How should the results go out?',
-  'grades.channelMessage': 'Email goes over the internet. SMS goes from this phone.',
+  'grades.channelMessage': 'Texts go from this phone.',
   'grades.channelEmail': 'Email',
   'grades.channelSms': 'SMS',
   'grades.channelBoth': 'Both',
@@ -1887,13 +1871,14 @@ const en: Record<TranslationKey, string> = {
   'about.aboutHint': 'What it does and who wrote it',
 
   /* --------------------------------------------------------------- Sync */
-  'sync.offline': 'No internet. Keep working, everything is saved on this phone.',
-  'sync.offlinePending':
-    'Saved on this phone. {count} waiting, and it will sync on its own once you are back online.',
+  'sync.offline': 'No internet. Saved on this phone.',
+  'sync.offlinePending': 'Saved on this phone. {count} waiting.',
   'sync.couldNotSave': '{what} could not be saved. {reason}',
-  'auth.signOutUnsent':
-    'You have {count} changes that have not reached the server. Signing out loses them. Get online and press Sync first.',
+  'auth.signOutUnsent': '{count} unsent changes will be lost. Sync first.',
   'students.needName': 'Enter the student’s name',
+  'messages.offlineSend': 'No internet. The message was not sent.',
+  'messages.offlineSmsOnly': 'No internet. Send the texts only?',
+  'messages.allRejected': 'All {count} deliveries were rejected.',
   'sync.synced': 'All synced',
   'home.activeCount': '{count} active',
   'home.shownOf': '{count} of {total}',
@@ -1902,8 +1887,7 @@ const en: Record<TranslationKey, string> = {
   'sync.syncing': 'Syncing…',
   'sync.offlineShort': 'No internet',
   'sync.stillOfflineTitle': 'Still no internet',
-  'sync.stillOfflineBody':
-    'Your changes are saved on this phone. They will go out on their own once you are back online.',
+  'sync.stillOfflineBody': 'Saved on this phone. It will go when you are back online.',
   'sync.failedTitle': 'Could not sync',
   'sync.failedBody': 'Try again in a moment.',
   'sync.button': 'Sync',

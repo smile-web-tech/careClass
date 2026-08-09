@@ -42,6 +42,12 @@ example
 /ios
 /android
 
+# Local module build output. Gradle regenerates all of it, and EAS builds from
+# the git archive — so committing it only made every build upload a megabyte of
+# stale Kotlin caches.
+modules/*/android/build/
+modules/*/android/.gradle/
+
 # Local secrets
 .env
 .env.local

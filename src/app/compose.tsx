@@ -53,6 +53,7 @@ import { describeError } from '@/lib/errors';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { builtInTemplates } from '@/lib/templates';
 import { hasSupabase } from '@/lib/supabase';
+import { isReachable } from '@/data/sync';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -443,8 +444,46 @@ export default function Compose() {
     }
   };
 
+  /**
+   * Refuse to start a send there is no connection for.
+   *
+   * Sending is not like saving a register. A register is the teacher's own
+   * record and can wait for signal; a message is an act with a recipient, and
+   * "it will go out later" is not what anybody means when they press Send on a
+   * reminder about tonight's class.
+   *
+   * The check also has to happen *before* the request rather than after it
+   * fails: an Edge Function call is allowed three minutes, so an offline send
+   * used to sit on a spinner for the whole of it before saying anything.
+   */
   const send = async () => {
     const body = draft.trim();
+
+    /*
+      Texting from the teacher's own SIM needs no internet at all, so the check
+      is only about the half that does. With both channels chosen and the
+      connection down, the texts should still go — abandoning them because the
+      email cannot be sent would be the wrong trade for the class waiting to
+      hear about tonight's lesson.
+    */
+    let skipEmail = false;
+    if (liveSend && (!viaPhone || channels.email) && !(await isReachable(6000))) {
+      if (!viaPhone) {
+        await showAlert(t('error.offlineTitle'), t('messages.offlineSend'), 'danger');
+        return;
+      }
+
+      const go = await showDialog({
+        title: t('error.offlineTitle'),
+        message: t('messages.offlineSmsOnly'),
+        actions: [
+          { label: t('common.cancel'), value: 'no', intent: 'quiet' },
+          { label: t('sms.continue'), value: 'yes', intent: 'primary' },
+        ],
+      });
+      if (go !== 'yes') return;
+      skipEmail = true;
+    }
 
     if (viaPhone) {
       setSending(true);
@@ -457,7 +496,7 @@ export default function Compose() {
         // queue is a minute of watched progress — running it after would leave
         // the email sitting behind the whole class list for no reason. The SMS
         // channel is dropped from this call so nothing is sent twice.
-        if (channels.email) {
+        if (channels.email && !skipEmail) {
           try {
             await apiSendMessage({
               groupIds: selectedGroups.map((g) => g.id),
@@ -511,7 +550,7 @@ export default function Compose() {
       if (report.sent === 0) {
         await showAlert(
           t('messages.nothingSentTitle'),
-          [`All ${report.failed} deliveries were rejected.`, ...report.errors].join('\n\n'),
+          [t('messages.allRejected', { count: report.failed }), ...report.errors].join('\n\n'),
           'danger',
         );
         return;
