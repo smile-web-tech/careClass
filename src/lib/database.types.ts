@@ -41,6 +41,8 @@ export type TeacherRow = {
   phone: string | null;
   /** 'tk' | 'ru' — the app's language and the language students are written in. */
   language: string;
+  /** The teacher's own wording for a result. Null means use the app default. */
+  grade_template: string | null;
   created_at: string;
 };
 

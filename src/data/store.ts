@@ -83,6 +83,15 @@ type State = {
   teacherAvatarUrl: string | null;
   /** 'google' | 'apple' | 'email'. */
   teacherProvider: string;
+  /**
+   * The teacher's own wording for a reported mark.
+   *
+   * Null means they have not written one and the translated default applies.
+   * Storing null rather than a copy of the default is what lets the default
+   * keep improving with the catalogue, and lets it follow a change of
+   * language instead of freezing in whichever one was active at sign-up.
+   */
+  gradeTemplate: string | null;
   groups: Group[];
   students: Student[];
   /** Saved attendance, keyed by `attendanceKey`. */
@@ -156,6 +165,8 @@ type State = {
   removeTemplate: (id: string) => void;
 
   setLanguage: (language: Language) => void;
+  /** Null puts the teacher back on the app's translated default. */
+  setGradeTemplate: (template: string | null) => void;
   setReminders: (on: boolean, lead?: ReminderLead) => void;
 
   addEvent: (e: Omit<CalendarEvent, 'id'>) => string;
@@ -204,6 +215,7 @@ export type StoreMirror = {
     announcement?: boolean;
   }) => void;
   setLanguage: (language: Language) => void;
+  setGradeTemplate: (template: string | null) => void;
   markRepliesRead: () => void;
   markReplyRead: (id: string) => void;
   deleteReply: (id: string) => void;
@@ -238,6 +250,7 @@ export const useStore = create<State>()(
       teacherEmail: null,
       teacherAvatarUrl: null,
       teacherProvider: 'email',
+      gradeTemplate: null,
       groups: [],
       students: [],
       attendance: {},
@@ -270,6 +283,7 @@ export const useStore = create<State>()(
           teacherEmail: null,
           teacherAvatarUrl: null,
           teacherProvider: 'email',
+          gradeTemplate: null,
           groups: [],
           students: [],
           attendance: {},
@@ -459,6 +473,11 @@ export const useStore = create<State>()(
         if (get().signedIn) mirror.setLanguage?.(language);
       },
 
+      setGradeTemplate: (template) => {
+        set({ gradeTemplate: template });
+        if (get().signedIn) mirror.setGradeTemplate?.(template);
+      },
+
       markRepliesRead: () => {
         set((s) => ({
           replies: s.replies.map((r) => ({ ...r, unread: false })),
@@ -580,6 +599,7 @@ export const useStore = create<State>()(
         teacherEmail: s.teacherEmail,
         teacherAvatarUrl: s.teacherAvatarUrl,
         teacherProvider: s.teacherProvider,
+        gradeTemplate: s.gradeTemplate,
         groups: s.groups,
         students: s.students,
         attendance: s.attendance,

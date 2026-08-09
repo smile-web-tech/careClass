@@ -83,7 +83,8 @@ export type Op =
   | { kind: 'event.create'; event: CalendarEvent }
   | { kind: 'event.update'; id: string; patch: Partial<Omit<CalendarEvent, 'id'>> }
   | { kind: 'event.delete'; id: string }
-  | { kind: 'teacher.language'; language: Language };
+  | { kind: 'teacher.language'; language: Language }
+  | { kind: 'teacher.gradeTemplate'; template: string | null };
 
 /** Perform one queued change against the server. */
 function perform(op: Op): Promise<unknown> {
@@ -142,6 +143,8 @@ function perform(op: Op): Promise<unknown> {
       return api.deleteEvent(op.id);
     case 'teacher.language':
       return api.updateTeacher({ language: op.language });
+    case 'teacher.gradeTemplate':
+      return api.updateTeacher({ gradeTemplate: op.template });
   }
 }
 
@@ -169,7 +172,9 @@ function labelOf(op: Op): string {
                 ? 'sync.item.reply'
                 : op.kind === 'teacher.language'
                   ? 'sync.item.language'
-                  : 'sync.item.message';
+                  : op.kind === 'teacher.gradeTemplate'
+                    ? 'sync.item.template'
+                    : 'sync.item.message';
   return translateNow(key);
 }
 
@@ -360,6 +365,7 @@ function supersedes(a: Op, b: Op): boolean {
     case 'attendance.save':
       return a.key === (b as typeof a).key;
     case 'teacher.language':
+    case 'teacher.gradeTemplate':
     case 'replies.read':
       return true;
     case 'reply.read':
@@ -610,6 +616,7 @@ export async function hydrate() {
       teacherEmail: teacher.email,
       teacherAvatarUrl: teacher.avatarUrl,
       teacherProvider: teacher.provider,
+      gradeTemplate: teacher.gradeTemplate,
     }),
   });
 
@@ -665,6 +672,9 @@ export const remote: StoreMirror = {
   sendMessage: (input) => enqueue({ kind: 'message.send', input }),
 
   setLanguage: (language: Language) => enqueue({ kind: 'teacher.language', language }),
+
+  setGradeTemplate: (template: string | null) =>
+    enqueue({ kind: 'teacher.gradeTemplate', template }),
 
   markRepliesRead: () => enqueue({ kind: 'replies.read' }),
 

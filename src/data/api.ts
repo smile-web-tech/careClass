@@ -220,6 +220,8 @@ export type TeacherProfile = {
   createdAt: string;
   /** Null until the teacher picks one; the device's choice then fills it in. */
   language: string | null;
+  /** What a result message says. Null until the teacher writes their own. */
+  gradeTemplate: string | null;
 };
 
 export async function fetchTeacher(): Promise<TeacherProfile | null> {
@@ -250,6 +252,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
       createdAt: user.created_at,
       // A row that does not exist yet has chosen nothing; the device's pick wins.
       language: null,
+      gradeTemplate: null,
     };
 
     // Create it rather than returning a convincing-looking profile that exists
@@ -285,6 +288,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
     provider: user.app_metadata?.provider ?? 'email',
     createdAt: row.created_at,
     language: row.language ?? null,
+    gradeTemplate: row.grade_template ?? null,
   };
 }
 
@@ -293,6 +297,8 @@ export async function updateTeacher(patch: {
   timezone?: string;
   pushToken?: string;
   language?: string;
+  /** Null clears it, which puts the teacher back on the translated default. */
+  gradeTemplate?: string | null;
 }) {
   const teacherId = await requireUser();
   unwrap(
@@ -303,6 +309,7 @@ export async function updateTeacher(patch: {
         ...(patch.timezone !== undefined && { timezone: patch.timezone }),
         ...(patch.pushToken !== undefined && { push_token: patch.pushToken }),
         ...(patch.language !== undefined && { language: patch.language }),
+        ...(patch.gradeTemplate !== undefined && { grade_template: patch.gradeTemplate }),
       })
       .eq('id', teacherId)
       .select(),
@@ -1103,10 +1110,46 @@ export type GradeReport = {
 export async function sendGrades(input: {
   assessmentId: string;
   audience: Audience;
+  /**
+   * The teacher's own wording, rendered per recipient by the function.
+   *
+   * Passed up rather than read from `teachers.grade_template` on the server so
+   * that the default, when they have not written one, is the app's translated
+   * text in the language they are actually using. The server has no business
+   * guessing that.
+   */
+  template: string;
+  /**
+   * The sentences that are not the teacher's: why this address is receiving
+   * the message, and how to stop. Translated here and filled in by the
+   * function, which holds no catalogue of its own.
+   */
+  labels: { whyStudent: string; whyParent: string; stop: string; reply: string };
 }): Promise<GradeReport> {
   const { data, error } = await supabase.functions.invoke('send-grades', { body: input });
   if (error) throw new Error(await functionErrorMessage(error));
   return data as GradeReport;
+}
+
+/**
+ * Stamp results the phone itself texted out.
+ *
+ * `send-grades` marks what it emailed. Nothing marks what went by SMS from the
+ * teacher's own SIM, and without this the grading screen keeps calling those
+ * marks unreported, which invites the teacher to send them a second time.
+ */
+export async function markGradesNotified(assessmentId: string, studentIds: string[]) {
+  if (!studentIds.length) return;
+  const teacherId = await requireUser();
+  unwrap(
+    await supabase
+      .from('grades')
+      .update({ notified_at: new Date().toISOString() })
+      .eq('assessment_id', assessmentId)
+      .eq('teacher_id', teacherId)
+      .in('student_id', studentIds)
+      .select(),
+  );
 }
 
 /* -------------------------------------------------------------------------- */

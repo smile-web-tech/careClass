@@ -11,7 +11,7 @@
  * five times heavier, which would quietly mislabel students.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,7 +30,7 @@ import {
   SelectChip,
   StatTile,
 } from '@/components/ui';
-import { sendGrades } from '@/data/api';
+import { markGradesNotified, sendGrades } from '@/data/api';
 import { refreshGrades } from '@/data/sync';
 import {
   averagePercent,
@@ -44,6 +44,18 @@ import type { Assessment, Audience } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { shortDate, fromKey } from '@/lib/date';
+import { describeError } from '@/lib/errors';
+import {
+  deviceSmsSupported,
+  hasSmsPermission,
+  newSmsBatchId,
+  requestSmsPermission,
+  sendSmsBatch,
+  type SmsOutcome,
+  type SmsRecipient,
+} from '@/lib/deviceSms';
+import { defaultGradeTemplate, renderGradeTemplate } from '@/lib/gradeTemplate';
+import { SmsRunSheet } from '@/components/SmsRunSheet';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -76,6 +88,17 @@ export default function Grades() {
 
   const [picked, setPicked] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+
+  /** Live state of an SMS run, shared with the composer's sheet. */
+  const [run, setRun] = useState<{
+    total: number;
+    results: SmsOutcome[];
+    running: boolean;
+  } | null>(null);
+  const cancelled = useRef(false);
+
+  const teacherName = useStore((s) => s.teacherName);
+  const storedTemplate = useStore((s) => s.gradeTemplate);
 
   // Same derived-default pattern as the composer: follow the data until the
   // teacher picks, so a screen opened before hydration finishes still works.
@@ -123,7 +146,104 @@ export default function Grades() {
     [grades, groupAssessments],
   );
 
+  /**
+   * Everyone who should hear about this assessment, and what each of them is
+   * told.
+   *
+   * Built on the device from the local store rather than asked of the server,
+   * because the SMS goes out from the teacher's own SIM: the phone needs the
+   * numbers and the marks in its hand, and it needs them whether or not there
+   * is a connection at the time.
+   */
+  const smsRecipientsFor = (assessment: Assessment, audience: Audience, template: string) => {
+    const kindLabel = t(KIND_KEY[assessment.kind]);
+    const date = shortDate(fromKey(assessment.takenOn));
+    const recipients: SmsRecipient[] = [];
+    let noPhone = 0;
+
+    for (const grade of grades.filter((g) => g.assessmentId === assessment.id)) {
+      const student = students.find((s) => s.id === grade.studentId);
+      if (!student) continue;
+
+      const vars = {
+        student: student.name,
+        group: groups.find((g) => g.id === assessment.groupId)?.name ?? '',
+        title: assessment.title,
+        kind: kindLabel,
+        score: grade.score,
+        max: assessment.maxScore,
+        percent: (grade.score / assessment.maxScore) * 100,
+        date,
+        teacher: teacherName,
+      };
+
+      if (audience !== 'parents') {
+        if (student.phone?.trim()) {
+          recipients.push({
+            key: `${student.id}:student`,
+            studentId: student.id,
+            kind: 'student',
+            name: student.name,
+            phone: student.phone.trim(),
+            body: renderGradeTemplate(template, { ...vars, name: student.name }),
+          });
+        } else {
+          noPhone += 1;
+        }
+      }
+
+      if (audience !== 'students') {
+        if (student.parentPhone?.trim()) {
+          recipients.push({
+            key: `${student.id}:parent`,
+            studentId: student.id,
+            kind: 'parent',
+            name: student.parentName || student.name,
+            phone: student.parentPhone.trim(),
+            // The parent is addressed by their own name where we have it, but
+            // the mark is always described as the student's.
+            body: renderGradeTemplate(template, {
+              ...vars,
+              name: student.parentName || student.name,
+            }),
+          });
+        } else {
+          noPhone += 1;
+        }
+      }
+    }
+
+    return { recipients, noPhone };
+  };
+
   const notify = async (assessment: Assessment) => {
+    const template = storedTemplate ?? defaultGradeTemplate(t);
+    const canText = deviceSmsSupported();
+
+    /*
+      Two questions, asked in the order they matter. How it goes out first,
+      because email and SMS have different consequences — one is free and
+      arrives whenever, the other costs the teacher's own credit and lands on a
+      lock screen — and only then who hears it.
+    */
+    type Channel = 'email' | 'sms' | 'both';
+    let channel: Channel = 'email';
+    if (canText) {
+      const picked = await showDialog({
+        title: t('grades.channelTitle'),
+        message: t('grades.channelMessage'),
+        tone: 'info',
+        actions: [
+          { label: t('grades.channelEmail'), value: 'email', intent: 'primary' },
+          { label: t('grades.channelSms'), value: 'sms', intent: 'primary' },
+          { label: t('grades.channelBoth'), value: 'both', intent: 'primary' },
+          { label: t('common.notNow'), value: 'cancel', intent: 'quiet' },
+        ],
+      });
+      if (!picked || picked === 'cancel') return;
+      channel = picked as Channel;
+    }
+
     // Who hears about a mark is the teacher's call every time, not a setting
     // buried somewhere: a result a 17-year-old wants sent to them alone and one
     // a parent expects to see are the same feature with different consequences.
@@ -141,35 +261,121 @@ export default function Grades() {
     if (!choice || choice === 'cancel') return;
 
     const audience = choice as Audience;
+    const lines: string[] = [];
+    let anySent = false;
 
     setSending(assessment.id);
     try {
-      const report = await sendGrades({ assessmentId: assessment.id, audience });
-      const lines = [
-        t('grades.notifiedCount', { count: report.notified }),
-        report.skipped
-          ? t(audience === 'parents' ? 'grades.skippedNoParentEmail' : 'grades.skippedNoEmail', {
-              count: report.skipped,
-            })
-          : '',
-        report.failed ? t('grades.failedCount', { count: report.failed }) : '',
-        ...report.errors,
-      ].filter(Boolean);
+      if (channel !== 'sms') {
+        try {
+          const report = await sendGrades({
+            assessmentId: assessment.id,
+            audience,
+            template,
+            labels: {
+              whyStudent: t('grades.mailWhyStudent'),
+              whyParent: t('grades.mailWhyParent'),
+              stop: t('grades.mailStop'),
+              reply: t('grades.mailReply'),
+            },
+          });
+          lines.push(t('grades.notifiedCount', { count: report.notified }));
+          if (report.skipped) {
+            lines.push(
+              t(audience === 'parents' ? 'grades.skippedNoParentEmail' : 'grades.skippedNoEmail', {
+                count: report.skipped,
+              }),
+            );
+          }
+          if (report.failed) lines.push(t('grades.failedCount', { count: report.failed }));
+          lines.push(...report.errors);
+          anySent ||= report.notified > 0;
+        } catch (e) {
+          // Held rather than thrown: the texts are a separate delivery and
+          // should still go. The teacher is told at the end.
+          lines.push(describeError(e).message);
+        }
+      }
 
-      // The server stamped `notified_at` on whatever actually went. Re-read it,
-      // or the screen keeps calling those marks unreported.
+      if (channel !== 'email') {
+        const sent = await textResults(assessment, audience, template, lines);
+        anySent ||= sent;
+      }
+
+      // The server stamped `notified_at` on whatever it emailed, and the SMS
+      // run stamps its own. Re-read, or the screen keeps calling those marks
+      // unreported.
       await refreshGrades().catch(() => {});
 
       await showAlert(
-        report.notified ? t('grades.resultsSent') : t('messages.nothingSentTitle'),
-        lines.join('\n\n'),
-        report.notified ? 'success' : 'danger',
+        anySent ? t('grades.resultsSent') : t('messages.nothingSentTitle'),
+        lines.filter(Boolean).join('\n\n'),
+        anySent ? 'success' : 'danger',
       );
     } catch (e) {
       showError(e, t('grades.couldNotSend'));
     } finally {
       setSending(null);
     }
+  };
+
+  /**
+   * Text the results from this phone, watched.
+   *
+   * Returns whether anything went, and appends its own lines to the report the
+   * teacher reads at the end.
+   */
+  const textResults = async (
+    assessment: Assessment,
+    audience: Audience,
+    template: string,
+    lines: string[],
+  ): Promise<boolean> => {
+    if (!hasSmsPermission()) {
+      const ok = await showDialog({
+        title: t('sms.permissionTitle'),
+        message: t('sms.permissionBody'),
+        actions: [
+          { label: t('common.cancel'), value: 'no', intent: 'quiet' },
+          { label: t('sms.continue'), value: 'yes', intent: 'primary' },
+        ],
+      });
+      if (ok !== 'yes') return false;
+
+      const granted = await requestSmsPermission();
+      if (!granted.granted) {
+        await showAlert(t('sms.permissionTitle'), t('sms.permissionDenied'), 'danger');
+        return false;
+      }
+    }
+
+    const { recipients, noPhone } = smsRecipientsFor(assessment, audience, template);
+    if (noPhone) lines.push(t('grades.smsSkippedNoPhone', { count: noPhone }));
+    if (!recipients.length) return false;
+
+    cancelled.current = false;
+    setRun({ total: recipients.length, results: [], running: true });
+
+    const results = await sendSmsBatch(recipients, {
+      batch: newSmsBatchId(),
+      shouldStop: () => cancelled.current,
+      onProgress: ({ latest }) =>
+        setRun((r) => (r ? { ...r, results: [...r.results, latest] } : r)),
+    });
+
+    setRun((r) => (r ? { ...r, results, running: false } : r));
+
+    const delivered = results.filter((r) => r.state === 'sent');
+    lines.push(t('grades.smsSent', { count: delivered.length }));
+
+    // Only the students something actually reached are marked reported, so a
+    // second run re-sends exactly what failed.
+    const reached = [...new Set(delivered.map((r) => r.studentId))];
+    if (reached.length) {
+      await markGradesNotified(assessment.id, reached).catch(() => {});
+    }
+
+    return delivered.length > 0;
   };
 
   const removeWithConfirm = async (assessment: Assessment) => {
@@ -392,6 +598,20 @@ export default function Grades() {
           </>
         )}
       </ScrollView>
+
+      {/* The same sheet the composer uses. Texting a class of results takes a
+          minute of watched progress, and it is the same minute whether the
+          message is a reminder or a mark. */}
+      <SmsRunSheet
+        visible={run !== null}
+        total={run?.total ?? 0}
+        results={run?.results ?? []}
+        running={run?.running ?? false}
+        onCancel={() => {
+          cancelled.current = true;
+        }}
+        onClose={() => setRun(null)}
+      />
     </Screen>
   );
 }

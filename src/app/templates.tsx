@@ -25,6 +25,11 @@ import { Button, Card, Divider, EmptyState, FieldRow, Overline, Press } from '@/
 import { useStore, useTemplates } from '@/data/store';
 import type { MessageTemplate } from '@/data/types';
 import { useT } from '@/i18n/useT';
+import {
+  defaultGradeTemplate,
+  GRADE_PLACEHOLDERS,
+  previewGradeTemplate,
+} from '@/lib/gradeTemplate';
 import { builtInTemplates } from '@/lib/templates';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
@@ -36,6 +41,9 @@ export default function Templates() {
   const t = useT();
 
   const mine = useTemplates();
+  const teacherName = useStore((s) => s.teacherName);
+  const storedGradeTemplate = useStore((s) => s.gradeTemplate);
+  const setGradeTemplate = useStore((s) => s.setGradeTemplate);
   const addTemplate = useStore((s) => s.addTemplate);
   const updateTemplate = useStore((s) => s.updateTemplate);
   const removeTemplate = useStore((s) => s.removeTemplate);
@@ -44,6 +52,17 @@ export default function Templates() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
+
+  /*
+    The result template is edited here too, but it is not one of the teacher's
+    message templates and must not be listed among them: there is exactly one,
+    it cannot be deleted, and it is not something you pick when composing. It
+    is the wording every reported mark goes out with.
+  */
+  const [editingGrade, setEditingGrade] = useState(false);
+  const [gradeText, setGradeText] = useState('');
+
+  const gradeTemplate = storedGradeTemplate ?? defaultGradeTemplate(t);
 
   const builtIn = builtInTemplates(t);
   const ready = title.trim().length > 1 && text.trim().length > 1;
@@ -78,6 +97,100 @@ export default function Templates() {
     });
     if (yes) removeTemplate(template.id);
   };
+
+  const saveGrade = () => {
+    const next = gradeText.trim();
+    if (next.length < 5) {
+      void showAlert(t('grades.templateTitle'), t('template.saveFirst'), 'danger');
+      return;
+    }
+    // Storing null when it matches the default keeps the teacher on the
+    // translated text: they would otherwise be pinned to whichever language
+    // was active on the day they opened this screen.
+    setGradeTemplate(next === defaultGradeTemplate(t).trim() ? null : next);
+    setEditingGrade(false);
+  };
+
+  const resetGrade = async () => {
+    const yes = await confirm({
+      title: t('grades.templateReset'),
+      message: t('grades.templateResetConfirm'),
+      confirmLabel: t('grades.templateReset'),
+    });
+    if (!yes) return;
+    setGradeTemplate(null);
+    setGradeText(defaultGradeTemplate(t));
+  };
+
+  /* ------------------------------------------------- Editing the result */
+
+  if (editingGrade) {
+    return (
+      <Screen>
+        <TopBar title={t('grades.templateTitle')} dismiss />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={insets.top + 60}>
+          <ScrollView
+            automaticallyAdjustKeyboardInsets
+            contentContainerStyle={{ padding: space.gutter, paddingBottom: insets.bottom + 140 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <Text style={styles.hint}>{t('grades.templateHint')}</Text>
+
+            <Card style={[styles.editor, { marginTop: 14 }]}>
+              <TextInput
+                value={gradeText}
+                onChangeText={setGradeText}
+                multiline
+                placeholder={t('template.bodyHint')}
+                placeholderTextColor={color.mutedLight}
+                style={styles.editorInput}
+                textAlignVertical="top"
+                selectionColor={color.primary}
+                keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
+              />
+              <View style={styles.chipRow}>
+                {GRADE_PLACEHOLDERS.map((p) => (
+                  <Press
+                    key={p}
+                    onPress={() =>
+                      setGradeText((d) => `${d}${d.endsWith(' ') || !d ? '' : ' '}${p}`)
+                    }
+                    style={styles.chip}>
+                    <Text style={styles.chipLabel}>{p}</Text>
+                  </Press>
+                ))}
+              </View>
+            </Card>
+
+            {/* Written out with a real name and a real mark in it. Reading
+                "{student} scored {score}" tells nobody whether the sentence
+                works. */}
+            <Overline style={styles.label}>{t('grades.templatePreview')}</Overline>
+            <Card style={styles.previewCard}>
+              <Text style={styles.previewText}>
+                {previewGradeTemplate(gradeText, t, teacherName)}
+              </Text>
+            </Card>
+
+            <Press onPress={() => void resetGrade()} style={styles.resetRow}>
+              <Icon name="refresh" size={14} color={color.mutedLight} />
+              <Text style={styles.resetLabel}>{t('grades.templateReset')}</Text>
+            </Press>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        <StickyFooter style={{ gap: 10 }}>
+          <Press onPress={() => setEditingGrade(false)} style={styles.cancel}>
+            <Text style={styles.cancelLabel}>{t('common.cancel')}</Text>
+          </Press>
+          <Button grow label={t('common.save')} height={50} onPress={saveGrade} />
+        </StickyFooter>
+      </Screen>
+    );
+  }
 
   /* ------------------------------------------------------------- Editing */
 
@@ -156,7 +269,26 @@ export default function Templates() {
           paddingBottom: insets.bottom + 120,
         }}
         showsVerticalScrollIndicator={false}>
-        <Overline style={styles.label}>{t('template.mine')}</Overline>
+        <Overline style={styles.label}>{t('grades.templateTitle')}</Overline>
+        <Press
+          onPress={() => {
+            setGradeText(gradeTemplate);
+            setEditingGrade(true);
+          }}>
+          <Card style={styles.gradeCard}>
+            <View style={[styles.gradeGlyph, { backgroundColor: color.primaryTint }]}>
+              <Icon name="pencil" size={15} color={color.primaryInk} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.rowBody} numberOfLines={3}>
+                {gradeTemplate}
+              </Text>
+              <Text style={styles.gradeAction}>{t('grades.templateEdit')}</Text>
+            </View>
+          </Card>
+        </Press>
+
+        <Overline style={[styles.label, { marginTop: 22 }]}>{t('template.mine')}</Overline>
         {mine.length === 0 ? (
           <EmptyState title={t('template.none')} hint={t('template.noneHint')} />
         ) : (
@@ -260,5 +392,33 @@ const makeStyles = ({ color }: Theme) =>
       borderColor: color.border,
       justifyContent: 'center',
     },
+    gradeCard: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 13,
+      paddingHorizontal: 15,
+      paddingVertical: 14,
+    },
+    gradeGlyph: {
+      width: 30,
+      height: 30,
+      borderRadius: radius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    gradeAction: { fontFamily: body[700], fontSize: 12.5, color: color.primary, marginTop: 8 },
+
+    previewCard: { paddingHorizontal: 15, paddingVertical: 14 },
+    previewText: { fontFamily: body[400], fontSize: 14, lineHeight: 21, color: color.ink },
+
+    resetRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+      paddingVertical: 16,
+    },
+    resetLabel: { fontFamily: body[600], fontSize: 13, color: color.mutedLight },
+
     cancelLabel: { fontFamily: body[600], fontSize: 14.5, color: color.inkSoft },
   });
