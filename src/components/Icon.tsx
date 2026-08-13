@@ -158,6 +158,16 @@ const GLYPHS = {
       'M2.6 15.2v-2.1c0-1.3 1-2.3 2.3-2.3h8.2c1.3 0 2.3 1 2.3 2.3v2.1',
     ],
   },
+  /** Settings. A gear, drawn as a ring with eight teeth. */
+  gear: {
+    box: 18,
+    sw: 1.6,
+    circles: [[9, 9, 2.6]],
+    d: [
+      'M9 1.8v2M9 14.2v2M16.2 9h-2M3.8 9h-2',
+      'm14.1 3.9-1.4 1.4M5.3 12.7l-1.4 1.4M14.1 14.1l-1.4-1.4M5.3 5.3 3.9 3.9',
+    ],
+  },
   warning: {
     box: 16,
     sw: 1.9,

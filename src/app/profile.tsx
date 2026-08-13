@@ -1,53 +1,42 @@
-import { File } from 'expo-file-system';
+/**
+ * The teacher's own account, and nothing else.
+ *
+ * Everything that governs how the app behaves — reminders, language, theme,
+ * templates, backups, permissions — moved to `settings.tsx`. This screen had
+ * grown to eight sections of settings under a name and a photo, which made the
+ * two things it was for equally hard to find. What is left is who is signed in,
+ * what they have, and the two account actions nobody should have to hunt for.
+ */
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { confirm, showAlert, showError } from '@/components/Dialog';
-import { LanguagePicker } from '@/components/LanguagePicker';
-import { Icon, type IconName } from '@/components/Icon';
+import { confirm, showError } from '@/components/Dialog';
+import { Icon } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
-import { Button, Card, Divider, Overline, Press, StatTile, Toggle } from '@/components/ui';
-import { applyBackup, BackupError, exportBackup, readBackup, summarise } from '@/data/backup';
+import { ActionRow, InfoRow } from '@/components/SettingsRows';
+import { Button, Card, Divider, Overline, Press, StatTile } from '@/components/ui';
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import { wipeLocal } from '@/data/persistence';
-import { clearQueue, hydrate } from '@/data/sync';
+import { clearQueue } from '@/data/sync';
 import { useSyncStatus } from '@/data/syncStatus';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
-import { SUPPORT_EMAIL } from '@/lib/brand';
-import {
-  cancelClassReminders,
-  getDevicePushToken,
-  notificationPermissionStatus,
-  registerForPush,
-  requestNotificationPermission,
-  rescheduleReminders,
-  scheduledReminderCount,
-  type ReminderLead,
-} from '@/lib/notifications';
 import { signOut } from '@/lib/auth';
 import { weekDays } from '@/lib/date';
 import { sessionsForWeek } from '@/lib/schedule';
 import { hasSupabase } from '@/lib/supabase';
-import { radius, space, useTheme, useThemedStyles, type Theme, type ThemePref } from '@/theme';
+import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
-/** Why a chosen file could not be read, in words rather than in a code. */
-const BACKUP_ERROR_KEY: Record<BackupError['reason'], TranslationKey> = {
-  notJson: 'backup.errorNotJson',
-  notBackup: 'backup.errorNotBackup',
-  tooNew: 'backup.errorTooNew',
-  empty: 'backup.errorEmpty',
-};
-
-const PROVIDER_LABEL: Record<string, string> = {
-  google: 'Signed in with Google',
-  apple: 'Signed in with Apple',
-  email: 'Signed in with email',
+/** How this session was established, in the teacher's language. */
+const PROVIDER_KEY: Record<string, TranslationKey> = {
+  google: 'profile.viaGoogle',
+  apple: 'profile.viaApple',
+  email: 'profile.viaEmail',
 };
 
 export default function Profile() {
@@ -68,8 +57,6 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(name);
   const [busy, setBusy] = useState(false);
-  /** Which backup job is running, so the row can say so and refuse a second. */
-  const [busyBackup, setBusyBackup] = useState<'export' | 'import' | null>(null);
 
   const t = useT();
   const live = hasSupabase;
@@ -92,105 +79,6 @@ export default function Profile() {
       await updateTeacher({ name: next, timezone });
     } catch (e) {
       showError(e, t('profile.couldNotSave'));
-    }
-  };
-
-  /**
-   * Write the whole account to a file and hand it to whatever the teacher
-   * wants to send it with.
-   *
-   * `shareAsync` rather than saving to Downloads: the file is on its way to
-   * another phone, and the share sheet is where Bluetooth, WhatsApp and the
-   * file manager all already are.
-   */
-  const doExport = async () => {
-    if (busyBackup) return;
-    setBusyBackup('export');
-    try {
-      const file = await exportBackup();
-
-      /*
-        Loaded here rather than imported at the top of the file.
-
-        An Expo module resolves its native side at import time, so a top-level
-        import crashes the whole Profile screen on a build that predates the
-        package — for a feature the teacher may never touch. Failing on the
-        button instead keeps the rest of the screen working.
-      */
-      let Sharing: typeof import('expo-sharing');
-      try {
-        Sharing = require('expo-sharing') as typeof import('expo-sharing');
-      } catch {
-        await showAlert(t('backup.exported'), t('backup.savedTo', { path: file.uri }));
-        return;
-      }
-
-      if (!(await Sharing.isAvailableAsync())) {
-        // No share sheet — a rooted or stripped device. The file exists, so
-        // say where it is rather than pretending nothing happened.
-        await showAlert(t('backup.exported'), t('backup.savedTo', { path: file.uri }));
-        return;
-      }
-
-      await Sharing.shareAsync(file.uri, {
-        mimeType: 'application/json',
-        dialogTitle: t('backup.export'),
-      });
-    } catch (e) {
-      showError(e, t('backup.exportFailed'));
-    } finally {
-      setBusyBackup(null);
-    }
-  };
-
-  /**
-   * Read a backup file and, once the teacher has seen what is in it, replace
-   * this device's data with it.
-   *
-   * Replace rather than merge, and the confirmation says so with the counts in
-   * it. Merging two copies of the same class means deciding which version of a
-   * mark is right, and there is no honest way to do that without asking about
-   * every difference.
-   */
-  const doImport = async () => {
-    if (busyBackup) return;
-
-    // One file, so the single-file overload: it hands back the `File` itself
-    // rather than an array.
-    const picked = await File.pickFileAsync({ mimeTypes: ['application/json', '*/*'] });
-    if (picked.canceled) return;
-
-    setBusyBackup('import');
-    try {
-      const backup = await readBackup(picked.result);
-      const summary = summarise(backup);
-
-      const yes = await confirm({
-        title: t('backup.importTitle'),
-        message: t('backup.importSummary', {
-          groups: summary.groups,
-          students: summary.students,
-          photos: summary.photos,
-          date: summary.exportedAt.slice(0, 10),
-        }),
-        confirmLabel: t('backup.importConfirm'),
-      });
-      if (!yes) return;
-
-      await applyBackup(backup);
-      await showAlert(
-        t('backup.imported'),
-        t('backup.importedBody', { students: summary.students }),
-        'success',
-      );
-    } catch (e) {
-      if (e instanceof BackupError) {
-        await showAlert(t('backup.importFailed'), t(BACKUP_ERROR_KEY[e.reason]), 'danger');
-      } else {
-        showError(e, t('backup.importFailed'));
-      }
-    } finally {
-      setBusyBackup(null);
     }
   };
 
@@ -319,14 +207,14 @@ export default function Profile() {
                 setEditing(true);
               }}
               style={styles.nameRow}>
-              <Text style={styles.name}>{name || 'Add your name'}</Text>
+              <Text style={styles.name}>{name || t('profile.addName')}</Text>
               <Icon name="pencil" size={16} color={color.mutedLight} />
             </Press>
           )}
 
-          <Text style={styles.email}>{email ?? 'No email on file'}</Text>
+          <Text style={styles.email}>{email ?? t('profile.noEmail')}</Text>
           <View style={styles.providerPill}>
-            <Text style={styles.providerLabel}>{PROVIDER_LABEL[provider] ?? t('auth.signIn')}</Text>
+            <Text style={styles.providerLabel}>{t(PROVIDER_KEY[provider] ?? 'auth.signIn')}</Text>
           </View>
         </View>
 
@@ -336,12 +224,13 @@ export default function Profile() {
           <StatTile value={String(sessionsThisWeek)} label={t('profile.thisWeek')} fontSize={21} />
         </View>
 
+        {/*
+          The name and the address are already on the card above, in larger
+          type. Repeating them here was two more rows to scroll past before
+          anything actionable.
+        */}
         <Overline style={styles.label}>{t('profile.account')}</Overline>
         <Card style={styles.group}>
-          <InfoRow icon="person" label={t('profile.name')} value={name || '.'} />
-          <Divider inset={58} />
-          <InfoRow icon="mail" label={t('profile.email')} value={email ?? '.'} />
-          <Divider inset={58} />
           <InfoRow icon="tabCalendar" label={t('profile.timezone')} value={timezone} />
           <Divider inset={58} />
           <InfoRow
@@ -351,94 +240,23 @@ export default function Profile() {
           />
         </Card>
 
-        <Overline style={styles.label}>{t('profile.reminders')}</Overline>
-        <ReminderSettings />
-
-        <Overline style={styles.label}>{t('profile.language')}</Overline>
+        {/*
+          One way in to everything the app does, rather than eight sections of
+          it stacked under the teacher's photograph.
+        */}
         <Card style={styles.group}>
-          <LanguagePicker />
-        </Card>
-        <Text style={styles.languageHint}>{t('profile.languageHint')}</Text>
-
-        <Overline style={styles.label}>{t('profile.appearance')}</Overline>
-        <ThemePicker />
-
-        <Overline style={styles.label}>{t('messages.templates')}</Overline>
-        <Card style={[styles.group, { overflow: 'hidden' }]}>
+          <ActionRow
+            icon="gear"
+            label={t('settings.title')}
+            hint={t('settings.hint')}
+            onPress={() => router.push('/settings')}
+          />
+          <Divider inset={58} />
           <ActionRow
             icon="chat"
             label={t('template.manage')}
             hint={t('profile.emailTemplatesHint')}
             onPress={() => router.push('/templates')}
-          />
-        </Card>
-
-        <Overline style={styles.label}>{t('about.aboutApp')}</Overline>
-        <Card style={[styles.group, { overflow: 'hidden' }]}>
-          <ActionRow
-            icon="info"
-            label={t('about.aboutApp')}
-            hint={t('about.aboutHint')}
-            onPress={() => router.push('/about')}
-          />
-          <Divider inset={58} />
-          <ActionRow
-            icon="mail"
-            label={t('about.support')}
-            hint={t('about.supportHint')}
-            onPress={() =>
-              Linking.openURL(
-                `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(t('about.supportSubject'))}`,
-              ).catch(() =>
-                showAlert(t('error.cannotOpen'), t('error.noAppFor', { what: 'email' }), 'danger'),
-              )
-            }
-          />
-        </Card>
-
-        {/*
-          A file the teacher owns, that works with no server involved. Moving to
-          a new phone in a place where the connection is a sometimes thing
-          should not depend on anybody's infrastructure.
-        */}
-        <Overline style={styles.label}>{t('backup.section')}</Overline>
-        <Card style={[styles.group, { overflow: 'hidden' }]}>
-          <ActionRow
-            icon="cloudUp"
-            label={busyBackup === 'export' ? t('backup.exporting') : t('backup.export')}
-            hint={t('backup.exportHint')}
-            onPress={() => void doExport()}
-          />
-          <Divider inset={58} />
-          <ActionRow
-            icon="paperclip"
-            label={busyBackup === 'import' ? t('backup.importing') : t('backup.import')}
-            hint={t('backup.importHint')}
-            onPress={() => void doImport()}
-          />
-        </Card>
-
-        <Overline style={styles.label}>{t('profile.data')}</Overline>
-        <Card style={styles.group}>
-          <ActionRow
-            icon="tabStudents"
-            label={t('profile.students')}
-            hint={`${students.length} / ${groups.length}`}
-            onPress={() => router.push('/(tabs)/students')}
-          />
-          <Divider inset={58} />
-          <ActionRow
-            icon="bell"
-            label={t('perm.manage')}
-            hint={t('perm.manageHint')}
-            onPress={() => router.push('/permissions')}
-          />
-          <Divider inset={58} />
-          <ActionRow
-            icon="info"
-            label={t('profile.privacy')}
-            hint={t('profile.privacyHint')}
-            onPress={() => showAlert(t('profile.yourData'), t('profile.privacyBody'))}
           />
         </Card>
 
@@ -467,307 +285,11 @@ export default function Profile() {
             </Card>
           </>
         ) : null}
-
-        {live ? (
-          <Press onPress={() => hydrate().catch(() => {})} style={styles.refresh}>
-            <Text style={styles.refreshLabel}>{t('profile.refreshFromServer')}</Text>
-          </Press>
-        ) : null}
-
-        <Text style={styles.version}>ClassCare 1.0.0</Text>
       </ScrollView>
     </Screen>
   );
 }
 
-function InfoRow({ icon, label, value }: { icon: IconName; label: string; value: string }) {
-  const { color } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowIcon}>
-        <Icon name={icon} size={16} color={color.inkSoft} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.rowLabel}>{label}</Text>
-        <Text style={styles.rowValue} numberOfLines={1}>
-          {value}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const LEADS: ReminderLead[] = [5, 10, 15, 20, 30, 60];
-
-/**
- * Reminders, raised by the phone itself rather than by the server — the
- * calendar is already on the device, so a reminder must not depend on the
- * network being up. See `lib/notifications.ts`.
- *
- * One switch and one lead time for everything in the calendar. It used to say
- * "Remind before class" and mean exactly that, so an event a teacher typed in
- * themselves was kept and never mentioned again.
- */
-function ReminderSettings() {
-  const t = useT();
-  const { color } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  const groups = useGroups();
-  const events = useStore((s) => s.events);
-  const on = useStore((s) => s.remindersOn);
-  const lead = useStore((s) => s.reminderLead);
-  const setReminders = useStore((s) => s.setReminders);
-
-  const [blocked, setBlocked] = useState(false);
-  const [count, setCount] = useState(0);
-
-  const refresh = useCallback(async () => {
-    setCount(await scheduledReminderCount());
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  const apply = useCallback(
-    async (nextOn: boolean, nextLead: ReminderLead) => {
-      if (nextOn) {
-        // Ask only when they actually turn it on — a cold prompt at launch
-        // earns a "Don't allow" that iOS never offers to revisit.
-        const ok = await requestNotificationPermission();
-        if (!ok) {
-          setBlocked(true);
-          setReminders(false);
-          return;
-        }
-        setBlocked(false);
-        // Permission is the gate on getting a token at all, so this is the
-        // first moment registration can succeed for a teacher who declined
-        // at some earlier point.
-        void registerForPush((pushToken) => updateTeacher({ pushToken }));
-      }
-      setReminders(nextOn, nextLead);
-      if (nextOn) await rescheduleReminders(groups, events, nextLead);
-      else await cancelClassReminders();
-      await refresh();
-    },
-    [events, groups, refresh, setReminders],
-  );
-
-  return (
-    <>
-      <Card style={styles.group}>
-        <View style={styles.toggleRow}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.actionLabel}>{t('profile.remindBefore')}</Text>
-            <Text style={styles.actionHint} numberOfLines={2}>
-              {on
-                ? count
-                  ? t('profile.remindersQueued', { count })
-                  : t('profile.noUpcoming')
-                : t('profile.reminderHint')}
-            </Text>
-          </View>
-          <Toggle value={on} onChange={(v) => void apply(v, lead)} />
-        </View>
-
-        {on ? (
-          <>
-            <Divider inset={15} />
-            <View style={styles.leadRow}>
-              {LEADS.map((m) => {
-                const active = m === lead;
-                return (
-                  <Press
-                    key={m}
-                    haptic
-                    onPress={() => void apply(true, m)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    style={[
-                      styles.leadChip,
-                      {
-                        backgroundColor: active ? color.primaryTint : color.fill,
-                        borderColor: active ? color.primary : 'transparent',
-                      },
-                    ]}>
-                    <Text
-                      style={[
-                        styles.leadLabel,
-                        { color: active ? color.primaryInk : color.inkSoft },
-                      ]}>
-                      {t('profile.minutes', { count: m })}
-                    </Text>
-                  </Press>
-                );
-              })}
-            </View>
-          </>
-        ) : null}
-      </Card>
-
-      {blocked ? (
-        <Press onPress={() => Linking.openSettings()} style={styles.blockedRow}>
-          <Icon name="info" size={15} color={color.warningDeep} />
-          <Text style={[styles.actionHint, { color: color.warningDeep, flex: 1 }]}>
-            {t('profile.notificationsBlocked')}
-          </Text>
-        </Press>
-      ) : null}
-
-      <PushStatus />
-    </>
-  );
-}
-
-/**
- * Whether this phone can receive a push at all.
- *
- * Reminders are raised by the phone; a parent's reply is raised by the server,
- * and that needs a device token registered against the account. When it is
- * missing there is nothing on screen to say so — push simply never arrives, and
- * from the teacher's side that is indistinguishable from nobody having written
- * back. This says which of the three it is, and retries when tapped.
- */
-function PushStatus() {
-  const t = useT();
-  const { color } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-
-  const [state, setState] = useState<'checking' | 'ready' | 'unavailable' | 'off'>('checking');
-
-  const check = useCallback(async () => {
-    const permission = await notificationPermissionStatus();
-    if (permission !== 'granted') {
-      setState('off');
-      return;
-    }
-    // A token means Play Services answered and the build carries the FCM
-    // config. No token is the answer to "why does push do nothing".
-    setState((await getDevicePushToken()) ? 'ready' : 'unavailable');
-  }, []);
-
-  useEffect(() => {
-    void check();
-  }, [check]);
-
-  const retry = async () => {
-    setState('checking');
-    await registerForPush((pushToken) => updateTeacher({ pushToken })).catch(() => false);
-    await check();
-  };
-
-  const hint: TranslationKey =
-    state === 'ready'
-      ? 'profile.pushReady'
-      : state === 'unavailable'
-        ? 'profile.pushUnavailable'
-        : state === 'off'
-          ? 'profile.pushOff'
-          : 'profile.pushChecking';
-
-  return (
-    <Card style={[styles.group, { marginTop: 10 }]}>
-      <Press onPress={() => void retry()} style={styles.toggleRow}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.actionLabel}>{t('profile.pushTitle')}</Text>
-          <Text style={styles.actionHint}>{t(hint)}</Text>
-        </View>
-        <Icon
-          name={state === 'ready' ? 'check' : 'refresh'}
-          size={16}
-          color={state === 'ready' ? color.successDeep : color.inkSoft}
-        />
-      </Press>
-    </Card>
-  );
-}
-
-const THEME_OPTIONS: {
-  key: ThemePref;
-  labelKey: TranslationKey;
-  icon: IconName;
-}[] = [
-  { key: 'light', labelKey: 'profile.themeLight', icon: 'sun' },
-  { key: 'dark', labelKey: 'profile.themeDark', icon: 'moon' },
-  { key: 'system', labelKey: 'profile.themeSystem', icon: 'phone' },
-];
-
-/**
- * Light / Dark / System. `System` keeps following the OS as it changes, so a
- * phone on auto-dark flips this app with it at sunset without a second tap.
- */
-function ThemePicker() {
-  const t = useT();
-  const { color, pref, scheme, setPref } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-
-  return (
-    <>
-      <View style={styles.themeRow}>
-        {THEME_OPTIONS.map((opt) => {
-          const on = pref === opt.key;
-          return (
-            <Press
-              key={opt.key}
-              haptic
-              onPress={() => setPref(opt.key)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: on }}
-              accessibilityLabel={t(opt.labelKey)}
-              style={[styles.themeCard, on && styles.themeCardOn]}>
-              <View style={[styles.themeIcon, on && styles.themeIconOn]}>
-                <Icon name={opt.icon} size={18} color={on ? color.primaryInk : color.mutedLight} />
-              </View>
-              <Text style={[styles.themeLabel, on && styles.themeLabelOn]}>{t(opt.labelKey)}</Text>
-            </Press>
-          );
-        })}
-      </View>
-      {/* Only meaningful under `system` — otherwise the chosen card says it. */}
-      {pref === 'system' ? <Text style={styles.themeFootnote}>{scheme}</Text> : null}
-    </>
-  );
-}
-
-function ActionRow({
-  icon,
-  label,
-  hint,
-  onPress,
-  tint: tintProp,
-  fg: fgProp,
-  labelColor: labelColorProp,
-}: {
-  icon: IconName;
-  label: string;
-  hint: string;
-  onPress?: () => void;
-  tint?: string;
-  fg?: string;
-  labelColor?: string;
-}) {
-  const { color } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  const tint = tintProp ?? color.fill;
-  const fg = fgProp ?? color.inkSoft;
-  const labelColor = labelColorProp ?? color.ink;
-  return (
-    <Press onPress={onPress} disabled={!onPress} style={styles.row}>
-      <View style={[styles.rowIcon, { backgroundColor: tint }]}>
-        <Icon name={icon} size={16} color={fg} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[styles.actionLabel, { color: labelColor }]}>{label}</Text>
-        <Text style={styles.actionHint} numberOfLines={1}>
-          {hint}
-        </Text>
-      </View>
-      <Icon name="disclosure" size={16} color={color.chevron} />
-    </Press>
-  );
-}
 
 const makeStyles = ({ color, status }: Theme) =>
   StyleSheet.create({
@@ -827,73 +349,7 @@ const makeStyles = ({ color, status }: Theme) =>
       borderRadius: radius.md,
       backgroundColor: color.primaryTint,
     },
-    providerPillDemo: { backgroundColor: status.late.tint },
 
-    toggleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 15,
-      paddingVertical: 13,
-    },
-    leadRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 15, paddingVertical: 12 },
-    leadChip: {
-      flex: 1,
-      height: 38,
-      borderRadius: radius.lg,
-      borderWidth: 1.5,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    leadLabel: { fontFamily: body[700], fontSize: 12.5 },
-    blockedRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 4,
-      marginTop: -14,
-      marginBottom: 18,
-    },
-
-    themeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
-    themeCard: {
-      flex: 1,
-      backgroundColor: color.surface,
-      borderWidth: 1.5,
-      borderColor: color.border,
-      borderRadius: radius.card,
-      paddingVertical: 14,
-      paddingHorizontal: 10,
-      alignItems: 'center',
-      gap: 7,
-    },
-    themeCardOn: {
-      borderColor: color.primary,
-      backgroundColor: color.primaryTint,
-    },
-    themeIcon: {
-      width: 38,
-      height: 38,
-      borderRadius: radius.control,
-      backgroundColor: color.fill,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    themeIconOn: { backgroundColor: color.surface },
-    themeLabel: { fontFamily: body[700], fontSize: 14, color: color.ink },
-    themeLabelOn: { color: color.primaryInk },
-    themeHint: {
-      fontFamily: body[500],
-      fontSize: 10.5,
-      color: color.mutedLight,
-    },
-    themeFootnote: {
-      fontFamily: body[500],
-      fontSize: 12,
-      color: color.mutedLight,
-      marginTop: 8,
-      marginBottom: 2,
-    },
     providerLabel: {
       fontFamily: body[600],
       fontSize: 12,
@@ -904,75 +360,5 @@ const makeStyles = ({ color, status }: Theme) =>
     label: { marginBottom: 10 },
     group: { overflow: 'hidden', marginBottom: 22 },
 
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 13,
-    },
-    rowIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: radius.md,
-      backgroundColor: color.fill,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    rowLabel: {
-      fontFamily: body[700],
-      fontSize: 10.5,
-      letterSpacing: 0.84,
-      textTransform: 'uppercase',
-      color: color.mutedLight,
-    },
-    rowValue: {
-      fontFamily: body[600],
-      fontSize: 14.5,
-      color: color.ink,
-      marginTop: 2,
-    },
-    // `Text` does not inherit colour from its parent View, and the default is
-    // black — which is invisible on a dark card. Every other caller passed a
-    // colour explicitly, so only the reminder row showed the bug.
-    actionLabel: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
-    languageHint: {
-      fontFamily: body[400],
-      fontSize: 12,
-      lineHeight: 17,
-      color: color.mutedLight,
-      marginTop: -12,
-      marginBottom: 22,
-      paddingHorizontal: 4,
-    },
-    actionHint: {
-      fontFamily: body[400],
-      fontSize: 12.5,
-      color: color.mutedLight,
-      marginTop: 2,
-    },
 
-    demoCard: { padding: 18, marginBottom: 22 },
-    demoTitle: { fontFamily: body[700], fontSize: 15, color: color.ink },
-    demoHint: {
-      fontSize: 13.5,
-      lineHeight: 20,
-      color: color.muted,
-      marginTop: 5,
-    },
-
-    refresh: { height: 44, alignItems: 'center', justifyContent: 'center' },
-    refreshLabel: {
-      fontFamily: body[600],
-      fontSize: 13.5,
-      color: color.primary,
-    },
-
-    version: {
-      fontFamily: body[400],
-      fontSize: 11.5,
-      color: color.faint,
-      textAlign: 'center',
-      marginTop: 12,
-    },
   });
