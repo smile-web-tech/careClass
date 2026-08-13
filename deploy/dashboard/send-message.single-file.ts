@@ -69,7 +69,7 @@ function render(template: string, r: Recipient) {
     .replaceAll('{time}', r.time);
 }
 
-/** E.164-ish: Uzbek numbers are stored spaced, gateways want digits only. */
+/** E.164-ish: Turkmen numbers are stored spaced, gateways want digits only. */
 const normalizePhone = (p: string) => p.replace(/[^\d]/g, '');
 
 /** Next occurrence of a weekly slot, for `{time}`. */

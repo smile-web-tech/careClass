@@ -106,6 +106,7 @@ const SETTINGS = [
   'gradeTemplate',
   'language',
   'languageChosen',
+  'permissionsAsked',
   'remindersOn',
   'reminderLead',
 ] as const;

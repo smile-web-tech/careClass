@@ -411,6 +411,13 @@ export default function Profile() {
           />
           <Divider inset={58} />
           <ActionRow
+            icon="bell"
+            label={t('perm.manage')}
+            hint={t('perm.manageHint')}
+            onPress={() => router.push('/permissions')}
+          />
+          <Divider inset={58} />
+          <ActionRow
             icon="info"
             label={t('profile.privacy')}
             hint={t('profile.privacyHint')}

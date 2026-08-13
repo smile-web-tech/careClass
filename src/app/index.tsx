@@ -15,7 +15,12 @@ import { useStore } from '@/data/store';
 export default function Index() {
   const signedIn = useStore((s) => s.signedIn);
   const languageChosen = useStore((s) => s.languageChosen);
+  const permissionsAsked = useStore((s) => s.permissionsAsked);
 
   if (!languageChosen) return <Redirect href="/welcome" />;
-  return <Redirect href={signedIn ? '/(tabs)' : '/sign-in'} />;
+  if (!signedIn) return <Redirect href="/sign-in" />;
+  // Once, on the way in, and only after there is an account to hold the
+  // answer. Asking on the sign-in screen would be asking a stranger.
+  if (!permissionsAsked) return <Redirect href="/permissions" />;
+  return <Redirect href="/(tabs)" />;
 }

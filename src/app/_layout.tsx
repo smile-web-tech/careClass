@@ -264,6 +264,7 @@ function RootNavigator() {
         <Stack.Screen name="forgot-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="permissions" options={{ animation: 'fade' }} />
         <Stack.Screen name="group/[id]" />
         <Stack.Screen name="student/[id]" />
         <Stack.Screen name="attendance" options={{ animation: 'slide_from_bottom' }} />

@@ -125,12 +125,22 @@ type State = {
   /** False until the teacher has been asked, which gates the welcome screen. */
   languageChosen: boolean;
 
+  /**
+   * Whether the permissions screen has been through once.
+   *
+   * A flag rather than a check of the permissions themselves: a teacher who
+   * deliberately refused everything must not be asked again on every launch,
+   * and the OS cannot tell "refused" from "never asked" for all of them.
+   */
+  permissionsAsked: boolean;
+
   /** Local class reminders: off, or how many minutes before the start. */
   remindersOn: boolean;
   reminderLead: ReminderLead;
 
   signIn: (name?: string) => void;
   signOut: () => void;
+  markPermissionsAsked: () => void;
   /**
    * Throw away everything that belongs to an account, keeping only what belongs
    * to the device — the language, and whether the welcome screen has been seen.
@@ -284,6 +294,7 @@ export const useStore = create<State>()((set, get) => ({
   templates: [],
   language: DEFAULT_LANGUAGE,
   languageChosen: false,
+  permissionsAsked: false,
   remindersOn: false,
   reminderLead: 15,
 
@@ -293,6 +304,8 @@ export const useStore = create<State>()((set, get) => ({
   // in place meant the next teacher to sign in on this phone saw the last
   // one's classes — and a shared staffroom phone is exactly how this app
   // gets used.
+  markPermissionsAsked: () => set({ permissionsAsked: true }),
+
   signOut: () => {
     get().resetAccount();
     set({ signedIn: false });
