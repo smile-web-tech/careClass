@@ -24,8 +24,9 @@
  * omits the outbox, because unsent writes belong to the device that made them
  * and replaying them from a second phone would send everything twice.
  */
-import { Directory, File, Paths } from 'expo-file-system';
+import { Directory, File } from 'expo-file-system';
 
+import { backupsDirectory } from '@/lib/appFolder';
 import { useStore } from '@/data/store';
 import { flushAll } from '@/data/persistence';
 import type {
@@ -141,18 +142,46 @@ export async function exportBackup(): Promise<File> {
     photos,
   };
 
-  // The cache, not the documents folder: this is a file on its way somewhere
-  // else, and leaving copies of every export in permanent storage would grow
-  // without limit on a phone nobody ever clears.
-  const directory = new Directory(Paths.cache, 'exports');
-  if (!directory.exists) directory.create({ intermediates: true });
+  // `ClassCare/backups`, not the cache. An export written to the cache is a
+  // file the OS may delete the moment storage runs low, which is exactly when a
+  // teacher goes looking for it. Kept here it survives, and the share sheet
+  // still hands a copy to wherever they actually want it.
+  const directory = backupsDirectory();
 
   const file = new File(directory, fileName(new Date()));
   if (file.exists) file.delete();
   file.create();
   file.write(JSON.stringify(backup));
 
+  pruneBackups(directory);
   return file;
+}
+
+/** How many exports the folder keeps. Older ones are the teacher's to re-make. */
+const KEEP_BACKUPS = 5;
+
+/**
+ * Keep the newest few and delete the rest.
+ *
+ * A backup a day for a term is a term of duplicated photos on a phone that is
+ * usually short of space. Five is enough to go back to a known-good copy after
+ * a bad import, which is the only reason to keep more than one.
+ */
+function pruneBackups(directory: Directory) {
+  try {
+    const files = directory
+      .list()
+      .filter((entry): entry is File => entry instanceof File)
+      .filter((f) => f.name.endsWith(`.${BACKUP_EXTENSION}`))
+      // The name carries the date, so sorting by it is sorting by age. Reverse
+      // alphabetical puts the newest first.
+      .sort((a, b) => b.name.localeCompare(a.name));
+
+    for (const old of files.slice(KEEP_BACKUPS)) old.delete();
+  } catch {
+    // A folder that will not list is not a reason to fail an export that has
+    // already been written.
+  }
 }
 
 /* -------------------------------------------------------------------------- */

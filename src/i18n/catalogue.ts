@@ -402,7 +402,7 @@ const tk = {
   'grades.kindQuiz': 'Test',
   'grades.typeAdd': 'Görnüş goş',
   'grades.typeNameHint': 'Mysal: Test 1',
-  'grades.typeLongPress': 'Pozmak üçin basyp sakla.',
+  'grades.typeRemove': 'Pozmak üçin × belgä bas.',
   'grades.typeDeleteTitle': '“{name}” pozulsynmy?',
   'grades.typeDeleteHint': 'Öňki bahalar şol adynda galýar.',
   'grades.templateDefault':
@@ -1139,7 +1139,7 @@ const ru: Record<TranslationKey, string> = {
   'grades.kindQuiz': 'Тест',
   'grades.typeAdd': 'Добавить вид',
   'grades.typeNameHint': 'Например: Тест 1',
-  'grades.typeLongPress': 'Удерживайте, чтобы удалить.',
+  'grades.typeRemove': 'Нажмите ×, чтобы удалить тип.',
   'grades.typeDeleteTitle': 'Удалить «{name}»?',
   'grades.typeDeleteHint': 'Прошлые оценки сохранят своё название.',
   'grades.templateDefault':
@@ -1871,7 +1871,7 @@ const en: Record<TranslationKey, string> = {
   'grades.kindQuiz': 'Quiz',
   'grades.typeAdd': 'Add type',
   'grades.typeNameHint': 'Test 1, for example',
-  'grades.typeLongPress': 'Press and hold to delete.',
+  'grades.typeRemove': 'Tap × to delete a type.',
   'grades.typeDeleteTitle': 'Delete “{name}”?',
   'grades.typeDeleteHint': 'Past marks keep the name they were filed under.',
   'grades.templateDefault':

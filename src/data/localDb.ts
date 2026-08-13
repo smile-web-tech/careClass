@@ -3,8 +3,9 @@
  *
  * ClassCare is used where the internet is a sometimes thing, so the device is
  * the primary store and the server is a copy of it rather than the other way
- * round. Everything a teacher enters lands here first, in `classcare.db` in the
- * app's own folder, and reaches Supabase whenever there is a route to it.
+ * round. Everything a teacher enters lands here first, in `classcare.db` inside
+ * the app's own `ClassCare` folder (see `lib/appFolder.ts`), and reaches
+ * Supabase whenever there is a route to it.
  *
  * ## Why tables rather than one blob
  *
@@ -30,8 +31,10 @@
  * queries this by field. What the columns buy is the ability to write, replace
  * and delete one row at a time.
  */
+import { Directory, File } from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 
+import { appDirectory, moveIfPresent } from '@/lib/appFolder';
 import type {
   Assessment,
   AssessmentType,
@@ -101,6 +104,44 @@ let database: SQLite.SQLiteDatabase | null = null;
 let opening: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
+ * The folder the database lives in, having moved anything left behind.
+ *
+ * It used to sit wherever `expo-sqlite` puts things, which is a folder with no
+ * name a teacher would recognise and no relationship to where the photos were.
+ * Everything the app owns is under `ClassCare/` now.
+ *
+ * The move happens here rather than at startup because it has to happen before
+ * the file is opened — SQLite holds the handle afterwards, and moving a file
+ * out from under an open connection is how a database gets corrupted. All three
+ * files go together: the `-wal` holds committed transactions that are not in
+ * the main file yet, so moving the `.db` alone would silently roll back the
+ * last session's work.
+ *
+ * A failure here is not fatal. `moveIfPresent` swallows it and the old file is
+ * left alone, so the worst case is the previous layout continuing to work.
+ */
+function databaseDirectory(): string {
+  const target = appDirectory();
+
+  try {
+    const legacy = SQLite.defaultDatabaseDirectory as string | undefined;
+    if (legacy) {
+      const from = new Directory(legacy);
+      for (const suffix of ['', '-wal', '-shm']) {
+        moveIfPresent(
+          new File(from, `${DATABASE_NAME}${suffix}`),
+          new File(target, `${DATABASE_NAME}${suffix}`),
+        );
+      }
+    }
+  } catch {
+    // No legacy directory, or it cannot be read. Nothing to bring across.
+  }
+
+  return target.uri;
+}
+
+/**
  * Open once, and only once.
  *
  * Two calls landing together during startup would otherwise each open a
@@ -112,7 +153,7 @@ export function openLocalDb(): Promise<SQLite.SQLiteDatabase> {
   if (opening) return opening;
 
   opening = (async () => {
-    const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+    const db = await SQLite.openDatabaseAsync(DATABASE_NAME, undefined, databaseDirectory());
 
     // WAL is the difference between a write blocking a read and not. The store
     // writes on every change while screens are reading; without this they

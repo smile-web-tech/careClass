@@ -10,7 +10,7 @@
  * a correction rather than a duplicate.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -40,6 +40,7 @@ import type { Assessment } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { assessmentKindLabel, starterTypeNames } from '@/lib/assessmentKind';
 import { toKey } from '@/lib/date';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 import * as Crypto from 'expo-crypto';
@@ -106,6 +107,37 @@ export default function RecordGrades() {
     String(existing?.passMark ?? Math.round((existing?.maxScore ?? 100) / 2)),
   );
   const [saving, setSaving] = useState(false);
+
+  /*
+    Keeping the box being typed into above the keyboard.
+
+    Marking a class of twenty means the last ten rows are under the keyboard the
+    moment it opens, and neither `adjustResize` nor `automaticallyAdjustKeyboard-
+    Insets` scrolls to the field that has focus — they only make room. So the row
+    positions are measured as they lay out and the scroll view is told where to
+    go when a box takes focus, and again when the keyboard finishes appearing,
+    because the first scroll happens before there is anywhere to scroll to.
+  */
+  const scroller = useRef<ScrollView>(null);
+  const rosterTop = useRef(0);
+  const rowTops = useRef<Record<string, number>>({});
+  const focusedRow = useRef<string | null>(null);
+
+  const revealRow = useCallback((studentId: string) => {
+    const top = rowTops.current[studentId];
+    if (top === undefined) return;
+    // A third of the way down rather than flush to the top: the rows above give
+    // the teacher their place in the list, which is what stops them entering a
+    // mark against the wrong name.
+    const y = Math.max(rosterTop.current + top - 180, 0);
+    requestAnimationFrame(() => scroller.current?.scrollTo({ y, animated: true }));
+  }, []);
+
+  const keyboardInset = useKeyboardInset(
+    useCallback(() => {
+      if (focusedRow.current) revealRow(focusedRow.current);
+    }, [revealRow]),
+  );
 
   // Kept as strings while typing: "" is "no mark", and a number cannot hold
   // that distinction. Parsed once, at save.
@@ -229,10 +261,15 @@ export default function RecordGrades() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top + 60}>
         <ScrollView
+          ref={scroller}
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={{
             padding: space.gutter,
-            paddingBottom: insets.bottom + 140,
+            // The keyboard's own height on top of the footer's, so there is
+            // somewhere to scroll to when the last student is the one being
+            // marked. Without it the view is already at the end and the row
+            // stays hidden however far it is dragged.
+            paddingBottom: insets.bottom + 140 + keyboardInset,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -252,6 +289,8 @@ export default function RecordGrades() {
                 selected={chosenKind === name}
                 onPress={() => setKindLabel(name)}
                 onLongPress={groupTypes.length ? () => void removeType(name) : undefined}
+                onRemove={groupTypes.length ? () => void removeType(name) : undefined}
+                removeLabel={t('grades.typeDeleteTitle', { name })}
               />
             ))}
 
@@ -278,9 +317,7 @@ export default function RecordGrades() {
               </View>
             )}
           </View>
-          {groupTypes.length ? (
-            <Text style={styles.typeHint}>{t('grades.typeLongPress')}</Text>
-          ) : null}
+          {groupTypes.length ? <Text style={styles.typeHint}>{t('grades.typeRemove')}</Text> : null}
 
           <Card style={styles.group}>
             <FieldRow
@@ -317,7 +354,11 @@ export default function RecordGrades() {
             </Text>
           </View>
 
-          <Card style={{ overflow: 'hidden' }}>
+          <Card
+            style={{ overflow: 'hidden' }}
+            onLayout={(e) => {
+              rosterTop.current = e.nativeEvent.layout.y;
+            }}>
             {roster.map((s, i) => {
               const value = scores[s.id] ?? '';
               const n = Number(value);
@@ -325,7 +366,11 @@ export default function RecordGrades() {
                 value.trim() !== '' && (!Number.isFinite(n) || n < 0 || (maxValid && n > max));
 
               return (
-                <View key={s.id}>
+                <View
+                  key={s.id}
+                  onLayout={(e) => {
+                    rowTops.current[s.id] = e.nativeEvent.layout.y;
+                  }}>
                   {i > 0 ? <Divider inset={62} /> : null}
                   <View style={styles.scoreRow}>
                     <Avatar
@@ -346,6 +391,13 @@ export default function RecordGrades() {
                       keyboardType="numeric"
                       selectionColor={color.primary}
                       keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
+                      onFocus={() => {
+                        focusedRow.current = s.id;
+                        revealRow(s.id);
+                      }}
+                      onBlur={() => {
+                        if (focusedRow.current === s.id) focusedRow.current = null;
+                      }}
                       style={[
                         styles.scoreInput,
                         {

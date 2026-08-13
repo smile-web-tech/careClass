@@ -12,6 +12,7 @@
  * the last change writes once.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
 import {
   clearLocalData,
@@ -314,6 +315,23 @@ export function startPersistence() {
     }
 
     if (pendingTables.size || pendingSettings.size) schedule();
+  });
+
+  /*
+    Write the moment the app leaves the screen.
+
+    Changes are coalesced for a few hundred milliseconds so that typing a name
+    is one write rather than one per letter. The cost is a window: a teacher who
+    marks the last student and immediately switches apps can have the phone kill
+    ClassCare before the timer fires, and that mark is gone. Android kills
+    backgrounded apps freely on the hardware these teachers actually have, so
+    this is not a rare case.
+
+    Flushing on the way out closes it. `inactive` is included for iOS, which
+    passes through it during the app switcher.
+  */
+  AppState.addEventListener('change', (status) => {
+    if (status === 'background' || status === 'inactive') void flush();
   });
 }
 

@@ -12,13 +12,14 @@
  * whole school over a bad connection, and still sharp on a 3x screen at the
  * size it is actually displayed.
  *
- * Files live in the app's own document folder, one per student, named by id.
- * Not in the media library: a teacher's photo roll should not fill up with
- * other people's children, and a picture that is only meaningful inside
- * ClassCare belongs inside ClassCare.
+ * Files live in `ClassCare/photos`, one per student, named by id. Not in the
+ * media library: a teacher's photo roll should not fill up with other people's
+ * children, and a picture that is only meaningful inside ClassCare belongs
+ * inside ClassCare.
  */
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { moveIfPresent, photosDirectory } from '@/lib/appFolder';
 import { translateNow } from '@/i18n/useT';
 import { supabase } from '@/lib/supabase';
 
@@ -81,17 +82,27 @@ const MAX_EDGE = 512;
 /** JPEG quality. Below about 0.7 the artefacts show on skin. */
 const QUALITY = 0.8;
 
-const PHOTO_DIR = 'student-photos';
+/** Where the pictures used to live, before there was one folder for everything. */
+const LEGACY_PHOTO_DIR = 'student-photos';
 
 export type PhotoSource = 'camera' | 'library';
 
 /** Where this student's picture lives on the device. */
 export function photoFile(studentId: string): File {
-  return new File(Paths.document, PHOTO_DIR, `${studentId}.jpg`);
+  const name = `${studentId}.jpg`;
+  const destination = new File(photoDirectory(), name);
+
+  // Brought across the first time this student's picture is asked for, rather
+  // than sweeping the whole folder at startup: a teacher with sixty students
+  // should not pay for sixty file moves before the first screen draws, and the
+  // ones nobody looks at move the next time a sync or an export walks the list.
+  moveIfPresent(new File(Paths.document, LEGACY_PHOTO_DIR, name), destination);
+
+  return destination;
 }
 
 function photoDirectory(): Directory {
-  return new Directory(Paths.document, PHOTO_DIR);
+  return photosDirectory();
 }
 
 /** A `file://` URI for the picture, or null when there is none. */

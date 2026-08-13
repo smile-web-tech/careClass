@@ -338,6 +338,8 @@ export function SelectChip({
   selected,
   onPress,
   onLongPress,
+  onRemove,
+  removeLabel,
   height = 40,
 }: {
   label: string;
@@ -347,6 +349,17 @@ export function SelectChip({
   onPress: () => void;
   /** Optional second action, used where a chip is also the teacher's to delete. */
   onLongPress?: () => void;
+  /**
+   * Draws a small × at the end of the chip.
+   *
+   * Long-press alone was the only way to remove one, which is a gesture with no
+   * affordance: nothing on screen says it is there, and a teacher who has not
+   * read the hint under the row will never find it. The × is the same action,
+   * visible.
+   */
+  onRemove?: () => void;
+  /** What the × does, for screen readers. */
+  removeLabel?: string;
   height?: number;
 }) {
   const { color } = useTheme();
@@ -363,6 +376,7 @@ export function SelectChip({
           borderRadius: height >= 42 ? radius.field : radius.control,
           backgroundColor: selected ? color.primaryTint : color.surface,
           borderColor: selected ? color.primary : color.border,
+          ...(onRemove ? { paddingRight: 6 } : null),
         },
       ]}>
       {dot ? <View style={[styles.chipDot, { backgroundColor: dot }]} /> : null}
@@ -385,6 +399,18 @@ export function SelectChip({
           }}>
           {count}
         </Text>
+      ) : null}
+      {onRemove ? (
+        <Press
+          onPress={onRemove}
+          // Generous, because the target is 22pt inside a chip somebody is
+          // trying to *select* — a miss that deletes would be unforgivable, and
+          // a miss that selects is free.
+          hitSlop={8}
+          accessibilityLabel={removeLabel}
+          style={[styles.chipRemove, { backgroundColor: color.fill }]}>
+          <Icon name="close" size={10} color={color.mutedLight} />
+        </Press>
       ) : null}
     </Press>
   );
@@ -634,6 +660,14 @@ const makeStyles = ({ color }: Theme) =>
       borderWidth: 1.5,
     },
     chipDot: { width: 8, height: 8, borderRadius: 3 },
+    chipRemove: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 2,
+    },
 
     statTile: {
       flex: 1,
