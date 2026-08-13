@@ -158,6 +158,18 @@ export const dowLong = (d: Date) => names().dowLong[d.getDay()];
 export const monthLong = (d: Date) => names().monthLong[d.getMonth()];
 export const monthShort = (d: Date) => names().monthShort[d.getMonth()];
 
+/**
+ * Weekday initials for a calendar header, Monday first.
+ *
+ * The name arrays are Sunday-first because `getDay()` is, but every week in
+ * this app — the schedule, the calendar tab, the date picker — starts on
+ * Monday, which is also how the week runs here.
+ */
+export const weekdayInitials = (): string[] => {
+  const short = names().dowShort;
+  return [...short.slice(1), short[0]].map((name) => name.slice(0, 2));
+};
+
 export const isSameDay = (a: Date, b: Date) => toKey(a) === toKey(b);
 
 /** "Friday 31 July" — the home screen eyebrow. */

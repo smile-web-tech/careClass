@@ -481,7 +481,7 @@ function InfoRow({ icon, label, value }: { icon: IconName; label: string; value:
   );
 }
 
-const LEADS: ReminderLead[] = [5, 15, 30, 60];
+const LEADS: ReminderLead[] = [5, 10, 15, 20, 30, 60];
 
 /**
  * Class reminders, raised by the phone itself rather than by the server — the

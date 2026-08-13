@@ -72,9 +72,18 @@ export type StudentRow = {
   name: string;
   phone: string;
   email: string | null;
+  birth_date: string | null;
+  address: string | null;
+  school: string | null;
+  document_id: string | null;
   parent_name: string | null;
   parent_phone: string | null;
   parent_email: string | null;
+  parent_work: string | null;
+  parent2_name: string | null;
+  parent2_phone: string | null;
+  parent2_email: string | null;
+  parent2_work: string | null;
   accent: GroupAccentRow;
   note: string | null;
   photo_path: string | null;

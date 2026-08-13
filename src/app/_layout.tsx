@@ -35,7 +35,11 @@ import {
   restoreQueue,
   watchInbox,
 } from '@/data/sync';
-import { registerForPush, rescheduleClassReminders } from '@/lib/notifications';
+import {
+  registerForPush,
+  rescheduleBirthdays,
+  rescheduleClassReminders,
+} from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
 
@@ -135,6 +139,7 @@ function useFlushOnForeground() {
  */
 function useClassReminders() {
   const groups = useGroups();
+  const students = useStore((s) => s.students);
   const on = useStore((s) => s.remindersOn);
   const lead = useStore((s) => s.reminderLead);
   // A reminder's text is baked into the OS when it is scheduled, not read when
@@ -146,6 +151,19 @@ function useClassReminders() {
     if (!on) return;
     void rescheduleClassReminders(groups, lead);
   }, [groups, on, lead, language]);
+
+  /*
+    Birthdays follow the roster rather than the reminder switch: a teacher who
+    does not want to be told a class is starting may still want to know it is
+    somebody's birthday tomorrow, and the two are separate channels on Android
+    so they can be muted separately anyway.
+
+    Re-planned whenever the roster changes, which is what stops a student who
+    has left wishing themselves many happy returns next March.
+  */
+  useEffect(() => {
+    void rescheduleBirthdays(students);
+  }, [students, language]);
 
   useEffect(() => {
     if (!on) return;

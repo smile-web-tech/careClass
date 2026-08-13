@@ -6,9 +6,10 @@ import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
 import { Button, Card, Divider, IconButton, Overline, Press, StatTile, Txt } from '@/components/ui';
 import { useGroups, useRecentSessions, useStudent, useStudentStats } from '@/data/store';
+import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
-import { shortDate } from '@/lib/date';
+import { fromKey, longDate, shortDate } from '@/lib/date';
 import { STATUS_KEY } from '@/app/attendance';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
@@ -155,35 +156,63 @@ export default function StudentProfile() {
                 />
               </>
             ) : null}
-            {student.parentPhone ? (
-              <>
-                <Divider inset={64} />
-                <ContactRow
-                  icon="person"
-                  tint={accents.violet.tint}
-                  fg={accents.violet.ink}
-                  label={`Parent${student.parentName ? ` · ${student.parentName}` : ''}`}
-                  value={student.parentPhone}
-                  tabular
-                  onPress={() => callNumber(student.parentPhone!)}
-                />
-              </>
-            ) : null}
-            {student.parentEmail ? (
-              <>
-                <Divider inset={64} />
-                <ContactRow
-                  icon="mail"
-                  tint={accents.violet.tint}
-                  fg={accents.violet.ink}
-                  label={`Parent email${student.parentName ? ` · ${student.parentName}` : ''}`}
-                  value={student.parentEmail}
-                  onPress={() => emailAddress(student.parentEmail!)}
-                />
-              </>
-            ) : null}
+            {/*
+              Both guardians, each with whatever we hold. The label carries the
+              parent's own name where there is one: "Parent · Merjen" tells the
+              teacher who is about to answer, which "Parent" does not.
+            */}
+            {[
+              {
+                name: student.parentName,
+                phone: student.parentPhone,
+                email: student.parentEmail,
+                accent: accents.violet,
+              },
+              {
+                name: student.parent2Name,
+                phone: student.parent2Phone,
+                email: student.parent2Email,
+                accent: accents.teal,
+              },
+            ].flatMap((parent, index) => {
+              const label = parent.name
+                ? `${t(index === 0 ? 'student.parent1' : 'student.parent2')} · ${parent.name}`
+                : t(index === 0 ? 'student.parent1' : 'student.parent2');
+
+              return [
+                parent.phone ? (
+                  <View key={`p${index}-phone`}>
+                    <Divider inset={64} />
+                    <ContactRow
+                      icon="person"
+                      tint={parent.accent.tint}
+                      fg={parent.accent.ink}
+                      label={label}
+                      value={parent.phone}
+                      tabular
+                      onPress={() => callNumber(parent.phone!)}
+                    />
+                  </View>
+                ) : null,
+                parent.email ? (
+                  <View key={`p${index}-email`}>
+                    <Divider inset={64} />
+                    <ContactRow
+                      icon="mail"
+                      tint={parent.accent.tint}
+                      fg={parent.accent.ink}
+                      label={`${label} · ${t('students.email')}`}
+                      value={parent.email}
+                      onPress={() => emailAddress(parent.email!)}
+                    />
+                  </View>
+                ) : null,
+              ];
+            })}
           </Card>
         </View>
+
+        <StudentDetails student={student} />
 
         <View style={styles.block}>
           <View style={styles.blockHead}>
@@ -228,6 +257,77 @@ export default function StudentProfile() {
       </ScrollView>
     </Screen>
   );
+}
+
+/**
+ * The facts that are not a way of contacting anybody.
+ *
+ * Rendered only where there is something to show: a card of five empty rows
+ * tells a teacher nothing and makes the screen look like a form they have
+ * failed to fill in.
+ */
+function StudentDetails({ student }: { student: Student }) {
+  const t = useT();
+  const styles = useThemedStyles(makeStyles);
+
+  const rows: { label: string; value: string }[] = [];
+
+  if (student.birthDate) {
+    const born = fromKey(student.birthDate);
+    rows.push({
+      label: t('student.birthDate'),
+      value: `${longDate(born)} · ${t('student.age', { age: yearsSince(born) })}`,
+    });
+  }
+  if (student.school) rows.push({ label: t('student.school'), value: student.school });
+  if (student.address) rows.push({ label: t('student.address'), value: student.address });
+  if (student.documentId) {
+    rows.push({ label: t('student.documentId'), value: student.documentId });
+  }
+  if (student.parentWork) {
+    rows.push({
+      label: `${t('student.parent1')} · ${t('student.work')}`,
+      value: student.parentWork,
+    });
+  }
+  if (student.parent2Work) {
+    rows.push({
+      label: `${t('student.parent2')} · ${t('student.work')}`,
+      value: student.parent2Work,
+    });
+  }
+
+  if (!rows.length) return null;
+
+  return (
+    <View style={styles.block}>
+      <Overline style={{ marginBottom: 10 }}>{t('student.details')}</Overline>
+      <Card style={{ overflow: 'hidden' }}>
+        {rows.map((row, i) => (
+          <View key={row.label}>
+            {i > 0 ? <Divider inset={15} /> : null}
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>{row.label}</Text>
+              <Text style={styles.detailValue} numberOfLines={2}>
+                {row.value}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}
+
+/** Whole years, not counting a birthday that has not happened yet this year. */
+function yearsSince(born: Date): number {
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  const before =
+    now.getMonth() < born.getMonth() ||
+    (now.getMonth() === born.getMonth() && now.getDate() < born.getDate());
+  if (before) age -= 1;
+  return Math.max(0, age);
 }
 
 function ContactRow({
@@ -336,6 +436,10 @@ const makeStyles = ({ color }: Theme) =>
       justifyContent: 'space-between',
       marginBottom: 10,
     },
+    detailRow: { paddingHorizontal: 15, paddingVertical: 13, gap: 3 },
+    detailLabel: { fontFamily: body[600], fontSize: 12, color: color.mutedLight },
+    detailValue: { fontFamily: body[500], fontSize: 14.5, color: color.ink, lineHeight: 20 },
+
     seeAll: { fontFamily: body[700], fontSize: 12.5, color: color.primary },
 
     contactRow: {

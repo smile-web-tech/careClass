@@ -24,9 +24,24 @@ export type Student = {
   name: string;
   phone: string;
   email?: string;
+  /** `YYYY-MM-DD`. Drives the birthday reminder. */
+  birthDate?: string;
+  address?: string;
+  school?: string;
+  /** Passport or birth certificate. Free text — the formats differ. */
+  documentId?: string;
+
+  /** The first guardian. These three predate the second parent's columns. */
   parentName?: string;
   parentPhone?: string;
   parentEmail?: string;
+  parentWork?: string;
+
+  parent2Name?: string;
+  parent2Phone?: string;
+  parent2Email?: string;
+  parent2Work?: string;
+
   groupIds: string[];
   accent: AccentName;
   /**

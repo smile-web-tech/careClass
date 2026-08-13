@@ -25,7 +25,11 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.READ_CONTACTS",
-        "android.permission.SEND_SMS"
+        "android.permission.SEND_SMS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.CAMERA"
       ],
       "softwareKeyboardLayoutMode": "resize",
       "googleServicesFile": "./google-services.json"

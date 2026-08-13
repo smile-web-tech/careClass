@@ -19,19 +19,44 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import type { Group } from '@/data/types';
+import type { Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
-import { at, toKey } from '@/lib/date';
+import { at, fromKey, toKey } from '@/lib/date';
 import { sessionsOn } from '@/lib/schedule';
 
 /** How far ahead to schedule. iOS caps an app at 64 pending notifications. */
 const HORIZON_DAYS = 14;
 const MAX_SCHEDULED = 60;
 
+/**
+ * Birthdays share the same iOS ceiling as class reminders, so they get their
+ * own slice of it rather than competing: a teacher with sixty students would
+ * otherwise have no room left for a single class.
+ */
+const MAX_BIRTHDAYS = 20;
+
 /** Marks our reminders so we never clear a notification we did not set. */
 const REMINDER_KIND = 'class-reminder';
 
-export type ReminderLead = 0 | 5 | 15 | 30 | 60;
+export type ReminderLead = 0 | 5 | 10 | 15 | 20 | 30 | 60;
+
+/**
+ * Why reminders used to arrive after the class had already started.
+ *
+ * Android 12 stopped honouring exact alarms without permission. Without
+ * `SCHEDULE_EXACT_ALARM` in the manifest, `expo-notifications` falls back to an
+ * inexact alarm, which Doze is free to defer — in practice by anything from a
+ * few minutes to over an hour, which is how "15 minutes before" turned into
+ * "some time after it started".
+ *
+ * The permission is declared in `app.json`, alongside `USE_EXACT_ALARM` (a
+ * reminder app is one of the categories Android grants that to outright) and
+ * `RECEIVE_BOOT_COMPLETED`, without which every pending reminder is lost when
+ * the phone restarts.
+ *
+ * None of it takes effect until the app is rebuilt — a manifest permission
+ * cannot be added over the air.
+ */
 
 /** Foreground presentation: show the banner rather than swallowing it. */
 Notifications.setNotificationHandler({
@@ -163,6 +188,98 @@ export async function rescheduleClassReminders(groups: Group[], lead: ReminderLe
   }
 
   return Math.min(planned.length, MAX_SCHEDULED);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Birthdays                                                                  */
+/* -------------------------------------------------------------------------- */
+
+const BIRTHDAY_KIND = 'student-birthday';
+
+/** The evening before, at six. Late enough to be remembered, early enough to act. */
+const BIRTHDAY_HOUR = 18;
+
+/**
+ * Remind the teacher of a birthday the night before.
+ *
+ * The night before rather than on the day, because the useful version of this
+ * reminder is the one that arrives while there is still time to bring
+ * something. A notification at 8am on the day is a notification about a thing
+ * already happening.
+ *
+ * Scheduled locally from the dates already on the device, so it works with no
+ * connection — and re-planned whenever the roster changes, which is what stops
+ * a deleted student wishing themselves many happy returns next March.
+ */
+export async function rescheduleBirthdays(students: Student[]) {
+  if (!Device.isDevice) return 0;
+  const { granted } = await Notifications.getPermissionsAsync();
+  if (!granted) return 0;
+
+  await cancelBirthdays();
+  await ensureAndroidChannel();
+
+  const now = new Date();
+  const planned: { when: Date; name: string; turning: number | null; id: string }[] = [];
+
+  for (const student of students) {
+    if (!student.birthDate) continue;
+
+    const born = fromKey(student.birthDate);
+    if (Number.isNaN(born.getTime())) continue;
+
+    // This year's occurrence, or next year's if it has already passed. The
+    // eve is what gets scheduled, so the comparison is against the eve too.
+    for (const year of [now.getFullYear(), now.getFullYear() + 1]) {
+      const birthday = new Date(year, born.getMonth(), born.getDate());
+      const eve = new Date(birthday);
+      eve.setDate(eve.getDate() - 1);
+      eve.setHours(BIRTHDAY_HOUR, 0, 0, 0);
+
+      if (eve.getTime() <= now.getTime() + 60_000) continue;
+
+      planned.push({
+        when: eve,
+        name: student.name,
+        // A birth year of 1900 is somebody typing rather than a fact, and an
+        // age is not worth being wrong about in a notification.
+        turning: born.getFullYear() > 1900 ? year - born.getFullYear() : null,
+        id: student.id,
+      });
+      break;
+    }
+  }
+
+  planned.sort((a, b) => a.when.getTime() - b.when.getTime());
+
+  for (const p of planned.slice(0, MAX_BIRTHDAYS)) {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: translateNow('notif.birthdayTitle'),
+        body:
+          p.turning === null
+            ? translateNow('notif.birthdayBody', { name: p.name })
+            : translateNow('notif.birthdayBodyAge', { name: p.name, age: p.turning }),
+        data: { kind: BIRTHDAY_KIND, studentId: p.id },
+        ...(Platform.OS === 'android' ? { channelId: 'classes' } : {}),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: p.when,
+      },
+    });
+  }
+
+  return Math.min(planned.length, MAX_BIRTHDAYS);
+}
+
+export async function cancelBirthdays() {
+  const pending = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    pending
+      .filter((n) => n.content.data?.kind === BIRTHDAY_KIND)
+      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+  );
 }
 
 /** Remove only our reminders, leaving any other notification alone. */

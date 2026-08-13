@@ -20,6 +20,7 @@ import {
   addDays,
   dowLong,
   dowShort,
+  fromKey,
   isSameDay,
   isSameMonth,
   monthLong,
@@ -48,7 +49,8 @@ const ROWS = 6;
 /** A class session or a personal event, ordered together on the day timeline. */
 type Entry =
   | { kind: 'session'; at: string; session: Session; group: Group }
-  | { kind: 'event'; at: string; event: CalendarEvent };
+  | { kind: 'event'; at: string; event: CalendarEvent }
+  | { kind: 'birthday'; at: string; name: string; age: number | null; studentId: string };
 
 export default function Calendar() {
   const t = useT();
@@ -115,6 +117,34 @@ export default function Calendar() {
     return out;
   }, [events]);
 
+  /**
+   * Birthdays, derived rather than stored.
+   *
+   * A birthday is not an event the teacher created; it is a fact about a
+   * student that recurs. Writing one row per student per year would mean
+   * hundreds of rows to keep in step with a date the teacher can edit at any
+   * time — and a stale one after they correct a typo. Deriving from the roster
+   * costs a loop over the visible month and is always right.
+   */
+  const birthdaysByDay = useMemo(() => {
+    const out: Record<string, { name: string; age: number | null; studentId: string }[]> = {};
+
+    for (const student of students) {
+      if (!student.birthDate) continue;
+      const born = fromKey(student.birthDate);
+      if (Number.isNaN(born.getTime())) continue;
+
+      for (const row of matrix) {
+        for (const day of row) {
+          if (day.getMonth() !== born.getMonth() || day.getDate() !== born.getDate()) continue;
+          const age = born.getFullYear() > 1900 ? day.getFullYear() - born.getFullYear() : null;
+          (out[toKey(day)] ??= []).push({ name: student.name, age, studentId: student.id });
+        }
+      }
+    }
+    return out;
+  }, [students, matrix]);
+
   const selectedKey = toKey(selected);
 
   /** Sessions and events for the selected day, in time order; all-day first. */
@@ -127,8 +157,12 @@ export default function Calendar() {
     for (const e of eventsByDay[selectedKey] ?? []) {
       list.push({ kind: 'event', at: e.allDay ? '' : (e.start ?? ''), event: e });
     }
+    // All-day, so they sort to the top alongside all-day events.
+    for (const b of birthdaysByDay[selectedKey] ?? []) {
+      list.push({ kind: 'birthday', at: '', name: b.name, age: b.age, studentId: b.studentId });
+    }
     return list.sort((a, b) => a.at.localeCompare(b.at));
-  }, [sessionsByDay, eventsByDay, selectedKey, groups]);
+  }, [sessionsByDay, eventsByDay, birthdaysByDay, selectedKey, groups]);
 
   const weekTotal = weekDays(selected).reduce(
     (n, d) => n + (sessionsByDay[toKey(d)]?.length ?? 0),
@@ -297,12 +331,20 @@ export default function Calendar() {
                 }
                 onOpen={() => router.push(`/group/${entry.group.id}`)}
               />
-            ) : (
+            ) : entry.kind === 'event' ? (
               <EventRow
                 key={`e-${entry.event.id}`}
                 event={entry.event}
                 last={i === entries.length - 1}
                 onOpen={() => router.push(`/event/new?id=${entry.event.id}`)}
+              />
+            ) : (
+              <BirthdayRow
+                key={`b-${entry.studentId}`}
+                name={entry.name}
+                age={entry.age}
+                last={i === entries.length - 1}
+                onOpen={() => router.push(`/student/${entry.studentId}`)}
               />
             ),
           )
@@ -432,6 +474,45 @@ function TimelineRow({
         </Press>
       </View>
     </View>
+  );
+}
+
+/**
+ * A birthday on the day's timeline.
+ *
+ * Deliberately quieter than a class and than an event the teacher created: it
+ * is something to know rather than something to do, and it should not compete
+ * with the lesson happening at four.
+ */
+function BirthdayRow({
+  name,
+  age,
+  last,
+  onOpen,
+}: {
+  name: string;
+  age: number | null;
+  last: boolean;
+  onOpen: () => void;
+}) {
+  const t = useT();
+  const { accents } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <Press onPress={onOpen} style={[styles.birthdayRow, last && { marginBottom: 6 }]}>
+      <View style={[styles.birthdayGlyph, { backgroundColor: accents.pink.tint }]}>
+        <Icon name="megaphone" size={15} color={accents.pink.ink} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.birthdayName} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={styles.birthdayNote}>
+          {age === null ? t('notif.birthdayTitle') : t('calendar.turningAge', { name, age })}
+        </Text>
+      </View>
+    </Press>
   );
 }
 
@@ -591,6 +672,23 @@ const makeStyles = ({ color, shadow }: Theme) =>
       fontSize: 12.5,
       color: color.inkSoft,
     },
+
+    birthdayRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+    },
+    birthdayGlyph: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    birthdayName: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
+    birthdayNote: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight, marginTop: 2 },
 
     fab: {
       position: 'absolute',
