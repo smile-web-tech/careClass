@@ -154,8 +154,10 @@ export default function Compose() {
   const toggleGroup = (id: string) => setPicked({ ...selection, [id]: !selection[id] });
   const [audience, setAudience] = useState<Audience>(params.audience ?? 'students');
   const [channels, setChannels] = useState<Record<Channel, boolean>>({
-    sms: true,
-    email: false,
+    // SMS unless the phone cannot send it, in which case email is the only way
+    // out and starting with nothing chosen would just be a step to nowhere.
+    sms: deviceSmsSupported(),
+    email: !deviceSmsSupported(),
     push: false,
   });
   // The starters are translations, so the opening draft has to be resolved
@@ -192,7 +194,22 @@ export default function Compose() {
    * no commercial gateway account, so the phone is the route that works.
    */
   const deviceSms = deviceSmsSupported();
-  const [smsFromPhone, setSmsFromPhone] = useState(deviceSms);
+
+  /*
+    SMS goes from the teacher's own number, or it is not offered.
+
+    There used to be a second route — hand the list to the server and let a
+    commercial gateway send it — and a control for picking between them. It is
+    gone. Nobody here has a gateway account, the messages that matter go to
+    parents on the same network as the teacher, and a text from a shortcode the
+    parent does not recognise is a text the parent ignores. A choice where one
+    option never works is not a choice; it is a way to get it wrong.
+
+    So on a phone that cannot text, SMS disappears from the channel row rather
+    than sitting there quietly routing somewhere else. Email still works, and
+    still says so.
+  */
+  const channelsHere = deviceSms ? CHANNELS : CHANNELS.filter((c) => c.key !== 'sms');
 
   /** Live state of a device send, or null when none is in flight or finished. */
   const [run, setRun] = useState<{
@@ -267,10 +284,12 @@ export default function Compose() {
    * are invented. Texting them would cost the teacher money and land real
    * messages on whatever real numbers those invented ones happen to be.
    */
-  const viaPhone = deviceSms && smsFromPhone && channels.sms && liveSend;
+  const viaPhone = deviceSms && channels.sms && liveSend;
 
   const selectedGroups = groups.filter((g) => selection[g.id]);
-  const activeChannels = CHANNELS.filter((c) => channels[c.key]);
+  // From what this phone actually offers, so the server can never be handed an
+  // SMS to send on the teacher's behalf.
+  const activeChannels = channelsHere.filter((c) => channels[c.key]);
   const multiplier = audience === 'both' ? 2 : 1;
 
   const reach = focusIds.length
@@ -686,7 +705,7 @@ export default function Compose() {
 
           <Overline style={styles.label}>{t('messages.sendVia')}</Overline>
           <View style={styles.channelRow}>
-            {CHANNELS.map((c) => {
+            {channelsHere.map((c) => {
               const on = channels[c.key];
               return (
                 <Press
@@ -715,24 +734,9 @@ export default function Compose() {
             })}
           </View>
 
-          {/* Only where the phone can actually do it, and only when SMS is on. */}
+          {/* One route, stated rather than chosen. See `CHANNELS` above. */}
           {deviceSms && channels.sms ? (
-            <>
-              <Overline style={styles.label}>{t('sms.transport')}</Overline>
-              <View style={{ marginBottom: 8 }}>
-                <Segmented
-                  options={[
-                    { key: 'phone', label: t('sms.viaPhone') },
-                    { key: 'gateway', label: t('sms.viaGateway') },
-                  ]}
-                  value={smsFromPhone ? 'phone' : 'gateway'}
-                  onChange={(v) => setSmsFromPhone(v === 'phone')}
-                />
-              </View>
-              {smsFromPhone ? (
-                <Text style={styles.transportHint}>{t('sms.viaPhoneHint')}</Text>
-              ) : null}
-            </>
+            <Text style={styles.transportHint}>{t('sms.viaPhoneHint')}</Text>
           ) : null}
 
           {noEmail > 0 ? (

@@ -318,9 +318,6 @@ const tk = {
 
   /* ----------------------------------------------- SMS from this phone */
   'sms.notConfigured': 'Internet arkaly SMS sazlanmadyk. “Bu telefondan” saýla.',
-  'sms.transport': 'SMS nireden ugradylsyn',
-  'sms.viaPhone': 'Bu telefondan',
-  'sms.viaGateway': 'Internet arkaly',
   'sms.viaPhoneHint': 'Öz SIM kartyňdan ugradylýar. Operatoryň nyrhy boýunça tölenýär.',
   'sms.permissionTitle': 'SMS ugratmaga rugsat gerek',
   'sms.permissionBody': 'SMS seniň öz belgiňden ugradylar. Android rugsat soraýar.',
@@ -506,7 +503,7 @@ const tk = {
 
   /* ------------------------------------------------------------- Profile */
   'profile.privacyBody':
-    'Toparlaryň, okuwçylaryň we gatnaşyk ýazgylaryň öz Supabase hasabyňda, hatar derejesinde goragly saklanýar. Başga mugallym olary görüp bilmeýär. Okuwçynyň telefon belgisi diňe habar ugradan wagtyň derwezä geçirilýär.',
+    'Toparlaryň, okuwçylaryň we gatnaşyk ýazgylaryň öz Supabase hasabyňda, hatar derejesinde goragly saklanýar. Başga mugallym olary görüp bilmeýär. SMS öz SIM kartyňdan gidýär, şoňa görä telefon belgileri hiç haçan telefonyňdan çykmaýar.',
   'profile.title': 'Profil',
   'settings.title': 'Sazlamalar',
   'settings.hint': 'Ýatlatmalar, dil, görnüş, ätiýaçlyk nusga',
@@ -1093,9 +1090,6 @@ const ru: Record<TranslationKey, string> = {
 
   /* ----------------------------------------------- SMS from this phone */
   'sms.notConfigured': 'SMS через интернет не настроены. Выберите «С этого телефона».',
-  'sms.transport': 'Откуда отправлять SMS',
-  'sms.viaPhone': 'С этого телефона',
-  'sms.viaGateway': 'Через интернет',
   'sms.viaPhoneHint': 'Отправка с вашей SIM-карты. Оплачивается по тарифу оператора.',
   'sms.permissionTitle': 'Нужно разрешение на отправку SMS',
   'sms.permissionBody': 'SMS уйдут с вашего номера, поэтому Android спрашивает разрешение.',
@@ -1280,7 +1274,7 @@ const ru: Record<TranslationKey, string> = {
 
   /* ------------------------------------------------------------- Profile */
   'profile.privacyBody':
-    'Ваши группы, ученики и посещаемость хранятся в вашем аккаунте Supabase под защитой на уровне строк. Другие преподаватели их не видят. Номера учеников передаются шлюзу только в момент отправки сообщения.',
+    'Ваши группы, ученики и посещаемость хранятся в вашем аккаунте Supabase под защитой на уровне строк. Другие преподаватели их не видят. SMS уходят с вашей SIM-карты, поэтому номера учеников никогда не покидают телефон.',
   'profile.title': 'Профиль',
   'settings.title': 'Настройки',
   'settings.hint': 'Напоминания, язык, оформление, резервные копии',
@@ -1862,9 +1856,6 @@ const en: Record<TranslationKey, string> = {
 
   /* ----------------------------------------------- SMS from this phone */
   'sms.notConfigured': 'SMS over the internet is not set up. Choose “This phone”.',
-  'sms.transport': 'Send SMS from',
-  'sms.viaPhone': 'This phone',
-  'sms.viaGateway': 'Over the internet',
   'sms.viaPhoneHint': 'Sent from your own SIM, at your operator’s rate.',
   'sms.permissionTitle': 'Permission to send SMS',
   'sms.permissionBody': 'Texts go from your own number, so Android asks first.',
@@ -2052,7 +2043,7 @@ const en: Record<TranslationKey, string> = {
 
   /* ------------------------------------------------------------- Profile */
   'profile.privacyBody':
-    'Your groups, students and attendance live in your own Supabase account, behind row level security. No other teacher can read them. Student phone numbers are only sent to a gateway at the moment you send a message.',
+    'Your groups, students and attendance live in your own Supabase account, behind row level security. No other teacher can read them. Texts go from your own SIM, so student phone numbers never leave your phone.',
   'profile.title': 'Profile',
   'settings.title': 'Settings',
   'settings.hint': 'Reminders, language, appearance, backups',
