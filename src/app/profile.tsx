@@ -1,6 +1,5 @@
 import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
-import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -107,6 +106,22 @@ export default function Profile() {
     setBusyBackup('export');
     try {
       const file = await exportBackup();
+
+      /*
+        Loaded here rather than imported at the top of the file.
+
+        An Expo module resolves its native side at import time, so a top-level
+        import crashes the whole Profile screen on a build that predates the
+        package — for a feature the teacher may never touch. Failing on the
+        button instead keeps the rest of the screen working.
+      */
+      let Sharing: typeof import('expo-sharing');
+      try {
+        Sharing = require('expo-sharing') as typeof import('expo-sharing');
+      } catch {
+        await showAlert(t('backup.exported'), t('backup.savedTo', { path: file.uri }));
+        return;
+      }
 
       if (!(await Sharing.isAvailableAsync())) {
         // No share sheet — a rooted or stripped device. The file exists, so

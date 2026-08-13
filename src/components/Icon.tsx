@@ -141,6 +141,23 @@ const GLYPHS = {
     sw: 1.8,
     d: ['M2.5 6.5h3l5-3v9l-5-3h-3z', 'M12.5 5.5a3.5 3.5 0 0 1 0 5'],
   },
+  /**
+   * A birthday, on the calendar and nowhere else.
+   *
+   * A megaphone stood in for this and read as an announcement, which is the one
+   * thing a birthday is not. Three candles, a tray and a plate: legible at 15
+   * points, which is the size it is actually drawn at.
+   */
+  cake: {
+    box: 18,
+    sw: 1.6,
+    d: [
+      'M6 4.2V2.8M9 4.2V2.8M12 4.2V2.8',
+      'M4 8.2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.6H4z',
+      'M2.6 15.2h12.8',
+      'M2.6 15.2v-2.1c0-1.3 1-2.3 2.3-2.3h8.2c1.3 0 2.3 1 2.3 2.3v2.1',
+    ],
+  },
   warning: {
     box: 16,
     sw: 1.9,

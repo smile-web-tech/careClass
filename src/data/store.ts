@@ -15,6 +15,7 @@ import type {
   Message,
   MessageTemplate,
   Reply,
+  SentMessageLog,
   Session,
   Student,
 } from '@/data/types';
@@ -168,6 +169,14 @@ type State = {
     total: number;
     announcement?: boolean;
   }) => void;
+  /**
+   * File a send the phone made itself into the message log.
+   *
+   * Texts leave from the teacher's own SIM with no server involved, so nothing
+   * else writes them down. Called with the outcome of the run, so the log shows
+   * what actually went and what did not.
+   */
+  logSentMessage: (entry: SentMessageLog) => void;
   markRepliesRead: () => void;
   markReplyRead: (id: string) => void;
   removeReply: (id: string) => void;
@@ -239,6 +248,7 @@ export type StoreMirror = {
     body: string;
     announcement?: boolean;
   }) => void;
+  logMessage: (entry: SentMessageLog) => void;
   setLanguage: (language: Language) => void;
   setGradeTemplate: (template: string | null) => void;
   setGradeTemplateFail: (template: string | null) => void;
@@ -300,7 +310,20 @@ export const useStore = create<State>()((set, get) => ({
   language: DEFAULT_LANGUAGE,
   languageChosen: false,
   permissionsAsked: false,
-  remindersOn: false,
+  /*
+    On by default.
+
+    It used to be off, which meant a teacher who granted notifications on the
+    way in — having been told, on that screen, that the app would remind them
+    before a class — got no reminders at all until they found a switch in
+    Profile they had no reason to go looking for. "Class reminder not working"
+    is exactly what that looks like from outside.
+
+    Nothing is scheduled without the OS permission anyway: `rescheduleClass-
+    Reminders` checks it and does nothing if it is missing. So the default
+    costs nothing for anyone who declined.
+  */
+  remindersOn: true,
   reminderLead: 15,
 
   signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
@@ -335,10 +358,11 @@ export const useStore = create<State>()((set, get) => ({
       assessmentTypes: [],
       grades: [],
       templates: [],
-      // Reminders are scheduled against groups that have just been dropped,
-      // so the schedule is meaningless now. `useClassReminders` re-plans
-      // from whatever the next account turns out to have.
-      remindersOn: false,
+      // The pending schedule belongs to groups that have just been dropped;
+      // `useClassReminders` re-plans against the now-empty list, which clears
+      // it. The setting itself stays on: it is a preference about this phone,
+      // not data belonging to the account that left.
+      remindersOn: true,
     }),
 
   addGroup: (g) => {
@@ -496,6 +520,29 @@ export const useStore = create<State>()((set, get) => ({
       body,
       announcement,
     });
+  },
+
+  logSentMessage: (entry) => {
+    const delivered = entry.deliveries.filter((d) => d.state === 'sent').length;
+    set((s) => ({
+      messages: [
+        {
+          id: entry.id,
+          groupIds: entry.groupIds,
+          audience: entry.audience,
+          channels: entry.channels,
+          body: entry.body,
+          delivered,
+          total: entry.deliveries.length,
+          sentAt: entry.sentAt,
+          announcement: entry.groupIds.length === 0,
+        },
+        ...s.messages,
+      ],
+    }));
+    // Not optimistic, unlike `sendMessage`: this is filed after the fact, and
+    // the counts above are what actually happened on the radio.
+    mirror.logMessage?.(entry);
   },
 
   setLanguage: (language) => {

@@ -194,10 +194,17 @@ function useNotificationRouting() {
     if (!response || !signedIn) return;
 
     const data = response.notification.request.content.data as
-      { kind?: string; groupId?: string; replyId?: string } | undefined;
+      { kind?: string; groupId?: string; replyId?: string; studentId?: string } | undefined;
 
     if (data?.kind === 'class-reminder' && data.groupId) {
       router.push({ pathname: '/group/[id]', params: { id: data.groupId } });
+      return;
+    }
+
+    // A birthday reminder is about one person, so it opens them — the teacher
+    // usually wants the phone number that is on that screen.
+    if (data?.kind === 'student-birthday' && data.studentId) {
+      router.push({ pathname: '/student/[id]', params: { id: data.studentId } });
       return;
     }
 

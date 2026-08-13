@@ -11,6 +11,7 @@ import type {
   Channel,
   Group,
   MessageTemplate,
+  SentMessageLog,
   Student,
 } from '@/data/types';
 import { isLanguage, setActiveLanguage, type Language, type TranslationKey } from '@/i18n';
@@ -75,6 +76,13 @@ export type Op =
         announcement?: boolean;
       };
     }
+  /**
+   * A send the device made itself, on its way to the message log.
+   *
+   * Carries its own row id, so replaying it after a failed connection updates
+   * the same record rather than logging the send twice.
+   */
+  | { kind: 'message.log'; entry: SentMessageLog }
   | { kind: 'message.delete'; id: string }
   | { kind: 'messages.delete'; ids: string[] }
   | { kind: 'reply.read'; id: string }
@@ -155,6 +163,8 @@ function perform(op: Op): Promise<unknown> {
         // so re-read rather than trusting the optimistic row.
         useStore.setState({ messages: await api.fetchMessages() });
       });
+    case 'message.log':
+      return api.logSentMessage(op.entry);
     case 'message.delete':
       return api.deleteMessage(op.id);
     case 'messages.delete':
@@ -745,6 +755,8 @@ export const remote: StoreMirror = {
     enqueue({ kind: 'attendance.save', key, marks }),
 
   sendMessage: (input) => enqueue({ kind: 'message.send', input }),
+
+  logMessage: (entry) => enqueue({ kind: 'message.log', entry }),
 
   setLanguage: (language: Language) => enqueue({ kind: 'teacher.language', language }),
 

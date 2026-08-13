@@ -11,6 +11,7 @@ import type {
   Group,
   Message,
   Reply,
+  SentMessageLog,
   Student,
   Weekday,
 } from '@/data/types';
@@ -967,6 +968,67 @@ export async function markReplyRead(id: string) {
 export async function deleteReply(id: string) {
   const teacherId = await requireUser();
   unwrap(await supabase.from('replies').delete().eq('id', id).eq('teacher_id', teacherId));
+}
+
+/**
+ * Record a send the phone made on its own.
+ *
+ * Only device SMS reaches this. Everything that goes through an Edge Function
+ * is written down by that function as it sends, which is both closer to the
+ * truth and impossible to do from here — the app cannot know a gateway's
+ * verdict. But a text sent from the teacher's own SIM has no server in the
+ * loop, so without this the message log simply had a hole in it where every
+ * texted exam result should have been.
+ *
+ * Written with the id the device generated, and the delivery rows cleared
+ * first, so a retry after a dropped connection replaces its own row instead of
+ * filing the same send twice.
+ */
+export async function logSentMessage(entry: SentMessageLog) {
+  const teacherId = await requireUser();
+
+  unwrap(
+    await supabase
+      .from('messages')
+      .upsert({
+        id: entry.id,
+        teacher_id: teacherId,
+        body: entry.body,
+        audience: entry.audience,
+        channels: entry.channels,
+        announcement: entry.groupIds.length === 0,
+        sent_at: new Date(entry.sentAt).toISOString(),
+      })
+      .select(),
+  );
+
+  if (entry.groupIds.length) {
+    unwrap(
+      await supabase
+        .from('message_groups')
+        .upsert(entry.groupIds.map((group_id) => ({ message_id: entry.id, group_id }))),
+    );
+  }
+
+  unwrap(await supabase.from('message_deliveries').delete().eq('message_id', entry.id));
+
+  if (entry.deliveries.length) {
+    unwrap(
+      await supabase.from('message_deliveries').insert(
+        entry.deliveries.map((d) => ({
+          message_id: entry.id,
+          teacher_id: teacherId,
+          student_id: d.studentId,
+          recipient: d.recipient,
+          channel: d.channel,
+          destination: d.destination,
+          rendered: d.rendered,
+          state: d.state,
+          error: d.error ?? null,
+        })),
+      ),
+    );
+  }
 }
 
 /**

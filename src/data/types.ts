@@ -112,6 +112,45 @@ export type Message = {
   announcement?: boolean;
 };
 
+/**
+ * A send the phone did itself, written into the message log after the fact.
+ *
+ * Everything sent through an Edge Function is recorded by that function as it
+ * goes. A text sent from the teacher's own SIM has no server in the loop at
+ * all, so nothing recorded it — which is why exam results texted from the phone
+ * used to leave no trace anywhere in the app. This is that record, built on the
+ * device and pushed up with the rest of the queue.
+ *
+ * The id is generated here and reused as the row id, so a queued log that is
+ * retried after a failed connection replaces itself rather than appearing twice.
+ */
+export type SentMessageLog = {
+  id: string;
+  groupIds: string[];
+  audience: Audience;
+  channels: Channel[];
+  /** What the teacher composed, placeholders intact. */
+  body: string;
+  sentAt: number;
+  deliveries: {
+    studentId: string;
+    recipient: 'student' | 'parent';
+    channel: Channel;
+    /** The number or address it went to. */
+    destination: string;
+    /** This recipient's own copy, placeholders filled in. */
+    rendered: string;
+    /**
+     * `queued` is not a pending state here — it is the honest answer when the
+     * radio took the message and no report ever came back. Calling that failed
+     * would have a teacher re-send a text the parent already has.
+     */
+    state: 'sent' | 'failed' | 'queued';
+    /** Untranslated reason code, when there is one. */
+    error?: string;
+  }[];
+};
+
 export type Reply = {
   id: string;
   authorName: string;

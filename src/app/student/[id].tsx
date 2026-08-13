@@ -1,18 +1,31 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AttachmentPreview, type PreviewFile } from '@/components/AttachmentPreview';
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
-import { Button, Card, Divider, IconButton, Overline, Press, StatTile, Txt } from '@/components/ui';
+import {
+  Avatar,
+  Button,
+  Card,
+  Divider,
+  IconButton,
+  Overline,
+  Press,
+  StatTile,
+  Txt,
+} from '@/components/ui';
 import { useGroups, useRecentSessions, useStudent, useStudentStats } from '@/data/store';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { fromKey, longDate, shortDate } from '@/lib/date';
+import { photoFile, photoUri } from '@/lib/studentPhoto';
 import { STATUS_KEY } from '@/app/attendance';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
-import { body, display, text } from '@/theme/type';
+import { body, text } from '@/theme/type';
 
 export default function StudentProfile() {
   const t = useT();
@@ -28,6 +41,9 @@ export default function StudentProfile() {
   const stats = useStudentStats(student);
   const recent = useRecentSessions(student, 3);
 
+  /** The picture, opened full size. Null while it is closed. */
+  const [viewing, setViewing] = useState<PreviewFile | null>(null);
+
   if (!student) {
     return (
       <Screen>
@@ -39,8 +55,32 @@ export default function StudentProfile() {
     );
   }
 
-  const a = accents[student.accent];
   const memberOf = groups.filter((g) => student.groupIds.includes(g.id));
+
+  /*
+    The picture is read off the disk here, not passed down from the list. This
+    screen used to draw initials and nothing else, so a student with a photo had
+    a face in the register and a pair of letters on their own profile — which
+    looks like the photo failed to save.
+  */
+  const face = photoUri(student.id);
+
+  const openPhoto = () => {
+    if (!face) return;
+    let size = 0;
+    try {
+      size = photoFile(student.id).size ?? 0;
+    } catch {
+      // The viewer shows the size as a caption; not knowing it is not a reason
+      // to refuse to open the picture.
+    }
+    setViewing({
+      filename: student.name,
+      mimeType: 'image/jpeg',
+      size,
+      uri: face,
+    });
+  };
 
   return (
     <Screen>
@@ -62,16 +102,19 @@ export default function StudentProfile() {
           </View>
 
           <View style={styles.identity}>
-            <View style={[styles.bigAvatar, { backgroundColor: a.tint }]}>
-              <Text style={[styles.bigInitials, { color: a.ink }]}>
-                {student.name
-                  .split(' ')
-                  .map((p) => p[0])
-                  .slice(0, 2)
-                  .join('')
-                  .toUpperCase()}
-              </Text>
-            </View>
+            <Press
+              onPress={openPhoto}
+              disabled={!face}
+              accessibilityLabel={face ? t('student.viewPhoto') : undefined}>
+              <Avatar
+                name={student.name}
+                accent={student.accent}
+                photoId={student.id}
+                size={76}
+                radius={radius.sheet}
+                fontSize={27}
+              />
+            </Press>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name}>{student.name}</Text>
               <View style={styles.tagRow}>
@@ -255,6 +298,8 @@ export default function StudentProfile() {
           </View>
         ) : null}
       </ScrollView>
+
+      <AttachmentPreview file={viewing} onClose={() => setViewing(null)} />
     </Screen>
   );
 }
@@ -393,14 +438,6 @@ const makeStyles = ({ color }: Theme) =>
       gap: 16,
       marginTop: 20,
     },
-    bigAvatar: {
-      width: 76,
-      height: 76,
-      borderRadius: radius.sheet,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    bigInitials: { fontFamily: display[600], fontSize: 27 },
     name: { ...text.pageTitle, lineHeight: 27.6, color: color.ink },
     tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
     tag: {

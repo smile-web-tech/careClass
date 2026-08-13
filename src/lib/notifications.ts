@@ -220,7 +220,7 @@ export async function rescheduleBirthdays(students: Student[]) {
   await ensureAndroidChannel();
 
   const now = new Date();
-  const planned: { when: Date; name: string; turning: number | null; id: string }[] = [];
+  const planned: { when: Date; name: string; id: string }[] = [];
 
   for (const student of students) {
     if (!student.birthDate) continue;
@@ -238,14 +238,10 @@ export async function rescheduleBirthdays(students: Student[]) {
 
       if (eve.getTime() <= now.getTime() + 60_000) continue;
 
-      planned.push({
-        when: eve,
-        name: student.name,
-        // A birth year of 1900 is somebody typing rather than a fact, and an
-        // age is not worth being wrong about in a notification.
-        turning: born.getFullYear() > 1900 ? year - born.getFullYear() : null,
-        id: student.id,
-      });
+      // Whose birthday it is, and nothing else. The age used to be worked out
+      // and announced, which is both a guess — a birth year typed to get past a
+      // required field is not a fact — and not the app's to say out loud.
+      planned.push({ when: eve, name: student.name, id: student.id });
       break;
     }
   }
@@ -256,10 +252,7 @@ export async function rescheduleBirthdays(students: Student[]) {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: translateNow('notif.birthdayTitle'),
-        body:
-          p.turning === null
-            ? translateNow('notif.birthdayBody', { name: p.name })
-            : translateNow('notif.birthdayBodyAge', { name: p.name, age: p.turning }),
+        body: translateNow('notif.birthdayBody', { name: p.name }),
         data: { kind: BIRTHDAY_KIND, studentId: p.id },
         ...(Platform.OS === 'android' ? { channelId: 'classes' } : {}),
       },

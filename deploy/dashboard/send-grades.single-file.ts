@@ -57,8 +57,9 @@ const json = (body: unknown, status = 200) =>
   });
 
 const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
 
 const KIND_LABEL: Record<string, string> = {
@@ -204,9 +205,7 @@ function renderGradeEmail(opts: {
   );
 
   const stop = fill(opts.labels.stop ?? 'To stop these, reply STOP.');
-  const reply = fill(
-    opts.labels.reply ?? 'Reply to this email if you have a question about it.',
-  );
+  const reply = fill(opts.labels.reply ?? 'Reply to this email if you have a question about it.');
 
   const text = [body, '', reply, '', opts.teacherName, opts.groupName, '', why, stop].join('\n');
 
@@ -260,6 +259,22 @@ function resendFailure(status: number, body: { message?: string; name?: string }
   // A bad address is something the teacher can actually fix, so say which.
   console.warn('[classcare] Resend refused a message:', detail);
   return detail;
+}
+
+/**
+ * The address a reply should come back to.
+ *
+ * Identical to `send-message`, and deliberately so: a student who replies to a
+ * result should land in the same inbox as a parent who replies to a notice. The
+ * token is the delivery id, which is what lets `inbound-email` know the teacher,
+ * the student, and whether the student or the guardian wrote back.
+ *
+ * Unset, this returns undefined and the caller falls back to the teacher's own
+ * mailbox — which is what results did before, and still works.
+ */
+function replyAddressFor(deliveryId: string) {
+  const domain = Deno.env.get('RESEND_INBOUND_DOMAIN');
+  return domain ? `reply-${deliveryId}@${domain}` : undefined;
 }
 
 async function sendEmail(opts: {
@@ -390,100 +405,206 @@ Deno.serve(async (req) => {
   const pickTemplate = (score: number) =>
     passMark === null || score >= passMark ? passTemplate : failTemplate;
 
+  /*
+    Work out every address first, and only then record and send.
+
+    This used to render and send inside one loop and write nothing down. Two
+    things followed from that. The teacher's Messages screen never showed a word
+    of what went out — results were the one kind of message the app sent and
+    then had no record of. And a reply to a result went to the teacher's own
+    mailbox rather than back into the app, because routing a reply needs the
+    delivery row to exist *before* the email leaves: the id is what the address
+    carries.
+  */
+  type Target = {
+    gradeId: string;
+    studentId: string;
+    recipient: 'student' | 'parent';
+    destination: string;
+    recipientName: string;
+    studentName: string;
+    score: number;
+  };
+
+  const targets: Target[] = [];
+  let skipped = 0;
+
+  for (const grade of grades) {
+    const student = (
+      grade as unknown as {
+        students: {
+          name: string;
+          email: string | null;
+          parent_name: string | null;
+          parent_email: string | null;
+        } | null;
+      }
+    ).students;
+    if (!student) {
+      skipped += 1;
+      continue;
+    }
+
+    const before = targets.length;
+
+    // One row per address we actually hold. A student with no email is not an
+    // error — it is a fact the grading screen already shows.
+    if ((audience === 'students' || audience === 'both') && student.email) {
+      targets.push({
+        gradeId: grade.id,
+        studentId: grade.student_id,
+        recipient: 'student',
+        destination: student.email,
+        recipientName: student.name,
+        studentName: student.name,
+        score: Number(grade.score),
+      });
+    }
+    if ((audience === 'parents' || audience === 'both') && student.parent_email) {
+      targets.push({
+        gradeId: grade.id,
+        studentId: grade.student_id,
+        recipient: 'parent',
+        destination: student.parent_email,
+        recipientName: student.parent_name ?? 'there',
+        studentName: student.name,
+        score: Number(grade.score),
+      });
+    }
+
+    if (targets.length === before) skipped += 1;
+  }
+
+  if (!targets.length) {
+    return json({ assessmentId: assessment.id, notified: 0, failed: 0, skipped, errors: [] });
+  }
+
+  // Rendered up front, keyed the way the inserted rows come back. A student and
+  // their guardian read different sentences about the same mark, so the pair is
+  // what identifies a delivery, not the student alone.
+  const key = (studentId: string, recipient: string) => `${studentId}:${recipient}`;
+  const composed = new Map<string, { subject: string; text: string; html: string }>();
+  const gradeOf = new Map<string, string>();
+
+  for (const target of targets) {
+    gradeOf.set(key(target.studentId, target.recipient), target.gradeId);
+    composed.set(
+      key(target.studentId, target.recipient),
+      renderGradeEmail({
+        template: pickTemplate(target.score),
+        labels: payload.labels ?? {},
+        recipientName: target.recipientName,
+        studentName: target.studentName,
+        isParent: target.recipient === 'parent',
+        teacherName,
+        groupName,
+        // The teacher's own name for it where there is one. `kind` is only
+        // still read for assessments filed before they could name their own
+        // types.
+        kind: assessment.kind_label ?? assessment.kind ?? '',
+        title: assessment.title,
+        score: target.score,
+        maxScore: Number(assessment.max_score),
+        takenOn: assessment.taken_on,
+      }),
+    );
+  }
+
+  const { data: message, error: messageError } = await db
+    .from('messages')
+    .insert({
+      teacher_id: teacherId,
+      // The wording the teacher chose, placeholders intact. Each recipient's
+      // own filled-in copy is on their delivery row; this is what the sent-
+      // message screen shows as "what was sent".
+      body: passTemplate,
+      audience,
+      channels: ['email'],
+      announcement: false,
+    })
+    .select()
+    .single();
+  if (messageError) return json({ error: messageError.message }, 400);
+
+  // Tagged with the class, so it appears under that group in the log like every
+  // other message rather than as an announcement to everybody.
+  if (assessment.group_id) {
+    await db
+      .from('message_groups')
+      .insert([{ message_id: message.id, group_id: assessment.group_id }]);
+  }
+
+  const { data: deliveries, error: deliveryError } = await db
+    .from('message_deliveries')
+    .insert(
+      targets.map((target) => ({
+        message_id: message.id,
+        teacher_id: teacherId,
+        student_id: target.studentId,
+        recipient: target.recipient,
+        channel: 'email',
+        destination: target.destination,
+        rendered: composed.get(key(target.studentId, target.recipient))?.text ?? '',
+        state: 'queued' as const,
+      })),
+    )
+    .select();
+  if (deliveryError) return json({ error: deliveryError.message }, 400);
+
   let notified = 0;
   let failed = 0;
-  let skipped = 0;
   const errors = new Set<string>();
-  const sentGradeIds: string[] = [];
+  const sentGradeIds = new Set<string>();
 
   await Promise.all(
-    grades.map(async (grade) => {
-      const student = (
-        grade as unknown as {
-          students: {
-            name: string;
-            email: string | null;
-            parent_name: string | null;
-            parent_email: string | null;
-          } | null;
-        }
-      ).students;
-      if (!student) {
-        skipped += 1;
-        return;
-      }
+    (deliveries ?? []).map(async (d) => {
+      const email = composed.get(key(d.student_id, d.recipient));
+      if (!email) return;
 
-      // One row per address we actually hold. A student with no email is not an
-      // error — it is a fact the grading screen already shows.
-      const targets: { to: string; name: string; isParent: boolean }[] = [];
-      if ((audience === 'students' || audience === 'both') && student.email) {
-        targets.push({ to: student.email, name: student.name, isParent: false });
-      }
-      if ((audience === 'parents' || audience === 'both') && student.parent_email) {
-        targets.push({
-          to: student.parent_email,
-          name: student.parent_name ?? 'there',
-          isParent: true,
+      try {
+        const providerId = await sendEmail({
+          to: d.destination,
+          subject: email.subject,
+          text: email.text,
+          html: email.html,
+          // The tokenised address when inbound is configured, otherwise the
+          // teacher's own mailbox exactly as before.
+          replyTo: replyAddressFor(d.id) ?? teacherEmail,
+          unsubscribeTo: teacherEmail,
         });
+
+        await db
+          .from('message_deliveries')
+          .update({ state: 'sent', provider_id: providerId, updated_at: new Date().toISOString() })
+          .eq('id', d.id);
+
+        notified += 1;
+        const gradeId = gradeOf.get(key(d.student_id, d.recipient));
+        if (gradeId) sentGradeIds.add(gradeId);
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        failed += 1;
+        errors.add(reason);
+        await db
+          .from('message_deliveries')
+          .update({ state: 'failed', error: reason, updated_at: new Date().toISOString() })
+          .eq('id', d.id);
       }
-
-      if (!targets.length) {
-        skipped += 1;
-        return;
-      }
-
-      let anySent = false;
-      for (const target of targets) {
-        try {
-          const { subject, text, html } = renderGradeEmail({
-            template: pickTemplate(Number(grade.score)),
-            labels: payload.labels ?? {},
-            recipientName: target.name,
-            studentName: student.name,
-            isParent: target.isParent,
-            teacherName,
-            groupName,
-            // The teacher's own name for it where there is one. `kind` is
-            // only still read for assessments filed before they could name
-            // their own types.
-            kind: assessment.kind_label ?? assessment.kind ?? '',
-            title: assessment.title,
-            score: Number(grade.score),
-            maxScore: Number(assessment.max_score),
-            takenOn: assessment.taken_on,
-          });
-
-          await sendEmail({
-            to: target.to,
-            subject,
-            text,
-            html,
-            replyTo: teacherEmail,
-            unsubscribeTo: teacherEmail,
-          });
-          notified += 1;
-          anySent = true;
-        } catch (e) {
-          failed += 1;
-          errors.add(e instanceof Error ? e.message : String(e));
-        }
-      }
-
-      if (anySent) sentGradeIds.push(grade.id);
     }),
   );
 
   // Stamp only the ones that actually went, so the screen's "not yet reported"
   // list stays honest and a retry re-sends exactly what failed.
-  if (sentGradeIds.length) {
+  if (sentGradeIds.size) {
     await db
       .from('grades')
       .update({ notified_at: new Date().toISOString() })
-      .in('id', sentGradeIds);
+      .in('id', [...sentGradeIds]);
   }
 
   return json({
     assessmentId: assessment.id,
+    messageId: message.id,
     notified,
     failed,
     skipped,

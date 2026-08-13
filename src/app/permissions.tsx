@@ -34,6 +34,7 @@ import {
   type PermissionKey,
   type PermissionState,
 } from '@/lib/permissions';
+import { rescheduleBirthdays, rescheduleClassReminders } from '@/lib/notifications';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -80,6 +81,20 @@ export default function Permissions() {
 
   const finish = () => {
     markAsked();
+
+    /*
+      Plan the reminders now that we may finally be allowed to.
+
+      Scheduling is gated on the OS permission, and the effect in the root
+      layout ran long before this screen was answered — so without this the
+      first reminders are not queued until the app is next brought to the
+      foreground. A teacher who grants notifications and then has a class in an
+      hour gets nothing, which reads as reminders being broken.
+    */
+    const { groups, students, remindersOn, reminderLead } = useStore.getState();
+    if (remindersOn) void rescheduleClassReminders(groups, reminderLead);
+    void rescheduleBirthdays(students);
+
     router.replace('/(tabs)');
   };
 

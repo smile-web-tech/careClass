@@ -18,10 +18,62 @@
  * ClassCare belongs inside ClassCare.
  */
 import { Directory, File, Paths } from 'expo-file-system';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
 
+import { translateNow } from '@/i18n/useT';
 import { supabase } from '@/lib/supabase';
+
+/*
+  The camera and the image tools are loaded when they are used, not when this
+  file is imported.
+
+  An Expo module resolves its native counterpart at import time and throws
+  "Cannot find native module" if the running binary does not contain it. This
+  file is reached from `components/ui.tsx`, which every screen imports, so a
+  top-level import here meant an app installed from a build older than these
+  packages could not render a single screen — every route failed with a missing
+  default export, which is the symptom rather than the cause and sends anyone
+  looking in the wrong place entirely.
+
+  Loading on use keeps that failure where it belongs: on the button that needs
+  the camera, with a sentence saying the app needs updating.
+*/
+type ImagePickerModule = typeof import('expo-image-picker');
+type ManipulatorModule = typeof import('expo-image-manipulator');
+
+/** Thrown when the running build predates the module a feature needs. */
+export class MissingNativeModule extends Error {
+  constructor() {
+    super(translateNow('error.needsNewBuild'));
+    this.name = 'MissingNativeModule';
+  }
+}
+
+function imagePicker(): ImagePickerModule {
+  try {
+    return require('expo-image-picker') as ImagePickerModule;
+  } catch {
+    throw new MissingNativeModule();
+  }
+}
+
+function manipulator(): ManipulatorModule {
+  try {
+    return require('expo-image-manipulator') as ManipulatorModule;
+  } catch {
+    throw new MissingNativeModule();
+  }
+}
+
+/** Whether this build can take and shrink a picture at all. */
+export function photoToolsAvailable(): boolean {
+  try {
+    require('expo-image-picker');
+    require('expo-image-manipulator');
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** The long edge, in pixels. Displayed at 52pt, so this is generous already. */
 const MAX_EDGE = 512;
@@ -61,10 +113,11 @@ export function photoUri(studentId: string): string | null {
  * is on screen.
  */
 export async function requestPhotoPermission(source: PhotoSource): Promise<boolean> {
+  const picker = imagePicker();
   const result =
     source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      ? await picker.requestCameraPermissionsAsync()
+      : await picker.requestMediaLibraryPermissionsAsync();
   return result.granted;
 }
 
@@ -89,10 +142,11 @@ export async function capturePhoto(studentId: string, source: PhotoSource): Prom
     quality: 1,
   };
 
+  const picker = imagePicker();
   const result =
     source === 'camera'
-      ? await ImagePicker.launchCameraAsync(options)
-      : await ImagePicker.launchImageLibraryAsync(options);
+      ? await picker.launchCameraAsync(options)
+      : await picker.launchImageLibraryAsync(options);
 
   if (result.canceled || !result.assets?.length) return null;
 
@@ -115,6 +169,7 @@ type ImagePickerOptionsSubset = {
  * as one taken here.
  */
 export async function storeOptimised(studentId: string, sourceUri: string): Promise<string> {
+  const { ImageManipulator, SaveFormat } = manipulator();
   const context = ImageManipulator.manipulate(sourceUri);
   // Only the width is given: passing both would stretch anything that is not
   // already square, and the picker has already cropped to square.

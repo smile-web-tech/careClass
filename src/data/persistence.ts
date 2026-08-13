@@ -156,6 +156,29 @@ export async function loadLocal(): Promise<void> {
   });
 
   applyLanguage();
+  await turnRemindersOnOnce(settings);
+}
+
+/**
+ * Switch class reminders on, once, for phones that saved the old default.
+ *
+ * They used to default to off. A teacher who granted notifications on the way
+ * in — on a screen that says the app will remind them before a class — then got
+ * nothing, because the switch that actually schedules anything was in Profile
+ * and off. The default is now on, but a device that has already written `false`
+ * would keep it forever, so it is flipped here and the flip is recorded so a
+ * teacher who deliberately turns them off again is left alone.
+ */
+async function turnRemindersOnOnce(settings: Record<string, unknown>) {
+  if (settings.remindersDefaultedOn) return;
+
+  useStore.setState({ remindersOn: true });
+  try {
+    await writeSetting('remindersOn', true);
+    await writeSetting('remindersDefaultedOn', true);
+  } catch {
+    // Worst case it runs again next launch, which costs one write.
+  }
 }
 
 /**

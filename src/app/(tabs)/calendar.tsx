@@ -50,7 +50,7 @@ const ROWS = 6;
 type Entry =
   | { kind: 'session'; at: string; session: Session; group: Group }
   | { kind: 'event'; at: string; event: CalendarEvent }
-  | { kind: 'birthday'; at: string; name: string; age: number | null; studentId: string };
+  | { kind: 'birthday'; at: string; name: string; studentId: string };
 
 export default function Calendar() {
   const t = useT();
@@ -127,7 +127,7 @@ export default function Calendar() {
    * costs a loop over the visible month and is always right.
    */
   const birthdaysByDay = useMemo(() => {
-    const out: Record<string, { name: string; age: number | null; studentId: string }[]> = {};
+    const out: Record<string, { name: string; studentId: string }[]> = {};
 
     for (const student of students) {
       if (!student.birthDate) continue;
@@ -137,8 +137,10 @@ export default function Calendar() {
       for (const row of matrix) {
         for (const day of row) {
           if (day.getMonth() !== born.getMonth() || day.getDate() !== born.getDate()) continue;
-          const age = born.getFullYear() > 1900 ? day.getFullYear() - born.getFullYear() : null;
-          (out[toKey(day)] ??= []).push({ name: student.name, age, studentId: student.id });
+          // The age is deliberately not worked out. It is the teacher's business
+          // how they mark the day, and an app that announces a number gets it
+          // wrong the moment a birth year was typed to fill a required field.
+          (out[toKey(day)] ??= []).push({ name: student.name, studentId: student.id });
         }
       }
     }
@@ -159,7 +161,7 @@ export default function Calendar() {
     }
     // All-day, so they sort to the top alongside all-day events.
     for (const b of birthdaysByDay[selectedKey] ?? []) {
-      list.push({ kind: 'birthday', at: '', name: b.name, age: b.age, studentId: b.studentId });
+      list.push({ kind: 'birthday', at: '', name: b.name, studentId: b.studentId });
     }
     return list.sort((a, b) => a.at.localeCompare(b.at));
   }, [sessionsByDay, eventsByDay, birthdaysByDay, selectedKey, groups]);
@@ -342,7 +344,6 @@ export default function Calendar() {
               <BirthdayRow
                 key={`b-${entry.studentId}`}
                 name={entry.name}
-                age={entry.age}
                 last={i === entries.length - 1}
                 onOpen={() => router.push(`/student/${entry.studentId}`)}
               />
@@ -486,12 +487,10 @@ function TimelineRow({
  */
 function BirthdayRow({
   name,
-  age,
   last,
   onOpen,
 }: {
   name: string;
-  age: number | null;
   last: boolean;
   onOpen: () => void;
 }) {
@@ -502,15 +501,13 @@ function BirthdayRow({
   return (
     <Press onPress={onOpen} style={[styles.birthdayRow, last && { marginBottom: 6 }]}>
       <View style={[styles.birthdayGlyph, { backgroundColor: accents.pink.tint }]}>
-        <Icon name="megaphone" size={15} color={accents.pink.ink} />
+        <Icon name="cake" size={15} color={accents.pink.ink} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={styles.birthdayName} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={styles.birthdayNote}>
-          {age === null ? t('notif.birthdayTitle') : t('calendar.turningAge', { name, age })}
-        </Text>
+        <Text style={styles.birthdayNote}>{t('calendar.birthdayOf', { name })}</Text>
       </View>
     </Press>
   );

@@ -10,6 +10,7 @@
  * of 100 cannot be averaged as numbers without silently weighting the final
  * five times heavier, which would quietly mislabel students.
  */
+import { randomUUID } from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -31,7 +32,7 @@ import {
   StatTile,
 } from '@/components/ui';
 import { markGradesNotified, sendGrades } from '@/data/api';
-import { refreshGrades } from '@/data/sync';
+import { refreshGrades, refreshInbox } from '@/data/sync';
 import {
   averagePercent,
   standingOf,
@@ -86,6 +87,7 @@ export default function Grades() {
   const assessments = useStore((s) => s.assessments);
   const grades = useStore((s) => s.grades);
   const removeAssessment = useStore((s) => s.removeAssessment);
+  const logSentMessage = useStore((s) => s.logSentMessage);
 
   const [picked, setPicked] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
@@ -323,6 +325,11 @@ export default function Grades() {
       // unreported.
       await refreshGrades().catch(() => {});
 
+      // `send-grades` files its own row in the message log, so pull it down —
+      // otherwise the results the teacher just emailed are missing from the
+      // Messages screen until something else happens to refresh it.
+      if (channel !== 'sms') await refreshInbox().catch(() => {});
+
       await showAlert(
         anySent ? t('grades.resultsSent') : t('messages.nothingSentTitle'),
         lines.filter(Boolean).join('\n\n'),
@@ -383,6 +390,43 @@ export default function Grades() {
 
     const delivered = results.filter((r) => r.state === 'sent');
     lines.push(t('grades.smsSent', { count: delivered.length }));
+
+    /*
+      File the run in the message log.
+
+      Results texted from the teacher's own SIM never touched a server, so
+      nothing wrote them down and the Messages screen showed no sign that a
+      whole class had just been told their marks. This is that record, with the
+      per-recipient outcome the run actually produced rather than an optimistic
+      count.
+    */
+    logSentMessage({
+      id: randomUUID(),
+      groupIds: assessment.groupId ? [assessment.groupId] : [],
+      audience,
+      channels: ['sms'],
+      body: templates.pass,
+      sentAt: Date.now(),
+      deliveries: results.map((r) => ({
+        studentId: r.studentId,
+        recipient: r.kind,
+        channel: 'sms' as const,
+        destination: r.phone,
+        rendered: r.body,
+        // A network that came back and said "not delivered" outranks the radio
+        // having accepted it — that is the empty-SIM case, and it is a failure
+        // however cheerful the send looked at the time.
+        state:
+          r.delivery === 'undelivered'
+            ? ('failed' as const)
+            : r.state === 'sent'
+              ? ('sent' as const)
+              : r.state === 'failed'
+                ? ('failed' as const)
+                : ('queued' as const),
+        error: r.deliveryReason ?? r.reason,
+      })),
+    });
 
     // Say which wording went where. A teacher who set the pass mark wrongly
     // finds out here rather than from a parent.
