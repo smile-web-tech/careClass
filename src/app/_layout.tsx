@@ -16,7 +16,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Linking } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -27,6 +27,7 @@ import { updateTeacher } from '@/data/api';
 import { loadLocal, startPersistence, wipeLocal } from '@/data/persistence';
 import { useGroups, useStore } from '@/data/store';
 import { toKey } from '@/lib/date';
+import { importFromUri, looksLikeBackupUrl, takeHeldImport } from '@/lib/importFlow';
 import {
   clearQueue,
   flushWrites,
@@ -177,6 +178,48 @@ function useClassReminders() {
 }
 
 /**
+ * A backup file the teacher tapped outside the app.
+ *
+ * Android hands the URI to whichever activity claimed the type — see the intent
+ * filters in `app.json` — and it arrives here either as the URL that launched
+ * the app or as an event on an app that was already open. Both are the same
+ * question: is this a ClassCare file, and is there an account to put it into.
+ *
+ * The same listener also sees OAuth callbacks and recovery links on the
+ * `classcare://` scheme, which is why only `file://` and `content://` are
+ * treated as imports.
+ */
+function useIncomingBackup() {
+  const signedIn = useStore((s) => s.signedIn);
+
+  useEffect(() => {
+    const offer = (url: string | null) => {
+      if (!url || !looksLikeBackupUrl(url)) return;
+      void importFromUri(url);
+    };
+
+    // The tap that launched the app, replayed once the tree is mounted.
+    void Linking.getInitialURL().then(offer);
+
+    const sub = Linking.addEventListener('url', (e) => offer(e.url));
+    return () => sub.remove();
+  }, []);
+
+  /*
+    A file that arrived before anybody was signed in.
+
+    Held rather than refused: the teacher tapped it on purpose, and making them
+    find it again after signing in is the kind of small cruelty that stops
+    people using a feature at all.
+  */
+  useEffect(() => {
+    if (!signedIn) return;
+    const waiting = takeHeldImport();
+    if (waiting) void importFromUri(waiting);
+  }, [signedIn]);
+}
+
+/**
  * Open what the notification was about.
  *
  * Without this, tapping a reminder drops the teacher wherever they last were —
@@ -290,6 +333,7 @@ function RootNavigator() {
   const [introDone, setIntroDone] = useState(false);
   useClassReminders();
   useNotificationRouting();
+  useIncomingBackup();
   useFlushOnForeground();
 
   // Paint the window itself, not just our views: without this the OS shows a

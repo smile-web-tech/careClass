@@ -703,6 +703,10 @@ const tk = {
   'backup.exportFailed': 'Faýla ýazyp bolmady',
   'backup.import': 'Faýldan dikelt',
   'backup.importHint': 'Başga telefondaky maglumaty getir',
+  'backup.signInFirst': 'Ilki hasabyňa gir, soň faýly import et.',
+  'backup.importMerge': 'Üstüne goş',
+  'backup.importReplace': 'Ählisini çalyş',
+  'backup.mergedBody': 'Faýldaky täze ýazgylar goşuldy. Öňki maglumatlar ýerinde galdy.',
   'backup.importing': 'Getirilýär…',
   'backup.importTitle': 'Maglumat dikeldilsinmi?',
   'backup.importSummary':
@@ -1466,6 +1470,10 @@ const ru: Record<TranslationKey, string> = {
   'backup.exportFailed': 'Не удалось сохранить',
   'backup.import': 'Восстановить из файла',
   'backup.importHint': 'Перенести данные с другого телефона',
+  'backup.signInFirst': 'Сначала войдите в аккаунт, потом импортируйте файл.',
+  'backup.importMerge': 'Добавить к текущим',
+  'backup.importReplace': 'Заменить всё',
+  'backup.mergedBody': 'Новые записи из файла добавлены. Прежние данные остались на месте.',
   'backup.importing': 'Загружаем…',
   'backup.importTitle': 'Восстановить данные?',
   'backup.importSummary':
@@ -2226,6 +2234,10 @@ const en: Record<TranslationKey, string> = {
   'backup.exportFailed': 'Could not save the file',
   'backup.import': 'Restore from a file',
   'backup.importHint': 'Bring data over from another phone',
+  'backup.signInFirst': 'Sign in first, then import the file.',
+  'backup.importMerge': 'Add to what is here',
+  'backup.importReplace': 'Replace everything',
+  'backup.mergedBody': 'The new rows from the file were added. Nothing already here was changed.',
   'backup.importing': 'Restoring…',
   'backup.importTitle': 'Restore this data?',
   'backup.importSummary':

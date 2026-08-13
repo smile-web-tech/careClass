@@ -96,11 +96,27 @@ export function summarise(backup: Backup): BackupSummary {
 /* Export                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** `ClassCare-2026-08-09.classcare` — sorts by date and says what it is. */
+/**
+ * `ClassCare-2026-08-09.classcare.json` — sorts by date and says what it is.
+ *
+ * Both halves of that suffix earn their place. `.classcare` is the identity, so
+ * a teacher scrolling a Downloads folder knows what they are looking at. The
+ * trailing `.json` is what makes tapping it work: Android matches a file to an
+ * app by MIME type, file managers derive that type from the last extension, and
+ * an unknown one arrives as `application/octet-stream` — a type ClassCare must
+ * not claim, or it would offer itself for every unrecognised file on the phone.
+ */
 function fileName(date: Date) {
   const stamp = date.toISOString().slice(0, 10);
-  return `ClassCare-${stamp}.${BACKUP_EXTENSION}`;
+  return `ClassCare-${stamp}${BACKUP_SUFFIX}`;
 }
+
+/** What an export is called from the dot onwards. */
+export const BACKUP_SUFFIX = `.${BACKUP_EXTENSION}.json`;
+
+/** True for anything this app wrote, including the older bare `.classcare`. */
+export const isBackupFileName = (name: string) =>
+  name.endsWith(BACKUP_SUFFIX) || name.endsWith(`.${BACKUP_EXTENSION}`);
 
 /**
  * Write the whole account to a file and return it.
@@ -172,7 +188,7 @@ function pruneBackups(directory: Directory) {
     const files = directory
       .list()
       .filter((entry): entry is File => entry instanceof File)
-      .filter((f) => f.name.endsWith(`.${BACKUP_EXTENSION}`))
+      .filter((f) => isBackupFileName(f.name))
       // The name carries the date, so sorting by it is sorting by age. Reverse
       // alphabetical puts the newest first.
       .sort((a, b) => b.name.localeCompare(a.name));
@@ -259,6 +275,69 @@ export async function readBackup(file: File): Promise<Backup> {
  * a photo and no row is invisible, while a row with no photo is a student the
  * teacher can see is missing their picture.
  */
+/**
+ * Add the file's contents to what is already here, keeping both.
+ *
+ * The other half of `applyBackup`, and the one a teacher wants far more often:
+ * a colleague sends a class, or last year's phone is restored onto this one,
+ * and none of that should cost the groups already on the device.
+ *
+ * Matched on id, and only on id. Two rows with the same id are the same row —
+ * an export and its origin — so the copy already here wins and the incoming one
+ * is skipped: it is older by definition, and silently overwriting a mark
+ * entered this morning with one from a file made last week is the worst thing
+ * this function could do. Anything whose id is new is added.
+ *
+ * Deliberately not matched on name. Two students called Aýgül Berdiýewa in two
+ * different teachers' files are two children, and merging them would put one
+ * girl's marks on the other's report.
+ */
+export async function mergeBackup(backup: Backup): Promise<void> {
+  const state = useStore.getState();
+
+  /** Existing first, then anything from the file with an unseen id. */
+  const join = <T extends { id: string }>(mine: T[], theirs: T[]): T[] => {
+    const seen = new Set(mine.map((x) => x.id));
+    return [...mine, ...theirs.filter((x) => !seen.has(x.id))];
+  };
+
+  // Attendance is a map of maps, so it merges twice: session by session, and
+  // then student by student inside a session both copies happen to hold.
+  const attendance: Record<string, AttendanceRecord> = { ...backup.data.attendance };
+  for (const [key, record] of Object.entries(state.attendance)) {
+    attendance[key] = { ...attendance[key], ...record };
+  }
+
+  // Only where this device has no picture. A face already here belongs to the
+  // student as this teacher knows them.
+  for (const [studentId, base64] of Object.entries(backup.photos)) {
+    if (state.students.some((s) => s.id === studentId)) continue;
+    try {
+      writePhotoBase64(studentId, base64);
+    } catch {
+      // One unreadable picture must not stop the merge.
+    }
+  }
+
+  useStore.setState({
+    groups: join(state.groups, backup.data.groups),
+    students: join(state.students, backup.data.students),
+    attendance,
+    messages: join(state.messages, backup.data.messages),
+    replies: join(state.replies, backup.data.replies),
+    events: join(state.events, backup.data.events),
+    assessments: join(state.assessments, backup.data.assessments),
+    assessmentTypes: join(state.assessmentTypes, backup.data.assessmentTypes),
+    grades: join(state.grades, backup.data.grades),
+    templates: join(state.templates, backup.data.templates),
+    // The teacher's own wording stays theirs. Taking the file's would rewrite
+    // what every parent reads, which is not what "add these students" asked for.
+    gradeTemplate: state.gradeTemplate ?? backup.data.gradeTemplate,
+  });
+
+  await flushAll();
+}
+
 export async function applyBackup(backup: Backup): Promise<void> {
   const previous = useStore.getState().students;
 

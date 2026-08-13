@@ -851,6 +851,48 @@ export async function refreshGrades() {
   useStore.setState({ grades: await api.fetchGrades() });
 }
 
+/**
+ * Send everything an import brought in up to the server.
+ *
+ * Without this an import is a local-only change, and the next `hydrate()` pulls
+ * the server's version over the top and the imported classes vanish — which
+ * looks exactly like the import having silently failed, some minutes after it
+ * said it had worked.
+ *
+ * Queued rather than posted, so a restore on a phone with no signal still
+ * reaches the server eventually, and so the home screen's pending count says
+ * how much is still on its way. Every create it uses upserts, so rows the
+ * server already holds are written over with the same values rather than
+ * failing on a duplicate key.
+ *
+ * Message history and replies are left alone deliberately: those rows are the
+ * server's own record of what it sent and received, and re-filing a copy of
+ * somebody else's would be inventing correspondence that never happened.
+ */
+export function pushImported(): void {
+  if (!hasSupabase) return;
+
+  const state = useStore.getState();
+
+  for (const group of state.groups) enqueue({ kind: 'group.create', group });
+  for (const student of state.students) enqueue({ kind: 'student.create', student });
+  for (const [key, marks] of Object.entries(state.attendance)) {
+    enqueue({ kind: 'attendance.save', key, marks });
+  }
+  for (const event of state.events) enqueue({ kind: 'event.create', event });
+  for (const template of state.templates) enqueue({ kind: 'template.create', template });
+  for (const type of state.assessmentTypes) enqueue({ kind: 'assessmentType.create', type });
+  for (const assessment of state.assessments) {
+    enqueue({
+      kind: 'assessment.save',
+      assessment,
+      scores: state.grades
+        .filter((g) => g.assessmentId === assessment.id)
+        .map((g) => ({ studentId: g.studentId, score: g.score })),
+    });
+  }
+}
+
 /** Keep the inbox badge honest — replies arrive from webhooks, not from us. */
 export function watchInbox() {
   if (!hasSupabase) return () => {};

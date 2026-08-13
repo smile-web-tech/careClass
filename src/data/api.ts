@@ -371,7 +371,11 @@ export async function createGroup(group: Group): Promise<Group> {
   const row = unwrap(
     await supabase
       .from('groups')
-      .insert({
+      // Upsert rather than insert: a create can be replayed — a queued write
+      // retried after a timeout that actually succeeded, or a row arriving from
+      // an imported backup the server already has — and a duplicate key error
+      // would stall the queue behind it.
+      .upsert({
         id: group.id,
         teacher_id: teacherId,
         name: group.name,
@@ -384,6 +388,8 @@ export async function createGroup(group: Group): Promise<Group> {
   ) as GroupRow;
 
   if (group.slots.length) {
+    // Cleared first, so a replayed create does not double every slot.
+    unwrap(await supabase.from('group_slots').delete().eq('group_id', row.id));
     unwrap(
       await supabase
         .from('group_slots')
@@ -431,7 +437,11 @@ export async function createEvent(event: CalendarEvent): Promise<CalendarEvent> 
   const row = unwrap(
     await supabase
       .from('calendar_events')
-      .insert({
+      // Upsert rather than insert: a create can be replayed — a queued write
+      // retried after a timeout that actually succeeded, or a row arriving from
+      // an imported backup the server already has — and a duplicate key error
+      // would stall the queue behind it.
+      .upsert({
         id: event.id,
         teacher_id: teacherId,
         title: event.title,
@@ -545,7 +555,11 @@ export async function createStudent(student: Student): Promise<Student> {
   const row = unwrap(
     await supabase
       .from('students')
-      .insert({
+      // Upsert rather than insert: a create can be replayed — a queued write
+      // retried after a timeout that actually succeeded, or a row arriving from
+      // an imported backup the server already has — and a duplicate key error
+      // would stall the queue behind it.
+      .upsert({
         id: student.id,
         teacher_id: teacherId,
         name: student.name,
@@ -1086,7 +1100,11 @@ export async function createTemplate(template: MessageTemplate) {
   unwrap(
     await supabase
       .from('message_templates')
-      .insert({
+      // Upsert rather than insert: a create can be replayed — a queued write
+      // retried after a timeout that actually succeeded, or a row arriving from
+      // an imported backup the server already has — and a duplicate key error
+      // would stall the queue behind it.
+      .upsert({
         id: template.id,
         teacher_id: teacherId,
         title: template.title,
@@ -1221,7 +1239,11 @@ export async function createAssessmentType(type: AssessmentType) {
   unwrap(
     await supabase
       .from('assessment_types')
-      .insert({
+      // Upsert rather than insert: a create can be replayed — a queued write
+      // retried after a timeout that actually succeeded, or a row arriving from
+      // an imported backup the server already has — and a duplicate key error
+      // would stall the queue behind it.
+      .upsert({
         id: type.id,
         teacher_id: teacherId,
         group_id: type.groupId,

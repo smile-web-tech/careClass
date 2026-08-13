@@ -32,7 +32,19 @@
         "android.permission.CAMERA"
       ],
       "softwareKeyboardLayoutMode": "resize",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT", "BROWSABLE"],
+          "data": [
+            { "scheme": "file", "mimeType": "*/*", "pathPattern": ".*\\\\.classcare" },
+            { "scheme": "file", "mimeType": "*/*", "pathPattern": ".*\\\\.classcare\\\\.json" },
+            { "scheme": "content", "mimeType": "application/json" },
+            { "scheme": "content", "mimeType": "application/classcare" }
+          ]
+        }
+      ]
     },
     "web": {
       "output": "static",

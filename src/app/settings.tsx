@@ -18,14 +18,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { confirm, showAlert, showError } from '@/components/Dialog';
+import { showAlert, showError } from '@/components/Dialog';
 import { Icon, type IconName } from '@/components/Icon';
 import { LanguagePicker } from '@/components/LanguagePicker';
 import { Screen, TopBar } from '@/components/layout';
 import { ActionRow } from '@/components/SettingsRows';
 import { Card, Divider, Overline, Press, Toggle } from '@/components/ui';
 import { updateTeacher } from '@/data/api';
-import { applyBackup, BackupError, exportBackup, readBackup, summarise } from '@/data/backup';
+import { exportBackup } from '@/data/backup';
 import { useGroups, useStore } from '@/data/store';
 import { hydrate } from '@/data/sync';
 import type { TranslationKey } from '@/i18n';
@@ -41,17 +41,10 @@ import {
   scheduledReminderCount,
   type ReminderLead,
 } from '@/lib/notifications';
+import { importFromFile } from '@/lib/importFlow';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme, type ThemePref } from '@/theme';
 import { body } from '@/theme/type';
-
-/** Why a chosen file could not be read, in words rather than in a code. */
-const BACKUP_ERROR_KEY: Record<BackupError['reason'], TranslationKey> = {
-  notJson: 'backup.errorNotJson',
-  notBackup: 'backup.errorNotBackup',
-  tooNew: 'backup.errorTooNew',
-  empty: 'backup.errorEmpty',
-};
 
 export default function Settings() {
   const t = useT();
@@ -62,6 +55,7 @@ export default function Settings() {
 
   /** Which backup job is running, so the row can say so and refuse a second. */
   const [busyBackup, setBusyBackup] = useState<'export' | 'import' | null>(null);
+  const signedIn = useStore((s) => s.signedIn);
   const live = hasSupabase;
 
   /**
@@ -114,16 +108,21 @@ export default function Settings() {
   };
 
   /**
-   * Read a backup file and, once the teacher has seen what is in it, replace
-   * this device's data with it.
+   * Pick a backup file and hand it to the same import the file manager uses.
    *
-   * Replace rather than merge, and the confirmation says so with the counts in
-   * it. Merging two copies of the same class means deciding which version of a
-   * mark is right, and there is no honest way to do that without asking about
-   * every difference.
+   * The reading, the confirmation and the failure messages live in `importFlow`
+   * so that a file picked here and a file tapped in Downloads cannot end up
+   * asking different questions before replacing a term of work.
    */
   const doImport = async () => {
     if (busyBackup) return;
+
+    // The account is the gate: an import writes into whoever is signed in, and
+    // there has to be somebody.
+    if (!signedIn) {
+      await showAlert(t('backup.import'), t('backup.signInFirst'), 'danger');
+      return;
+    }
 
     // One file, so the single-file overload: it hands back the `File` itself
     // rather than an array.
@@ -132,33 +131,7 @@ export default function Settings() {
 
     setBusyBackup('import');
     try {
-      const backup = await readBackup(picked.result);
-      const summary = summarise(backup);
-
-      const yes = await confirm({
-        title: t('backup.importTitle'),
-        message: t('backup.importSummary', {
-          groups: summary.groups,
-          students: summary.students,
-          photos: summary.photos,
-          date: summary.exportedAt.slice(0, 10),
-        }),
-        confirmLabel: t('backup.importConfirm'),
-      });
-      if (!yes) return;
-
-      await applyBackup(backup);
-      await showAlert(
-        t('backup.imported'),
-        t('backup.importedBody', { students: summary.students }),
-        'success',
-      );
-    } catch (e) {
-      if (e instanceof BackupError) {
-        await showAlert(t('backup.importFailed'), t(BACKUP_ERROR_KEY[e.reason]), 'danger');
-      } else {
-        showError(e, t('backup.importFailed'));
-      }
+      await importFromFile(picked.result);
     } finally {
       setBusyBackup(null);
     }
