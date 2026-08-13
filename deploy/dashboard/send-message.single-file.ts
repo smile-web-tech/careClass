@@ -109,9 +109,33 @@ type SmsProvider = 'twilio' | 'telnyx' | 'eskiz';
 const smsProvider = () => (Deno.env.get('SMS_PROVIDER') ?? 'twilio') as SmsProvider;
 
 /** E.164 for the gateways: digits with a leading `+`. */
+/**
+ * A number a gateway will accept.
+ *
+ * The old version tested `digits.startsWith('+')` after stripping every
+ * non-digit, so the test could never be true and a bare national number came
+ * out as `+65123456` — a plausible-looking address in another country
+ * entirely. Turkmenistan is +993, national numbers are eight digits, and a
+ * leading 8 is the domestic trunk prefix people still write.
+ *
+ * Kept in step with `src/lib/phone.ts` on the app side, which does the same
+ * job for messages sent from the teacher's own SIM.
+ */
 const toE164 = (p: string) => {
-  const digits = p.replace(/[^\d]/g, '');
-  return digits.startsWith('+') ? digits : `+${digits}`;
+  const trimmed = p.trim();
+  const hadPlus = trimmed.startsWith('+');
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (hadPlus) return `+${digits}`;
+  if (digits.startsWith('00')) return `+${digits.slice(2)}`;
+  if (digits.startsWith('993') && digits.length === 11) return `+${digits}`;
+  if (digits.startsWith('8') && digits.length === 9) return `+993${digits.slice(1)}`;
+  if (digits.length === 8) return `+993${digits}`;
+
+  // Not a shape we recognise. Guessing a country code onto it would send
+  // somebody's message to a stranger.
+  return digits;
 };
 
 async function sendViaTwilio(phone: string, text: string) {

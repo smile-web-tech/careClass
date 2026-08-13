@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.telephony.PhoneNumberUtils
 import android.telephony.SmsManager
 import android.telephony.SmsMessage
 import androidx.core.content.ContextCompat
@@ -310,6 +311,20 @@ class DeviceSmsModule : Module() {
       // now with a reason rather than hanging until the timeout.
       if (!registered) throw SendFailedException("receiver_unavailable")
       if (phone.isBlank()) throw SendFailedException("no_number")
+
+      /*
+        Separators out, at the platform's own hand.
+
+        `SmsManager` is not a dialer: it does not tolerate the spaces people
+        write numbers with. "+993 65 123456" comes back as a generic failure on
+        most builds — sometimes after the message has already gone, which is how
+        a teacher ended up watching their class receive a text the app was
+        calling a failure. The JavaScript side normalises too; this is the last
+        line, and uses the framework's own stripper rather than a second guess
+        at which characters count.
+      */
+      val destination = PhoneNumberUtils.stripSeparators(phone)
+      if (destination.isBlank()) throw SendFailedException("no_number")
       if (body.isEmpty()) throw SendFailedException("empty_body")
       if (pending.containsKey(id)) throw SendFailedException("duplicate_id")
 
@@ -360,7 +375,7 @@ class DeviceSmsModule : Module() {
       main.postDelayed(forget, DELIVERY_WINDOW_MS)
 
       try {
-        manager.sendMultipartTextMessage(phone, null, parts, sentIntents, deliveryIntents)
+        manager.sendMultipartTextMessage(destination, null, parts, sentIntents, deliveryIntents)
       } catch (e: Exception) {
         pending.remove(id)
         deliveries.remove(id)

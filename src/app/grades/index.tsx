@@ -46,6 +46,7 @@ import type { TranslationKey } from '@/i18n';
 import { shortDate, fromKey } from '@/lib/date';
 import { assessmentKindLabel } from '@/lib/assessmentKind';
 import { describeError } from '@/lib/errors';
+import { normalisePhone } from '@/lib/phone';
 import {
   deviceSmsSupported,
   hasSmsPermission,
@@ -179,7 +180,7 @@ export default function Grades() {
             studentId: student.id,
             kind: 'student',
             name: student.name,
-            phone: student.phone.trim(),
+            phone: normalisePhone(student.phone),
             body: renderGradeTemplate(template, { ...vars, name: student.name }),
           });
         } else {
@@ -194,7 +195,7 @@ export default function Grades() {
             studentId: student.id,
             kind: 'parent',
             name: student.parentName || student.name,
-            phone: student.parentPhone.trim(),
+            phone: normalisePhone(student.parentPhone),
             // The parent is addressed by their own name where we have it, but
             // the mark is always described as the student's.
             body: renderGradeTemplate(template, {

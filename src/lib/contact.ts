@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 import { showAlert } from '@/components/Dialog';
 import { translateNow } from '@/i18n/useT';
+import { normalisePhone } from '@/lib/phone';
 
 /**
  * Tap-to-contact helpers. These hand off to the OS dialer / SMS app / mail
@@ -30,8 +31,13 @@ const open = async (url: string, what: string) => {
   }
 };
 
-/** Strip spaces so the dialer receives a clean number. */
-const clean = (phone: string) => phone.replace(/[^\d+]/g, '');
+/**
+ * The same normalisation the app's own sending uses.
+ *
+ * A dialer is more forgiving than `SmsManager`, but there is no reason for the
+ * two to disagree about what a teacher's number means.
+ */
+const clean = (phone: string) => normalisePhone(phone);
 
 export const callNumber = (phone: string) => open(`tel:${clean(phone)}`, 'phone calls');
 
