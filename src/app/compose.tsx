@@ -115,6 +115,12 @@ export default function Compose() {
   const groups = useGroups();
   const students = useStudents();
   const savedTemplates = useTemplates();
+  const templateOverrides = useStore((s) => s.templateOverrides);
+  const hiddenTemplates = useStore((s) => s.hiddenTemplates);
+  const starterTemplates = builtInTemplates(t, {
+    overrides: templateOverrides,
+    hidden: hiddenTemplates,
+  });
   const sendMessage = useStore((s) => s.sendMessage);
 
   /** When arriving from attendance, the message targets specific students. */
@@ -155,8 +161,16 @@ export default function Compose() {
   // The starters are translations, so the opening draft has to be resolved
   // through the translator rather than read off a constant.
   const [draft, setDraft] = useState(() => {
-    const starters = builtInTemplates(t);
-    return (starters.find((x) => x.id === params.template) ?? starters[0]).body;
+    // The teacher's edits to the starters count here too: the register links
+    // straight to the absence wording, and it should open with whatever they
+    // rewrote it to say. A starter they removed leaves the draft empty rather
+    // than silently substituting a different message.
+    const { templateOverrides, hiddenTemplates } = useStore.getState();
+    const starters = builtInTemplates(t, {
+      overrides: templateOverrides,
+      hidden: hiddenTemplates,
+    });
+    return (starters.find((x) => x.id === params.template) ?? starters[0])?.body ?? '';
   });
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
@@ -633,7 +647,14 @@ export default function Compose() {
               <View style={styles.focusList}>
                 {focused.map((s) => (
                   <View key={s.id} style={styles.focusChip}>
-                    <Avatar name={s.name} accent={s.accent} size={24} radius={8} fontSize={9.5} />
+                    <Avatar
+                      name={s.name}
+                      accent={s.accent}
+                      photoId={s.id}
+                      size={24}
+                      radius={8}
+                      fontSize={9.5}
+                    />
                     <Text style={styles.focusName}>{s.name}</Text>
                   </View>
                 ))}
@@ -815,7 +836,7 @@ export default function Compose() {
             {t('messages.templates')}
           </Text>
           <Txt style={styles.sheetHint}>{t('messages.placeholderHint')}</Txt>
-          {[...savedTemplates, ...builtInTemplates(t)].map((template, i) => (
+          {[...savedTemplates, ...starterTemplates].map((template, i) => (
             <View key={template.id}>
               {i > 0 ? <Divider /> : null}
               <Press

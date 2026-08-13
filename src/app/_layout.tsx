@@ -26,6 +26,7 @@ import { SyncBanner } from '@/components/SyncBanner';
 import { updateTeacher } from '@/data/api';
 import { loadLocal, startPersistence, wipeLocal } from '@/data/persistence';
 import { useGroups, useStore } from '@/data/store';
+import { toKey } from '@/lib/date';
 import {
   clearQueue,
   flushWrites,
@@ -195,10 +196,32 @@ function useNotificationRouting() {
     if (!response || !signedIn) return;
 
     const data = response.notification.request.content.data as
-      { kind?: string; groupId?: string; replyId?: string; studentId?: string; eventId?: string } | undefined;
+      {
+        kind?: string;
+        groupId?: string;
+        replyId?: string;
+        studentId?: string;
+        eventId?: string;
+        start?: string;
+      } | undefined;
 
     if (data?.kind === 'class-reminder' && data.groupId) {
       router.push({ pathname: '/group/[id]', params: { id: data.groupId } });
+      return;
+    }
+
+    /*
+      The one that fires as the lesson begins opens the register, not the group.
+
+      Fifteen minutes early, a teacher wants to know which room. On the hour
+      they want the list of names in front of them, and making them find it is
+      three taps at the exact moment they have no hands free.
+    */
+    if (data?.kind === 'class-started' && data.groupId) {
+      router.push({
+        pathname: '/attendance',
+        params: { group: data.groupId, date: toKey(new Date()), start: data.start ?? '' },
+      });
       return;
     }
 

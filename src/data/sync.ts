@@ -700,6 +700,25 @@ export async function hydrate() {
 
   if (teacher) reconcileLanguage(teacher.language);
 
+  /*
+    Keep the account's timezone matching the phone.
+
+    Everything the app schedules is built from local `Date` values, so reminders
+    already follow whatever the handset says the time is — a teacher who travels
+    or whose phone corrects itself gets the right time with no help from this.
+    The column is what the *server* would have to reason from, and it was only
+    ever written when somebody happened to edit their name in Profile, so it sat
+    at 'UTC' for most accounts.
+  */
+  if (teacher) {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone && zone !== teacher.timezone) {
+      api.updateTeacher({ timezone: zone }).catch(() => {
+        // Cosmetic. Nothing on the device depends on it.
+      });
+    }
+  }
+
   // Faces this device has never seen: a second phone, or a reinstall. Not
   // awaited — nothing on screen is waiting for it, and on a poor connection it
   // is the slowest part of a sync by far.

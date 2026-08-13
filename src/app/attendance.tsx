@@ -5,7 +5,7 @@ import { Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View } fro
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FooterSummary, Screen, StickyFooter, TopBar } from '@/components/layout';
-import { Button, Press, Txt } from '@/components/ui';
+import { Avatar, Button, Press, Txt } from '@/components/ui';
 import { attendanceFor, useGroup, useRoster, useStore } from '@/data/store';
 import type { AttendanceRecord, Student } from '@/data/types';
 import { at, shortDate, fromKey } from '@/lib/date';
@@ -195,10 +195,9 @@ function FaceCell({
   onPress: () => void;
 }) {
   const t = useT();
-  const { accents, status } = useTheme();
+  const { status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const s = status[mark];
-  const a = accents[student.accent];
 
   return (
     <Press
@@ -208,16 +207,18 @@ function FaceCell({
       accessibilityLabel={`${student.name}, ${t(STATUS_KEY[mark])}`}
       style={[styles.cell, { width, borderColor: s.border, boxShadow: s.glow }]}>
       <View>
-        <View style={[styles.face, { backgroundColor: a.tint }]}>
-          <Text style={[styles.faceInitials, { color: a.ink }]}>
-            {student.name
-              .split(' ')
-              .map((p) => p[0])
-              .slice(0, 2)
-              .join('')
-              .toUpperCase()}
-          </Text>
-        </View>
+        {/* The face, where there is one. This grid drew initials and nothing
+            else, which is the one screen where a photo earns its keep: a
+            teacher marking a register they took over mid-term knows the faces
+            long before they know which Aýgül is which on paper. */}
+        <Avatar
+          name={student.name}
+          accent={student.accent}
+          photoId={student.id}
+          size={56}
+          radius={radius.hero}
+          fontSize={18}
+        />
         <View style={[styles.statusDot, { backgroundColor: s.dot }]}>
           <Text style={styles.statusMark}>{statusMeta[mark].mark}</Text>
         </View>
@@ -280,14 +281,6 @@ const makeStyles = ({ color }: Theme) =>
       paddingBottom: 11,
       paddingHorizontal: 8,
     },
-    face: {
-      width: 56,
-      height: 56,
-      borderRadius: radius.hero,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    faceInitials: { fontFamily: display[600], fontSize: 18 },
     statusDot: {
       position: 'absolute',
       right: -4,

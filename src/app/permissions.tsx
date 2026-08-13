@@ -102,7 +102,19 @@ export default function Permissions() {
 
   return (
     <Screen>
-      <TopBar title={t('perm.title')} />
+      {/*
+        Back does what it can.
+
+        This screen is reached two ways: pushed from Profile, where there is
+        something to go back to, and redirected onto an empty stack on the way
+        into the app, where `router.back()` had nothing to pop and the chevron
+        simply did nothing. In that second case it finishes the screen like Skip
+        does, which is where the teacher was trying to get to anyway.
+      */}
+      <TopBar
+        title={t('perm.title')}
+        onLeading={() => (router.canGoBack() ? router.back() : finish())}
+      />
 
       <ScrollView
         contentContainerStyle={{ padding: space.gutter, paddingBottom: insets.bottom + 140 }}

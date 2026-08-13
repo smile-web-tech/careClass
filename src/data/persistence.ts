@@ -111,6 +111,8 @@ const SETTINGS = [
   'permissionsAsked',
   'remindersOn',
   'reminderLead',
+  'templateOverrides',
+  'hiddenTemplates',
 ] as const;
 
 type SettingKey = (typeof SETTINGS)[number];

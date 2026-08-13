@@ -26,7 +26,16 @@ import { sessionsOn } from '@/lib/schedule';
 
 /** How far ahead to schedule. iOS caps an app at 64 pending notifications. */
 const HORIZON_DAYS = 14;
-const MAX_SCHEDULED = 60;
+
+/**
+ * How many may be queued at once.
+ *
+ * The 64 is iOS's limit, and the app has to stay under it or the OS drops the
+ * overflow silently. Android has no such cap, and every ClassCare teacher is on
+ * Android — with two notifications per lesson now, one before and one on the
+ * hour, sixty covered barely a week for anyone teaching four classes a day.
+ */
+const MAX_SCHEDULED = Platform.OS === 'ios' ? 60 : 150;
 
 /**
  * Birthdays share the same iOS ceiling as class reminders, so they get their
@@ -48,6 +57,15 @@ const REMINDER_KIND = 'class-reminder';
  * in the calendar.
  */
 const EVENT_KIND = 'calendar-event';
+
+/**
+ * The one that fires as the lesson begins, rather than before it.
+ *
+ * Its own kind so that tapping it can open the register — which is what a
+ * teacher wants at the moment a class starts, and not what they want fifteen
+ * minutes earlier.
+ */
+const STARTED_KIND = 'class-started';
 
 /**
  * When an all-day entry is raised.
@@ -201,20 +219,46 @@ export async function rescheduleReminders(
     for (const s of sessionsOn(groups, day)) {
       const group = groups.find((g) => g.id === s.groupId);
       if (!group) continue;
-      const fireAt = new Date(at(toKey(day), s.start).getTime() - lead * 60_000);
-      // A lead time can push the reminder into the past for today's classes.
-      if (fireAt.getTime() <= now + 30_000) continue;
 
-      const when = leadText(s.start);
-      planned.push({
-        when: fireAt,
-        title: group.name,
-        // A room is optional in practice even though the type says otherwise:
-        // an online class has none, and " · undefined" in a notification is
-        // the kind of detail that makes an app look unfinished.
-        body: group.room?.trim() ? `${when} · ${group.room.trim()}` : when,
-        data: { kind: REMINDER_KIND, groupId: group.id, start: s.start },
-      });
+      const startsAt = at(toKey(day), s.start).getTime();
+      const room = group.room?.trim();
+
+      const fireAt = new Date(startsAt - lead * 60_000);
+      // A lead time can push the reminder into the past for today's classes.
+      if (fireAt.getTime() > now + 30_000) {
+        const when = leadText(s.start);
+        planned.push({
+          when: fireAt,
+          title: group.name,
+          // A room is optional in practice even though the type says otherwise:
+          // an online class has none, and " · undefined" in a notification is
+          // the kind of detail that makes an app look unfinished.
+          body: room ? `${when} · ${room}` : when,
+          data: { kind: REMINDER_KIND, groupId: group.id, start: s.start },
+        });
+      }
+
+      /*
+        And one on the hour itself.
+
+        The lead reminder says a class is coming; this says it is happening. A
+        tutor running back-to-back lessons uses the second one to actually
+        start — and with a lead of 30 minutes, the warning has long since
+        scrolled off the lock screen by the time it matters.
+
+        Skipped when the lead is zero, because then the two would fire at the
+        same second and say almost the same thing.
+      */
+      if (lead !== 0 && startsAt > now + 30_000) {
+        planned.push({
+          when: new Date(startsAt),
+          title: group.name,
+          body: room
+            ? `${translateNow('notif.started')} · ${room}`
+            : translateNow('notif.started'),
+          data: { kind: STARTED_KIND, groupId: group.id, start: s.start },
+        });
+      }
     }
   }
 
@@ -362,7 +406,8 @@ export async function cancelBirthdays() {
 }
 
 /** True for a reminder this app planned, class or calendar entry alike. */
-const isReminder = (kind: unknown) => kind === REMINDER_KIND || kind === EVENT_KIND;
+const isReminder = (kind: unknown) =>
+  kind === REMINDER_KIND || kind === EVENT_KIND || kind === STARTED_KIND;
 
 /** Remove only our reminders, leaving any other notification alone. */
 export async function cancelClassReminders() {

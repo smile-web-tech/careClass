@@ -1,10 +1,12 @@
 /**
  * The teacher's own message templates: add, edit, delete.
  *
- * The built-in starters are listed too but cannot be edited or deleted. They
- * are translations, not rows, so "editing" one would either write a copy the
- * teacher did not ask for or silently stop it following their language. Anyone
- * who wants a different version writes their own, which is one tap away.
+ * The built-in starters are listed too, and can now be rewritten or taken off
+ * the list. They are translations rather than rows, so an edit is stored as an
+ * override against the starter's id — which keeps the register's link to the
+ * absence wording working, and keeps "put it back" to one tap. An untouched
+ * starter still follows the teacher's language; an edited one is their words
+ * and stays put.
  */
 import { useState } from 'react';
 import {
@@ -31,7 +33,7 @@ import {
   GRADE_PLACEHOLDERS,
   previewGradeTemplate,
 } from '@/lib/gradeTemplate';
-import { builtInTemplates } from '@/lib/templates';
+import { builtInDefault, builtInTemplates } from '@/lib/templates';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
@@ -47,12 +49,19 @@ export default function Templates() {
   const storedFailTemplate = useStore((s) => s.gradeTemplateFail);
   const setGradeTemplate = useStore((s) => s.setGradeTemplate);
   const setGradeTemplateFail = useStore((s) => s.setGradeTemplateFail);
+  const overrides = useStore((s) => s.templateOverrides);
+  const hidden = useStore((s) => s.hiddenTemplates);
+  const setBuiltInTemplate = useStore((s) => s.setBuiltInTemplate);
+  const hideBuiltInTemplate = useStore((s) => s.hideBuiltInTemplate);
+  const restoreBuiltInTemplates = useStore((s) => s.restoreBuiltInTemplates);
   const addTemplate = useStore((s) => s.addTemplate);
   const updateTemplate = useStore((s) => s.updateTemplate);
   const removeTemplate = useStore((s) => s.removeTemplate);
 
   /** `null` = not editing, `''` = writing a new one, otherwise an existing id. */
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Set while the thing being edited is a starter rather than the teacher's own. */
+  const [editingBuiltIn, setEditingBuiltIn] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
 
@@ -68,19 +77,33 @@ export default function Templates() {
   const passTemplate = storedGradeTemplate ?? defaultGradeTemplate(t);
   const failTemplate = storedFailTemplate ?? defaultFailTemplate(t);
 
-  const builtIn = builtInTemplates(t);
+  const builtIn = builtInTemplates(t, { overrides, hidden });
   const ready = title.trim().length > 1 && text.trim().length > 1;
 
   const startNew = () => {
     setEditingId('');
+    setEditingBuiltIn(null);
     setTitle('');
     setText('');
   };
 
   const startEdit = (template: MessageTemplate) => {
     setEditingId(template.id);
+    setEditingBuiltIn(null);
     setTitle(template.title);
     setText(template.body);
+  };
+
+  const startEditBuiltIn = (template: MessageTemplate) => {
+    setEditingId(template.id);
+    setEditingBuiltIn(template.id);
+    setTitle(template.title);
+    setText(template.body);
+  };
+
+  const closeEditor = () => {
+    setEditingId(null);
+    setEditingBuiltIn(null);
   };
 
   const save = () => {
@@ -88,9 +111,48 @@ export default function Templates() {
       void showAlert(t('template.new'), t('template.saveFirst'), 'danger');
       return;
     }
-    if (editingId) updateTemplate(editingId, { title: title.trim(), body: text.trim() });
-    else addTemplate(title.trim(), text.trim());
-    setEditingId(null);
+    if (editingBuiltIn) {
+      const original = builtInDefault(t, editingBuiltIn);
+      // Back to the translated original when the teacher has typed it word for
+      // word, so it keeps following their language instead of freezing here.
+      const unchanged =
+        original?.title === title.trim() && original?.body === text.trim();
+      setBuiltInTemplate(
+        editingBuiltIn,
+        unchanged ? null : { title: title.trim(), body: text.trim() },
+      );
+    } else if (editingId) {
+      updateTemplate(editingId, { title: title.trim(), body: text.trim() });
+    } else {
+      addTemplate(title.trim(), text.trim());
+    }
+    closeEditor();
+  };
+
+  const resetBuiltIn = async () => {
+    if (!editingBuiltIn) return;
+    const original = builtInDefault(t, editingBuiltIn);
+    if (!original) return;
+    setTitle(original.title);
+    setText(original.body);
+  };
+
+  const removeBuiltIn = async (template: MessageTemplate) => {
+    const yes = await confirm({
+      title: t('template.deleteTitle', { title: template.title }),
+      message: t('template.builtInRemoveHint'),
+      confirmLabel: t('common.delete'),
+    });
+    if (yes) hideBuiltInTemplate(template.id);
+  };
+
+  const restoreStarters = async () => {
+    const yes = await confirm({
+      title: t('template.builtInRestore'),
+      message: t('template.builtInRestoreConfirm'),
+      confirmLabel: t('template.builtInRestore'),
+    });
+    if (yes) restoreBuiltInTemplates();
   };
 
   const remove = async (template: MessageTemplate) => {
@@ -142,7 +204,7 @@ export default function Templates() {
       <Screen>
         <TopBar
           title={t(editingGrade === 'pass' ? 'grades.templatePass' : 'grades.templateFail')}
-          dismiss
+          onLeading={() => setEditingGrade(null)}
         />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -213,7 +275,13 @@ export default function Templates() {
   if (editingId !== null) {
     return (
       <Screen>
-        <TopBar title={t(editingId ? 'template.edit' : 'template.new')} dismiss />
+        {/* Back returns to the list. It used to fall through to `router.back()`,
+            which pops the whole templates route and drops the teacher in
+            Profile — one level further out than they asked for. */}
+        <TopBar
+          title={t(editingId ? 'template.edit' : 'template.new')}
+          onLeading={closeEditor}
+        />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -259,11 +327,18 @@ export default function Templates() {
             </Card>
 
             <Text style={styles.hint}>{t('messages.placeholderHint')}</Text>
+
+            {editingBuiltIn ? (
+              <Press onPress={() => void resetBuiltIn()} style={styles.resetRow}>
+                <Icon name="refresh" size={14} color={color.mutedLight} />
+                <Text style={styles.resetLabel}>{t('template.resetToDefault')}</Text>
+              </Press>
+            ) : null}
           </ScrollView>
         </KeyboardAvoidingView>
 
         <StickyFooter style={{ gap: 10 }}>
-          <Press onPress={() => setEditingId(null)} style={styles.cancel}>
+          <Press onPress={closeEditor} style={styles.cancel}>
             <Text style={styles.cancelLabel}>{t('common.cancel')}</Text>
           </Press>
           <Button grow label={t('common.save')} height={50} onPress={save} disabled={!ready} />
@@ -358,21 +433,53 @@ export default function Templates() {
         )}
 
         <Overline style={[styles.label, { marginTop: 24 }]}>{t('template.builtIn')}</Overline>
-        <Card style={{ overflow: 'hidden' }}>
-          {builtIn.map((template, i) => (
-            <View key={template.id}>
-              {i > 0 ? <Divider inset={15} /> : null}
-              <View style={[styles.row, { paddingVertical: 13 }]}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.rowTitle}>{template.title}</Text>
-                  <Text style={styles.rowBody} numberOfLines={2}>
-                    {template.body}
-                  </Text>
+        {builtIn.length ? (
+          <Card style={{ overflow: 'hidden' }}>
+            {builtIn.map((template, i) => (
+              <View key={template.id}>
+                {i > 0 ? <Divider inset={15} /> : null}
+                <View style={styles.row}>
+                  <Press
+                    onPress={() => startEditBuiltIn(template)}
+                    style={{ flex: 1, minWidth: 0, paddingVertical: 13 }}>
+                    <Text style={styles.rowTitle}>
+                      {template.title}
+                      {template.edited ? (
+                        <Text style={styles.editedMark}> · {t('template.edited')}</Text>
+                      ) : null}
+                    </Text>
+                    <Text style={styles.rowBody} numberOfLines={2}>
+                      {template.body}
+                    </Text>
+                  </Press>
+                  <Press
+                    onPress={() => startEditBuiltIn(template)}
+                    hitSlop={8}
+                    style={styles.action}>
+                    <Icon name="pencil" size={15} color={color.inkSoft} />
+                  </Press>
+                  <Press
+                    onPress={() => void removeBuiltIn(template)}
+                    hitSlop={8}
+                    style={styles.action}>
+                    <Icon name="close" size={15} color={color.dangerDeep} />
+                  </Press>
                 </View>
               </View>
-            </View>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        ) : (
+          <EmptyState title={t('template.builtInAllGone')} hint={t('template.builtInRestoreHint')} />
+        )}
+
+        {/* Only once something has actually been removed or rewritten. An undo
+            offered before there is anything to undo is a puzzle. */}
+        {hidden.length || Object.keys(overrides).length ? (
+          <Press onPress={() => void restoreStarters()} style={styles.resetRow}>
+            <Icon name="refresh" size={14} color={color.mutedLight} />
+            <Text style={styles.resetLabel}>{t('template.builtInRestore')}</Text>
+          </Press>
+        ) : null}
       </ScrollView>
 
       <StickyFooter>
@@ -390,6 +497,7 @@ const makeStyles = ({ color }: Theme) =>
     row: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 15 },
     rowTitle: { fontFamily: body[700], fontSize: 14.5, color: color.ink },
     rowBody: { fontFamily: body[400], fontSize: 12.5, color: color.mutedLight, marginTop: 3 },
+    editedMark: { fontFamily: body[400], fontSize: 12, color: color.mutedLight },
     action: {
       width: 32,
       height: 32,

@@ -114,6 +114,10 @@ type State = {
   assessmentTypes: AssessmentType[];
   /** One mark per student per assessment. */
   grades: Grade[];
+  /** The teacher's own wording for a starter template, by its stable id. */
+  templateOverrides: Record<string, { title: string; body: string }>;
+  /** Starter ids the teacher removed from the list. */
+  hiddenTemplates: string[];
   /** Reusable message bodies the teacher wrote. Built-ins are not in here. */
   templates: MessageTemplate[];
 
@@ -195,6 +199,23 @@ type State = {
   addTemplate: (title: string, body: string) => string;
   updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) => void;
   removeTemplate: (id: string) => void;
+
+  /**
+   * Rewrite one of the starter templates, or put it back.
+   *
+   * The starters are translations rather than rows, which is what lets them
+   * arrive in the teacher's own language and improve when the catalogue does.
+   * The cost was that they could not be touched: a wording that was nearly
+   * right had to be retyped from scratch as a new template. An override keeps
+   * the id — so the register's "message the absentees" link still finds the
+   * absence wording — while the words become the teacher's. Passing null drops
+   * the override and the translated original comes back.
+   */
+  setBuiltInTemplate: (id: string, value: { title: string; body: string } | null) => void;
+  /** Take a starter off the list. Reversible from the same screen. */
+  hideBuiltInTemplate: (id: string) => void;
+  /** Put every hidden starter back, edits included. */
+  restoreBuiltInTemplates: () => void;
 
   setLanguage: (language: Language) => void;
   /** Null puts the teacher back on the app's translated default. */
@@ -307,6 +328,8 @@ export const useStore = create<State>()((set, get) => ({
   assessmentTypes: [],
   grades: [],
   templates: [],
+  templateOverrides: {},
+  hiddenTemplates: [],
   language: DEFAULT_LANGUAGE,
   languageChosen: false,
   permissionsAsked: false,
@@ -660,6 +683,25 @@ export const useStore = create<State>()((set, get) => ({
     }));
     mirror.updateTemplate?.(id, patch);
   },
+
+  setBuiltInTemplate: (id, value) => {
+    set((s) => {
+      const next = { ...s.templateOverrides };
+      if (value) next[id] = value;
+      else delete next[id];
+      return { templateOverrides: next };
+    });
+  },
+
+  hideBuiltInTemplate: (id) => {
+    set((s) => ({
+      hiddenTemplates: s.hiddenTemplates.includes(id)
+        ? s.hiddenTemplates
+        : [...s.hiddenTemplates, id],
+    }));
+  },
+
+  restoreBuiltInTemplates: () => set({ hiddenTemplates: [], templateOverrides: {} }),
 
   removeTemplate: (id) => {
     set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
