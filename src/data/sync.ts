@@ -5,6 +5,7 @@ import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
 import { useSyncStatus } from '@/data/syncStatus';
 import type {
   Assessment,
+  AssessmentType,
   AttendanceStatus,
   Audience,
   CalendarEvent,
@@ -77,6 +78,8 @@ export type Op =
       scores: { studentId: string; score: number }[];
     }
   | { kind: 'assessment.delete'; id: string }
+  | { kind: 'assessmentType.create'; type: AssessmentType }
+  | { kind: 'assessmentType.delete'; id: string }
   | { kind: 'template.create'; template: MessageTemplate }
   | { kind: 'template.update'; id: string; patch: Partial<Omit<MessageTemplate, 'id'>> }
   | { kind: 'template.delete'; id: string }
@@ -129,6 +132,10 @@ function perform(op: Op): Promise<unknown> {
       return api.saveAssessment(op.assessment, op.scores);
     case 'assessment.delete':
       return api.deleteAssessment(op.id);
+    case 'assessmentType.create':
+      return api.createAssessmentType(op.type);
+    case 'assessmentType.delete':
+      return api.deleteAssessmentType(op.id);
     case 'template.create':
       return api.createTemplate(op.template);
     case 'template.update':
@@ -162,7 +169,7 @@ function labelOf(op: Op): string {
       ? 'sync.item.student'
       : op.kind.startsWith('attendance.')
         ? 'sync.item.attendance'
-        : op.kind.startsWith('assessment.')
+        : op.kind.startsWith('assessment')
           ? 'sync.item.grades'
           : op.kind.startsWith('template.')
             ? 'sync.item.template'
@@ -576,18 +583,29 @@ export async function hydrate() {
     if (!drained) return;
   }
 
-  const [teacher, groups, students, attendance, messages, replies, assessments, grades, templates] =
-    await Promise.all([
-      api.fetchTeacher(),
-      api.fetchGroups(),
-      api.fetchStudents(),
-      api.fetchAttendance(),
-      api.fetchMessages(),
-      api.fetchReplies(),
-      api.fetchAssessments(),
-      api.fetchGrades(),
-      api.fetchTemplates(),
-    ]);
+  const [
+    teacher,
+    groups,
+    students,
+    attendance,
+    messages,
+    replies,
+    assessments,
+    assessmentTypes,
+    grades,
+    templates,
+  ] = await Promise.all([
+    api.fetchTeacher(),
+    api.fetchGroups(),
+    api.fetchStudents(),
+    api.fetchAttendance(),
+    api.fetchMessages(),
+    api.fetchReplies(),
+    api.fetchAssessments(),
+    api.fetchAssessmentTypes(),
+    api.fetchGrades(),
+    api.fetchTemplates(),
+  ]);
 
   // Fetched separately and tolerantly: `calendar_events` arrived in migration
   // 0002, so a project still on 0001 returns "relation does not exist". Inside
@@ -607,6 +625,7 @@ export async function hydrate() {
     messages,
     replies,
     assessments,
+    assessmentTypes,
     grades,
     templates,
     // Keep whatever is already local when the table is not there yet.
@@ -690,6 +709,10 @@ export const remote: StoreMirror = {
     enqueue({ kind: 'assessment.save', assessment, scores }),
 
   deleteAssessment: (id: string) => enqueue({ kind: 'assessment.delete', id }),
+
+  createAssessmentType: (type: AssessmentType) => enqueue({ kind: 'assessmentType.create', type }),
+
+  deleteAssessmentType: (id: string) => enqueue({ kind: 'assessmentType.delete', id }),
 
   createTemplate: (template: MessageTemplate) => enqueue({ kind: 'template.create', template }),
 

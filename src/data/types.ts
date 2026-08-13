@@ -104,7 +104,26 @@ export type Reply = {
 /* Grading                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The original three, kept only for assessments filed before teachers could
+ * name their own. Nothing new is written with these.
+ */
 export type AssessmentKind = 'quiz' | 'exam' | 'final';
+
+/**
+ * A kind of assessment the teacher named, belonging to one group.
+ *
+ * Per group rather than per account: a beginners' class and an exam-prep class
+ * are assessed differently, and one list covering both is a list nobody wants
+ * to scroll while entering marks.
+ */
+export type AssessmentType = {
+  id: string;
+  groupId: string;
+  name: string;
+  /** The teacher's own order. "Test 1, Test 2, Final" is not alphabetical. */
+  position: number;
+};
 
 /**
  * Something a group sat. Scores are stored against it rather than as bare
@@ -114,7 +133,15 @@ export type AssessmentKind = 'quiz' | 'exam' | 'final';
 export type Assessment = {
   id: string;
   groupId: string;
-  kind: AssessmentKind;
+  /** Null on anything created since the teacher could name their own types. */
+  kind: AssessmentKind | null;
+  /**
+   * What the teacher called it, copied at creation rather than referenced.
+   *
+   * Deleting a type must not rewrite the history of every paper filed under
+   * it: "Test 2" stays "Test 2" on marks the class already sat.
+   */
+  kindLabel?: string;
   title: string;
   maxScore: number;
   /** `YYYY-MM-DD`, the same key format the schedule uses. */

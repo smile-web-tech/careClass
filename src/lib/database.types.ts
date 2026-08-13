@@ -160,10 +160,22 @@ export type AssessmentRow = {
   id: string;
   teacher_id: string;
   group_id: string;
-  kind: AssessmentKindRow;
+  /** Null since migration 0012; only rows older than that still carry it. */
+  kind: AssessmentKindRow | null;
+  /** The teacher's own name for this kind, copied at creation. */
+  kind_label: string | null;
   title: string;
   max_score: number;
   taken_on: string;
+  created_at: string;
+};
+
+export type AssessmentTypeRow = {
+  id: string;
+  teacher_id: string;
+  group_id: string;
+  name: string;
+  position: number;
   created_at: string;
 };
 
@@ -203,6 +215,7 @@ export type Database = {
       replies: Row<ReplyRow>;
       calendar_events: Row<CalendarEventRow>;
       assessments: Row<AssessmentRow>;
+      assessment_types: Row<AssessmentTypeRow>;
       grades: Row<GradeRow>;
       message_templates: Row<MessageTemplateRow>;
     };

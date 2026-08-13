@@ -6,6 +6,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type {
   Assessment,
+  AssessmentType,
   AttendanceRecord,
   AttendanceStatus,
   Audience,
@@ -102,6 +103,8 @@ type State = {
   events: CalendarEvent[];
   /** Everything a group has sat, newest first. */
   assessments: Assessment[];
+  /** The kinds of assessment each group uses, in the teacher's own order. */
+  assessmentTypes: AssessmentType[];
   /** One mark per student per assessment. */
   grades: Grade[];
   /** Reusable message bodies the teacher wrote. Built-ins are not in here. */
@@ -159,6 +162,10 @@ type State = {
 
   saveAssessment: (assessment: Assessment, scores: { studentId: string; score: number }[]) => void;
   removeAssessment: (id: string) => void;
+
+  /** Returns the new type's id, so the caller can select it straight away. */
+  addAssessmentType: (groupId: string, name: string) => string;
+  removeAssessmentType: (id: string) => void;
 
   addTemplate: (title: string, body: string) => string;
   updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) => void;
@@ -224,6 +231,8 @@ export type StoreMirror = {
   deleteMessages: (ids: string[]) => void;
   saveAssessment: (assessment: Assessment, scores: { studentId: string; score: number }[]) => void;
   deleteAssessment: (id: string) => void;
+  createAssessmentType: (type: AssessmentType) => void;
+  deleteAssessmentType: (id: string) => void;
   createTemplate: (template: MessageTemplate) => void;
   updateTemplate: (id: string, patch: Partial<Omit<MessageTemplate, 'id'>>) => void;
   deleteTemplate: (id: string) => void;
@@ -258,6 +267,7 @@ export const useStore = create<State>()(
       replies: [],
       events: [],
       assessments: [],
+      assessmentTypes: [],
       grades: [],
       templates: [],
       language: DEFAULT_LANGUAGE,
@@ -291,6 +301,7 @@ export const useStore = create<State>()(
           replies: [],
           events: [],
           assessments: [],
+          assessmentTypes: [],
           grades: [],
           templates: [],
           // Reminders are scheduled against groups that have just been dropped,
@@ -574,6 +585,22 @@ export const useStore = create<State>()(
         mirror.deleteTemplate?.(id);
       },
 
+      addAssessmentType: (groupId, name) => {
+        const id = uid();
+        // Appended, not sorted. "Test 1, Test 2, Final" is the order the
+        // teacher thinks in, and alphabetical would put Final in the middle.
+        const position = get().assessmentTypes.filter((x) => x.groupId === groupId).length;
+        const type: AssessmentType = { id, groupId, name, position };
+        set((s) => ({ assessmentTypes: [...s.assessmentTypes, type] }));
+        mirror.createAssessmentType?.(type);
+        return id;
+      },
+
+      removeAssessmentType: (id) => {
+        set((s) => ({ assessmentTypes: s.assessmentTypes.filter((x) => x.id !== id) }));
+        mirror.deleteAssessmentType?.(id);
+      },
+
       removeAssessment: (id) => {
         set((s) => ({
           assessments: s.assessments.filter((a) => a.id !== id),
@@ -609,6 +636,7 @@ export const useStore = create<State>()(
         language: s.language,
         languageChosen: s.languageChosen,
         assessments: s.assessments,
+        assessmentTypes: s.assessmentTypes,
         grades: s.grades,
         templates: s.templates,
         remindersOn: s.remindersOn,

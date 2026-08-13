@@ -44,6 +44,7 @@ import type { Assessment, Audience } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { shortDate, fromKey } from '@/lib/date';
+import { assessmentKindLabel } from '@/lib/assessmentKind';
 import { describeError } from '@/lib/errors';
 import {
   deviceSmsSupported,
@@ -58,12 +59,6 @@ import { defaultGradeTemplate, renderGradeTemplate } from '@/lib/gradeTemplate';
 import { SmsRunSheet } from '@/components/SmsRunSheet';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
-
-const KIND_KEY: Record<Assessment['kind'], TranslationKey> = {
-  quiz: 'grades.kindQuiz',
-  exam: 'grades.kindExam',
-  final: 'grades.kindFinal',
-};
 
 const STANDING_KEY: Record<GradeStanding, TranslationKey> = {
   excellent: 'grades.standingExcellent',
@@ -156,7 +151,7 @@ export default function Grades() {
    * is a connection at the time.
    */
   const smsRecipientsFor = (assessment: Assessment, audience: Audience, template: string) => {
-    const kindLabel = t(KIND_KEY[assessment.kind]);
+    const kindLabel = assessmentKindLabel(assessment, t);
     const date = shortDate(fromKey(assessment.takenOn));
     const recipients: SmsRecipient[] = [];
     let noPhone = 0;
@@ -544,7 +539,7 @@ export default function Grades() {
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <View style={styles.assessmentHead}>
                               <Badge
-                                label={t(KIND_KEY[a.kind])}
+                                label={assessmentKindLabel(a, t)}
                                 bg={color.bg}
                                 fg={color.muted}
                                 textStyle={styles.standingText}

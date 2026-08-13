@@ -1,5 +1,6 @@
 import type {
   Assessment,
+  AssessmentType,
   MessageTemplate,
   AttendanceRecord,
   AttendanceStatus,
@@ -15,6 +16,7 @@ import type {
 } from '@/data/types';
 import type {
   AssessmentRow,
+  AssessmentTypeRow,
   AttendanceRow,
   CalendarEventRow,
   GradeRow,
@@ -1021,6 +1023,7 @@ const toAssessment = (row: AssessmentRow): Assessment => ({
   id: row.id,
   groupId: row.group_id,
   kind: row.kind,
+  kindLabel: row.kind_label ?? undefined,
   title: row.title,
   maxScore: Number(row.max_score),
   takenOn: row.taken_on,
@@ -1068,6 +1071,7 @@ export async function saveAssessment(
         teacher_id: teacherId,
         group_id: assessment.groupId,
         kind: assessment.kind,
+        kind_label: assessment.kindLabel ?? null,
         title: assessment.title,
         max_score: assessment.maxScore,
         taken_on: assessment.takenOn,
@@ -1091,6 +1095,43 @@ export async function saveAssessment(
       )
       .select(),
   );
+}
+
+/* ----------------------------- Assessment types ------------------------- */
+
+const toAssessmentType = (row: AssessmentTypeRow): AssessmentType => ({
+  id: row.id,
+  groupId: row.group_id,
+  name: row.name,
+  position: row.position,
+});
+
+export async function fetchAssessmentTypes(): Promise<AssessmentType[]> {
+  const rows = unwrap(
+    await supabase.from('assessment_types').select('*').order('position'),
+  ) as AssessmentTypeRow[];
+  return rows.map(toAssessmentType);
+}
+
+export async function createAssessmentType(type: AssessmentType) {
+  const teacherId = await requireUser();
+  unwrap(
+    await supabase
+      .from('assessment_types')
+      .insert({
+        id: type.id,
+        teacher_id: teacherId,
+        group_id: type.groupId,
+        name: type.name,
+        position: type.position,
+      })
+      .select(),
+  );
+}
+
+export async function deleteAssessmentType(id: string) {
+  const teacherId = await requireUser();
+  unwrap(await supabase.from('assessment_types').delete().eq('id', id).eq('teacher_id', teacherId));
 }
 
 export async function deleteAssessment(id: string) {

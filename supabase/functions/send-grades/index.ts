@@ -344,7 +344,7 @@ Deno.serve(async (req) => {
   // Scoped to this teacher explicitly: the service key bypasses RLS.
   const { data: assessment, error: assessmentError } = await db
     .from('assessments')
-    .select('id, group_id, kind, title, max_score, taken_on, groups(name)')
+    .select('id, group_id, kind, kind_label, title, max_score, taken_on, groups(name)')
     .eq('id', payload.assessmentId)
     .eq('teacher_id', teacherId)
     .maybeSingle();
@@ -417,7 +417,10 @@ Deno.serve(async (req) => {
             isParent: target.isParent,
             teacherName,
             groupName,
-            kind: assessment.kind,
+            // The teacher's own name for it where there is one. `kind` is
+            // only still read for assessments filed before they could name
+            // their own types.
+            kind: assessment.kind_label ?? assessment.kind ?? '',
             title: assessment.title,
             score: Number(grade.score),
             maxScore: Number(assessment.max_score),

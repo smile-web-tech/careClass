@@ -22,23 +22,27 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { showAlert } from '@/components/Dialog';
+import { confirm, showAlert } from '@/components/Dialog';
+import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
-import { Avatar, Button, Card, Divider, FieldRow, Overline, Segmented } from '@/components/ui';
+import {
+  Avatar,
+  Button,
+  Card,
+  Divider,
+  FieldRow,
+  Overline,
+  Press,
+  SelectChip,
+} from '@/components/ui';
 import { useStore, useStudents } from '@/data/store';
-import type { Assessment, AssessmentKind } from '@/data/types';
-import type { TranslationKey } from '@/i18n';
+import type { Assessment } from '@/data/types';
 import { useT } from '@/i18n/useT';
+import { assessmentKindLabel, starterTypeNames } from '@/lib/assessmentKind';
 import { toKey } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 import * as Crypto from 'expo-crypto';
-
-const KINDS: { key: AssessmentKind; labelKey: TranslationKey }[] = [
-  { key: 'quiz', labelKey: 'grades.kindQuiz' },
-  { key: 'exam', labelKey: 'grades.kindExam' },
-  { key: 'final', labelKey: 'grades.kindFinal' },
-];
 
 export default function RecordGrades() {
   const t = useT();
@@ -63,7 +67,31 @@ export default function RecordGrades() {
     [groupId, students],
   );
 
-  const [kind, setKind] = useState<AssessmentKind>(existing?.kind ?? 'quiz');
+  /*
+    The kinds this group uses, in the teacher's own order.
+
+    A group with none of its own falls back to the three the app used to
+    hardcode, offered as suggestions rather than seeded rows: a group nobody
+    ever assesses should not accumulate three types nobody asked for, and a
+    teacher who changes language would otherwise be stuck with the old one's
+    words.
+  */
+  const types = useStore((s) => s.assessmentTypes);
+  const addAssessmentType = useStore((s) => s.addAssessmentType);
+  const removeAssessmentType = useStore((s) => s.removeAssessmentType);
+
+  const groupTypes = useMemo(
+    () => types.filter((x) => x.groupId === groupId).sort((a, b) => a.position - b.position),
+    [groupId, types],
+  );
+  const starters = useMemo(() => (groupTypes.length ? [] : starterTypeNames(t)), [groupTypes, t]);
+  const choices = groupTypes.length ? groupTypes.map((x) => x.name) : starters;
+
+  const [kindLabel, setKindLabel] = useState(
+    () => existing?.kindLabel ?? (existing ? assessmentKindLabel(existing, t) : ''),
+  );
+  /** Open only while a new type is being typed. */
+  const [newType, setNewType] = useState<string | null>(null);
   const [title, setTitle] = useState(existing?.title ?? '');
   const [maxScore, setMaxScore] = useState(String(existing?.maxScore ?? 100));
   const [saving, setSaving] = useState(false);
@@ -89,7 +117,57 @@ export default function RecordGrades() {
     return !Number.isFinite(n) || n < 0 || (maxValid && n > max);
   });
 
+  /** Falls back to the first choice so a teacher who ignores the row is fine. */
+  const chosenKind = kindLabel.trim() || choices[0] || '';
+
   const ready = title.trim().length > 1 && maxValid && entered.length > 0 && invalid.length === 0;
+
+  /**
+   * Add a type to this group.
+   *
+   * Written the moment it is named rather than when the assessment is saved:
+   * the teacher is setting up how they mark this class, and that should survive
+   * them backing out of a paper they decided not to enter after all.
+   */
+  const commitNewType = () => {
+    const name = (newType ?? '').trim();
+    if (name.length < 1) {
+      setNewType(null);
+      return;
+    }
+    if (groupTypes.some((x) => x.name.toLowerCase() === name.toLowerCase())) {
+      setKindLabel(name);
+      setNewType(null);
+      return;
+    }
+
+    // The first custom type on a group that was showing the starters has to
+    // bring them with it, or naming "Test 1" would silently delete Quiz, Exam
+    // and Final from the picker.
+    if (!groupTypes.length) {
+      for (const starter of starters) addAssessmentType(groupId, starter);
+    }
+    addAssessmentType(groupId, name);
+    setKindLabel(name);
+    setNewType(null);
+  };
+
+  const removeType = async (name: string) => {
+    const type = groupTypes.find((x) => x.name === name);
+    if (!type) return;
+
+    const yes = await confirm({
+      title: t('grades.typeDeleteTitle', { name }),
+      // Past papers keep their label, so this is not the alarming delete it
+      // looks like. Say so.
+      message: t('grades.typeDeleteHint'),
+      confirmLabel: t('common.delete'),
+    });
+    if (!yes) return;
+
+    removeAssessmentType(type.id);
+    if (kindLabel === name) setKindLabel('');
+  };
 
   const save = async () => {
     if (!ready || !groupId) return;
@@ -97,7 +175,10 @@ export default function RecordGrades() {
     const assessment: Assessment = {
       id: existing?.id ?? Crypto.randomUUID(),
       groupId,
-      kind,
+      // The enum is only kept so rows written before custom types still read
+      // correctly. Nothing new is filed under it.
+      kind: null,
+      kindLabel: chosenKind,
       title: title.trim(),
       maxScore: max,
       takenOn: existing?.takenOn ?? toKey(new Date()),
@@ -139,13 +220,50 @@ export default function RecordGrades() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <Overline style={styles.label}>{t('grades.assessment')}</Overline>
-          <View style={{ marginBottom: 16 }}>
-            <Segmented
-              options={KINDS.map((k) => ({ key: k.key, label: t(k.labelKey) }))}
-              value={kind}
-              onChange={setKind}
-            />
+          {/*
+            Chips rather than a segmented control: the set is the teacher's own
+            and has no fixed length, and five tests plus a final does not fit in
+            three equal slots. Long-press removes one, which keeps the row clean
+            for the common case of just picking.
+          */}
+          <View style={styles.typeRow}>
+            {choices.map((name) => (
+              <SelectChip
+                key={name}
+                label={name}
+                height={40}
+                selected={chosenKind === name}
+                onPress={() => setKindLabel(name)}
+                onLongPress={groupTypes.length ? () => void removeType(name) : undefined}
+              />
+            ))}
+
+            {newType === null ? (
+              <Press onPress={() => setNewType('')} style={styles.addType}>
+                <Icon name="plus" size={14} color={color.primary} />
+                <Text style={styles.addTypeLabel}>{t('grades.typeAdd')}</Text>
+              </Press>
+            ) : (
+              <View style={styles.newTypeRow}>
+                <TextInput
+                  value={newType}
+                  onChangeText={setNewType}
+                  autoFocus
+                  placeholder={t('grades.typeNameHint')}
+                  placeholderTextColor={color.mutedLight}
+                  style={styles.newTypeInput}
+                  returnKeyType="done"
+                  onSubmitEditing={commitNewType}
+                  onBlur={commitNewType}
+                  selectionColor={color.primary}
+                  keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
+                />
+              </View>
+            )}
           </View>
+          {groupTypes.length ? (
+            <Text style={styles.typeHint}>{t('grades.typeLongPress')}</Text>
+          ) : null}
 
           <Card style={styles.group}>
             <FieldRow
@@ -284,6 +402,37 @@ const makeStyles = ({ color }: Theme) =>
       color: color.dangerDeep,
       marginTop: 10,
     },
+    typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+    addType: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 40,
+      paddingHorizontal: 14,
+      borderRadius: radius.control,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: color.dashed,
+    },
+    addTypeLabel: { fontFamily: body[600], fontSize: 13.5, color: color.primary },
+    newTypeRow: {
+      height: 40,
+      minWidth: 140,
+      paddingHorizontal: 12,
+      borderRadius: radius.control,
+      borderWidth: 1,
+      borderColor: color.primary,
+      backgroundColor: color.surface,
+      justifyContent: 'center',
+    },
+    newTypeInput: { fontFamily: body[600], fontSize: 13.5, color: color.ink, padding: 0 },
+    typeHint: {
+      fontFamily: body[400],
+      fontSize: 11.5,
+      color: color.mutedLight,
+      marginBottom: 16,
+    },
+
     footnote: {
       fontFamily: body[400],
       fontSize: 12,

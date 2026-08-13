@@ -306,6 +306,7 @@ export function SelectChip({
   count,
   selected,
   onPress,
+  onLongPress,
   height = 40,
 }: {
   label: string;
@@ -313,6 +314,8 @@ export function SelectChip({
   count?: number;
   selected: boolean;
   onPress: () => void;
+  /** Optional second action, used where a chip is also the teacher's to delete. */
+  onLongPress?: () => void;
   height?: number;
 }) {
   const { color } = useTheme();
@@ -321,6 +324,7 @@ export function SelectChip({
     <Press
       haptic
       onPress={onPress}
+      onLongPress={onLongPress}
       style={[
         styles.selectChip,
         {
