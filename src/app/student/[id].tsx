@@ -1,13 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AttachmentPreview, type PreviewFile } from '@/components/AttachmentPreview';
@@ -25,7 +18,7 @@ import {
   Txt,
 } from '@/components/ui';
 import { useGroups, useRecentSessions, useStudent, useStudentStats } from '@/data/store';
-import { hydrate, useStudentPhotoUploading } from '@/data/sync';
+import { useStudentPhotoUploading } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
@@ -64,26 +57,6 @@ export default function StudentProfile() {
 
   /** True while the picture is queued for the server or on its way there. */
   const uploading = useStudentPhotoUploading(id);
-
-  /*
-    Pull down to fetch this student again, picture included.
-
-    The screen where "is my photo actually saved?" gets asked is the screen that
-    should be able to answer it. `hydrate` re-reads the account and downloads
-    any face this device does not have.
-  */
-  const [refreshing, setRefreshing] = useState(false);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await hydrate();
-    } catch {
-      // Offline. What is on screen is still the best copy this device has.
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
 
   if (!student) {
     return (
@@ -127,15 +100,6 @@ export default function StudentProfile() {
     <Screen>
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={color.muted}
-            colors={[color.primary]}
-            progressBackgroundColor={color.surface}
-          />
-        }
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
           <View style={styles.headerBar}>

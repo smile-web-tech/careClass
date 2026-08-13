@@ -453,3 +453,78 @@ export async function syncMissingPhotos(
   }
   return fetched;
 }
+
+/**
+ * Fetch every picture that is missing **or out of date**, and say how many.
+ *
+ * The difference from `syncMissingPhotos` is the whole point. That one skips a
+ * student who already has a file, which is right on a background sync and wrong
+ * when the teacher has deliberately asked for a refresh: a photo replaced on
+ * another phone lands at the same path with the same name here, so "already
+ * have one" is exactly the case that needs looking at. Pulling the list down
+ * and getting the old face back is worse than not offering the pull.
+ *
+ * One listing for the whole folder, then a download only where the copies
+ * actually differ. On mobile data that matters: re-fetching sixty faces to
+ * discover that none of them changed is a megabyte and a half for nothing.
+ *
+ * Compared by hash where storage gives one, by size otherwise. Neither is free
+ * of false negatives in theory; in practice two different JPEGs of two
+ * different moments do not agree on both a byte count and an MD5.
+ */
+export async function refreshPhotos(
+  students: { id: string; photoPath?: string }[],
+): Promise<number> {
+  const { data: auth } = await supabase.auth.getSession();
+  const teacherId = auth.session?.user?.id;
+  if (!teacherId) return 0;
+
+  const { data: objects } = await supabase.storage
+    .from('attachments')
+    .list(`${teacherId}/students`, { limit: 1000 });
+
+  const remote = new Map<string, { size?: number; eTag?: string }>();
+  for (const object of objects ?? []) {
+    const meta = object.metadata as { size?: number; eTag?: string } | null;
+    remote.set(object.name, { size: meta?.size, eTag: meta?.eTag });
+  }
+
+  let fetched = 0;
+  for (const student of students) {
+    if (!student.photoPath) continue;
+
+    try {
+      const file = photoFile(student.id);
+      if (!file.exists) {
+        if (await downloadPhoto(student.id, student.photoPath)) fetched += 1;
+        continue;
+      }
+
+      const theirs = remote.get(`${student.id}.jpg`);
+      if (!theirs) continue; // Nothing up there to be newer than.
+
+      if (!differs(file, theirs)) continue;
+
+      // Deleted rather than written over, so `downloadPhoto` — which skips a
+      // file that is already there — will actually fetch it.
+      file.delete();
+      if (await downloadPhoto(student.id, student.photoPath)) fetched += 1;
+    } catch {
+      // One face is not worth abandoning the other fifty-nine for.
+    }
+  }
+
+  return fetched;
+}
+
+/** Whether the copy in storage is a different picture from the one on disk. */
+function differs(file: File, theirs: { size?: number; eTag?: string }): boolean {
+  // Storage quotes the hash — `"a1b2…"` — and only sets it for a plain upload.
+  const hash = theirs.eTag?.replace(/"/g, '');
+  if (hash && /^[0-9a-f]{32}$/i.test(hash)) {
+    const mine = file.md5;
+    if (mine) return mine.toLowerCase() !== hash.toLowerCase();
+  }
+
+  return typeof theirs.size === 'number' && theirs.size !== file.size;
+}

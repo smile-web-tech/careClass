@@ -7,7 +7,7 @@ import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { Avatar, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStudents } from '@/data/store';
-import { hydrate } from '@/data/sync';
+import { refreshAll } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, smsNumber } from '@/lib/contact';
@@ -45,7 +45,7 @@ export default function Students() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await hydrate();
+      await refreshAll();
     } catch {
       // Offline, or the proxy is down. The list keeps what it had; an alert
       // would fire on every pull made on a bad connection, which is most of

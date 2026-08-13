@@ -21,7 +21,13 @@ import type {
 import { isLanguage, setActiveLanguage, type Language, type TranslationKey } from '@/i18n';
 import { translateNow } from '@/i18n/useT';
 import { describeError, isOfflineError } from '@/lib/errors';
-import { deleteRemotePhoto, photoFile, syncMissingPhotos, uploadPhoto } from '@/lib/studentPhoto';
+import {
+  deleteRemotePhoto,
+  photoFile,
+  refreshPhotos,
+  syncMissingPhotos,
+  uploadPhoto,
+} from '@/lib/studentPhoto';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
 /**
@@ -1246,6 +1252,27 @@ export function pushReplaced(removed: {
   for (const id of removed.templates) enqueue({ kind: 'template.delete', id });
   if (removed.messages.length) enqueue({ kind: 'messages.delete', ids: removed.messages });
   if (removed.replies.length) enqueue({ kind: 'replies.delete', ids: removed.replies });
+}
+
+/**
+ * A refresh the teacher asked for, rather than one the app decided to do.
+ *
+ * `hydrate` on its own only downloads faces this device has never seen, which
+ * is right when it runs by itself on every launch and wrong when somebody has
+ * just pulled the list down to find out whether a picture changed. A photo
+ * replaced on another phone arrives at the same path under the same name, so
+ * "this device already has one" is precisely the case worth checking.
+ *
+ * Photos second, and not awaited by the rows: the list should redraw as soon as
+ * the account has been read, not after every picture has been compared.
+ */
+export async function refreshAll(): Promise<void> {
+  await hydrate();
+
+  const { students } = useStore.getState();
+  await refreshPhotos(students).catch(() => {
+    // A refresh that fetched the rows and not the faces is still a refresh.
+  });
 }
 
 /** Keep the inbox badge honest — replies arrive from webhooks, not from us. */
