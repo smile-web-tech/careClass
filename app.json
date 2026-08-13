@@ -29,19 +29,38 @@
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM",
         "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.RECORD_AUDIO"
       ],
       "softwareKeyboardLayoutMode": "resize",
       "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",
-          "category": ["DEFAULT", "BROWSABLE"],
+          "category": [
+            "DEFAULT",
+            "BROWSABLE"
+          ],
           "data": [
-            { "scheme": "file", "mimeType": "*/*", "pathPattern": ".*\\\\.classcare" },
-            { "scheme": "file", "mimeType": "*/*", "pathPattern": ".*\\\\.classcare\\\\.json" },
-            { "scheme": "content", "mimeType": "application/json" },
-            { "scheme": "content", "mimeType": "application/classcare" }
+            {
+              "scheme": "file",
+              "mimeType": "*/*",
+              "pathPattern": ".*\\\\.classcare"
+            },
+            {
+              "scheme": "file",
+              "mimeType": "*/*",
+              "pathPattern": ".*\\\\.classcare\\\\.json"
+            },
+            {
+              "scheme": "content",
+              "mimeType": "application/json"
+            },
+            {
+              "scheme": "content",
+              "mimeType": "application/classcare"
+            }
           ]
         }
       ]
@@ -92,9 +111,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "ca3d6823-e765-4977-8c33-f61099342e30"
+        "projectId": "3c308887-043c-4d42-b51e-03423ec587a8"
       }
     },
-    "owner": "smiletechweb2"
+    "owner": "smiletech"
   }
 }
