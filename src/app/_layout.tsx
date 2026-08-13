@@ -35,6 +35,7 @@ import {
   installSync,
   refreshInbox,
   restoreQueue,
+  restoreRejectedFlag,
   watchInbox,
 } from '@/data/sync';
 import {
@@ -95,7 +96,12 @@ function useSupabaseSession() {
         // Bring back what was still unsent when the app last closed, then pull.
         // In that order, always — `hydrate` overwrites local collections, so
         // pulling first would discard a register taken on a dead connection.
-        restoreQueue(userId)
+        // The rejected-writes flag is read first of all: it decides whether
+        // `hydrate` may replace the local collections or has to add to them,
+        // and getting that wrong on the first sync after a launch is what used
+        // to delete an import overnight.
+        restoreRejectedFlag()
+          .then(() => restoreQueue(userId))
           .then(() => hydrate())
           .catch((e) => console.warn('[classcare] hydrate failed:', e));
         // Store this device's push token against the account, so the server can

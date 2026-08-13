@@ -20,7 +20,7 @@ import {
 import Svg, { Circle, G, Path } from 'react-native-svg';
 
 import { Icon, type IconName } from '@/components/Icon';
-import { photoUri } from '@/lib/studentPhoto';
+import { useStudentPhoto } from '@/lib/studentPhoto';
 import {
   PRESS_OPACITY,
   radius,
@@ -254,12 +254,12 @@ export function Avatar({
   const { accents } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const a = accents[accent];
-  const uri = photoId ? photoUri(photoId) : null;
+  const photo = useStudentPhoto(photoId);
 
-  if (uri) {
+  if (photo) {
     return (
       <Image
-        source={{ uri }}
+        source={photo}
         style={[
           {
             width: size,

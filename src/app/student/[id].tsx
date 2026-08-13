@@ -22,7 +22,7 @@ import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { fromKey, longDate, shortDate } from '@/lib/date';
-import { photoFile, photoUri } from '@/lib/studentPhoto';
+import { photoFile, useStudentPhoto } from '@/lib/studentPhoto';
 import { STATUS_KEY } from '@/app/attendance';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
@@ -44,6 +44,16 @@ export default function StudentProfile() {
   /** The picture, opened full size. Null while it is closed. */
   const [viewing, setViewing] = useState<PreviewFile | null>(null);
 
+  /*
+    Above the early return, because it is a hook.
+
+    Subscribed rather than read once, so taking a new picture on this screen
+    makes the header tappable straight away — before this, `face` was captured
+    at render and a student who had just been given their first photo still had
+    a dead tap target until the screen was left and come back to.
+  */
+  const photo = useStudentPhoto(id);
+
   if (!student) {
     return (
       <Screen>
@@ -63,7 +73,7 @@ export default function StudentProfile() {
     a face in the register and a pair of letters on their own profile — which
     looks like the photo failed to save.
   */
-  const face = photoUri(student.id);
+  const face = photo?.uri ?? null;
 
   const openPhoto = () => {
     if (!face) return;

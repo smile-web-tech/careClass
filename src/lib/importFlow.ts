@@ -15,9 +15,16 @@
 import { File } from 'expo-file-system';
 
 import { showAlert, showDialog, showError } from '@/components/Dialog';
-import { applyBackup, BackupError, mergeBackup, readBackup, summarise } from '@/data/backup';
+import {
+  applyBackup,
+  BackupError,
+  mergeBackup,
+  readBackup,
+  reownBackup,
+  summarise,
+} from '@/data/backup';
 import { useStore } from '@/data/store';
-import { pushImported } from '@/data/sync';
+import { pushImported, pushReplaced } from '@/data/sync';
 import type { TranslationKey } from '@/i18n';
 import { translateNow } from '@/i18n/useT';
 
@@ -115,8 +122,28 @@ export async function importFromFile(file: File): Promise<void> {
     });
     if (choice !== 'merge' && choice !== 'replace') return;
 
-    if (choice === 'merge') await mergeBackup(backup);
-    else await applyBackup(backup);
+    /*
+      Ids first, before a single row is written.
+
+      The file's ids belong to whoever exported it, and on the server they are
+      protected by that account's row-level security. Rewriting them here is
+      what stops the import from being refused row by row — see `reownBackup`.
+    */
+    const owned = await reownBackup(backup);
+
+    /*
+      What replacing is about to get rid of.
+
+      Read before anything is applied, and only used on the replace branch: the
+      rows this account holds that the file does not, which have to go from the
+      server as well or the next sync hands them straight back.
+    */
+    const before = choice === 'replace' ? survivors(owned.ids) : null;
+
+    if (choice === 'merge') await mergeBackup(owned.backup);
+    else await applyBackup(owned.backup);
+
+    if (before) pushReplaced(before);
 
     /*
       And up to the server.
@@ -125,7 +152,7 @@ export async function importFromFile(file: File): Promise<void> {
       pulls the account's rows over the top and the imported classes disappear,
       minutes after the app said the import had worked.
     */
-    pushImported();
+    pushImported(owned.ids);
 
     await showAlert(
       t('backup.imported'),
@@ -163,6 +190,30 @@ export async function importFromUri(uri: string): Promise<void> {
   } catch (e) {
     showError(e, t('backup.importFailed'));
   }
+}
+
+/**
+ * Everything this account holds that the incoming file does not mention.
+ *
+ * Named for what it describes rather than what is done with it: these are the
+ * rows that would survive a replacing import untouched on the server while
+ * being wiped from the phone, which is the mismatch `pushReplaced` closes.
+ */
+function survivors(keeping: ReadonlySet<string>) {
+  const state = useStore.getState();
+  const gone = <T extends { id: string }>(rows: T[]) =>
+    rows.filter((r) => !keeping.has(r.id)).map((r) => r.id);
+
+  return {
+    groups: gone(state.groups),
+    students: gone(state.students),
+    events: gone(state.events),
+    templates: gone(state.templates),
+    assessments: gone(state.assessments),
+    assessmentTypes: gone(state.assessmentTypes),
+    messages: gone(state.messages),
+    replies: gone(state.replies),
+  };
 }
 
 /** Non-hook translation, because this runs from the root layout and dialogs. */

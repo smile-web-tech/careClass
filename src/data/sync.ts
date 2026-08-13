@@ -1,5 +1,5 @@
 import * as api from '@/data/api';
-import { loadSnapshot, readOutbox, replaceOutbox, writeSetting } from '@/data/localDb';
+import { loadSnapshot, readOutbox, readSetting, replaceOutbox, writeSetting } from '@/data/localDb';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
 import { useSyncStatus } from '@/data/syncStatus';
 import type {
@@ -10,7 +10,9 @@ import type {
   CalendarEvent,
   Channel,
   Group,
+  Message,
   MessageTemplate,
+  Reply,
   SentMessageLog,
   Student,
 } from '@/data/types';
@@ -83,8 +85,22 @@ export type Op =
    * the same record rather than logging the send twice.
    */
   | { kind: 'message.log'; entry: SentMessageLog }
+  /**
+   * A message from a backup, on its way back into the history.
+   *
+   * Separate from `message.log` because it must not touch the delivery
+   * receipts — a backup never carried them.
+   */
+  | { kind: 'message.restore'; message: Message }
   | { kind: 'message.delete'; id: string }
   | { kind: 'messages.delete'; ids: string[] }
+  /**
+   * A reply this device holds that the server has not got.
+   *
+   * Only ever produced by an import. Every other reply is written by the
+   * inbound-email function and travels the other way.
+   */
+  | { kind: 'reply.create'; reply: Reply }
   | { kind: 'reply.read'; id: string }
   | { kind: 'replies.read' }
   | { kind: 'reply.delete'; id: string }
@@ -165,10 +181,14 @@ function perform(op: Op): Promise<unknown> {
       });
     case 'message.log':
       return api.logSentMessage(op.entry);
+    case 'message.restore':
+      return api.restoreMessage(op.message);
     case 'message.delete':
       return api.deleteMessage(op.id);
     case 'messages.delete':
       return api.deleteMessages(op.ids);
+    case 'reply.create':
+      return api.createReply(op.reply);
     case 'reply.read':
       return api.markReplyRead(op.id);
     case 'replies.read':
@@ -278,6 +298,9 @@ let restored = false;
 
 let writing: Promise<void> = Promise.resolve();
 
+/** True while a save of the outbox is scheduled but has not run yet. */
+let pendingWrite = false;
+
 /** Persist the queue. Chained so two rapid writes cannot land out of order. */
 function persistQueue() {
   // Fall back to the store when nothing has claimed the queue yet. Without
@@ -287,15 +310,34 @@ function persistQueue() {
   // work it exists to protect.
   queueOwner = queueOwner ?? useStore.getState().teacherId;
 
-  const ops = queue.map((q) => q.op);
-  const owner = queueOwner;
+  /*
+    One write for any number of requests made before it runs.
+
+    This used to serialise the whole queue on every single call, and both
+    enqueueing and draining call it once per op. An import queues a row per
+    student, per register, per message — four hundred ops meant four hundred
+    rewrites of a table that was itself four hundred rows long, then four
+    hundred more on the way out. The phone spent longer writing the list of
+    work than doing it.
+
+    The queue is read inside the callback rather than captured here, so the
+    write that does happen always reflects the latest state, and clearing the
+    flag first means anything queued while it runs schedules one more — the
+    last write is never the stale one.
+  */
+  if (pendingWrite) return;
+  pendingWrite = true;
 
   writing = writing
     .then(async () => {
-      await replaceOutbox(ops);
-      await writeSetting(OWNER_KEY, owner);
+      pendingWrite = false;
+      await replaceOutbox(queue.map((q) => q.op));
+      await writeSetting(OWNER_KEY, queueOwner);
     })
-    .catch((e) => console.warn('[classcare] could not save the outbox:', e));
+    .catch((e) => {
+      pendingWrite = false;
+      console.warn('[classcare] could not save the outbox:', e);
+    });
 }
 
 /**
@@ -339,6 +381,9 @@ export async function restoreQueue(teacherId: string | null) {
 export async function clearQueue() {
   queue.length = 0;
   queueOwner = null;
+  // Whatever the last account could not save is not this one's problem, and
+  // leaving it set would have the next teacher's first sync refuse to replace.
+  setRejected(false);
   // A fresh account may have its own saved queue waiting; let it be read.
   restored = false;
   publish();
@@ -363,9 +408,58 @@ function scheduleRetry(attempts: number) {
   }, retryDelay(attempts));
 }
 
+/* -------------------------------------------------------------------------- */
+/* Rejected writes                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whether anything this device wrote was refused by the server.
+ *
+ * The flag exists to protect `hydrate`. A rejected write is dropped from the
+ * queue so it cannot wedge the ones behind it, which leaves the device holding
+ * a row the server has never heard of — and `hydrate` replaces whole
+ * collections, so the next sync deletes it. That is how an import could look
+ * complete, survive until the app was closed, and be gone on the next launch.
+ *
+ * While this is set, `hydrate` adds to what is here instead of replacing it.
+ * Cleared by a drain that rejects nothing, at which point the device and the
+ * server agree and wholesale replacement is safe again.
+ *
+ * Persisted, because the failure and the launch that loses the data are two
+ * different runs of the app.
+ */
+const REJECTED_KEY = 'syncRejected';
+
+let rejected = false;
+
+/** Read once at startup, so a restart does not forget yesterday's refusal. */
+export async function restoreRejectedFlag() {
+  rejected = (await readSetting<boolean>(REJECTED_KEY)) ?? false;
+}
+
+function setRejected(value: boolean) {
+  if (rejected === value) return;
+  rejected = value;
+  void writeSetting(REJECTED_KEY, value).catch(() => {
+    // Worst case the flag is forgotten and hydrate replaces as it used to.
+  });
+}
+
 async function drain(): Promise<void> {
   if (draining) return;
   draining = true;
+
+  /*
+    Counted, not announced one by one.
+
+    A failing import is not one failure, it is one per row: sixty students, a
+    term of registers, every message. Reporting each of them replaced the
+    banner sixty times a second and told the teacher nothing they could act on.
+    One line at the end, naming what failed first and how many followed, is the
+    same information at a size a person can read.
+  */
+  let failures = 0;
+  let firstFailure: { what: string; reason: string } | null = null;
 
   useSyncStatus.getState().report({ syncing: true });
   try {
@@ -394,14 +488,32 @@ async function drain(): Promise<void> {
         publish();
         const described = describeError(e);
         console.warn(`[classcare] ${job.op.kind} failed permanently:`, described.detail);
-        useSyncStatus.getState().report({
-          offline: false,
-          failure: translateNow('sync.couldNotSave', {
-            what: labelOf(job.op),
-            reason: described.message,
-          }),
-        });
+        failures += 1;
+        firstFailure ??= { what: labelOf(job.op), reason: described.message };
       }
+    }
+
+    if (failures) {
+      setRejected(true);
+      useSyncStatus.getState().report({
+        offline: false,
+        failure:
+          failures === 1
+            ? translateNow('sync.couldNotSave', firstFailure!)
+            : translateNow('sync.couldNotSaveMany', { ...firstFailure!, count: failures - 1 }),
+      });
+    } else if (!queue.length) {
+      /*
+        The banner goes, but the flag stays.
+
+        A clean drain only says that what was in the queue *this time* landed.
+        Rows refused an hour ago were dropped from the queue then and are not
+        in it now, so clearing here would let the next `hydrate` replace — and
+        delete exactly the rows the flag exists to protect. Only `hydrate` can
+        clear it, because only `hydrate` can see whether the server is actually
+        holding everything this device is.
+      */
+      useSyncStatus.getState().report({ failure: null });
     }
   } finally {
     draining = false;
@@ -676,18 +788,66 @@ export async function hydrate() {
     console.warn('[classcare] events unavailable — apply migration 0002:', e);
   }
 
+  /*
+    Whether the server's answer may stand on its own.
+
+    Normally it may: it is authoritative, and replacing wholesale is what makes
+    a delete on one phone disappear from the other. But when this device is
+    holding writes the server refused, the server's answer is missing them —
+    and replacing would delete the teacher's data to match a copy that never
+    received it. So while anything is unaccounted for, the server's rows are
+    added to what is here rather than put in its place.
+
+    The cost is that a row deleted on another device lingers here until the next
+    clean sync. That is the right way round: a stale row is a nuisance, a
+    deleted term of work is not recoverable.
+  */
+  const local = useStore.getState();
+  const keepLocal = rejected || queue.length > 0;
+
+  /**
+   * Anything local the server did not return, counted as it goes.
+   *
+   * The count is what lets the flag clear itself. Kept rows are rows the server
+   * has never seen, so while there are any, this device and the account still
+   * disagree and replacing would delete them. When a pull comes back holding
+   * everything that is here — someone fixed the account, or a later write
+   * finally landed — the two agree again and wholesale replacement is safe.
+   * Without this the first refusal would put the app in union mode for good.
+   */
+  let unaccounted = 0;
+
+  const union = <T extends { id: string }>(theirs: T[], mine: T[]): T[] => {
+    if (!keepLocal) return theirs;
+    const seen = new Set(theirs.map((x) => x.id));
+    const missing = mine.filter((x) => !seen.has(x.id));
+    unaccounted += missing.length;
+    return [...theirs, ...missing];
+  };
+
   useStore.setState({
-    groups,
-    students,
-    attendance,
-    messages,
-    replies,
-    assessments,
-    assessmentTypes,
-    grades,
-    templates,
+    groups: union(groups, local.groups),
+    students: union(students, local.students),
+    attendance: keepLocal ? { ...local.attendance, ...attendance } : attendance,
+    messages: union(messages, local.messages),
+    replies: union(replies, local.replies),
+    assessments: union(assessments, local.assessments),
+    assessmentTypes: union(assessmentTypes, local.assessmentTypes),
+    // Grades have no id of their own, so they are matched on the pair they join.
+    grades: keepLocal
+      ? [
+          ...grades,
+          ...local.grades.filter(
+            (g) =>
+              !grades.some(
+                (s) => s.assessmentId === g.assessmentId && s.studentId === g.studentId,
+              ),
+          ),
+        ]
+      : grades,
+    templates: union(templates, local.templates),
     // Keep whatever is already local when the table is not there yet.
-    ...(events ? { events } : {}),
+    ...(events ? { events: union(events, local.events) } : {}),
     ...(teacher && {
       teacherName: teacher.name || useStore.getState().teacherName,
       teacherEmail: teacher.email,
@@ -697,6 +857,8 @@ export async function hydrate() {
       gradeTemplateFail: teacher.gradeTemplateFail,
     }),
   });
+
+  if (keepLocal && !unaccounted && !queue.length) setRejected(false);
 
   if (teacher) reconcileLanguage(teacher.language);
 
@@ -865,32 +1027,178 @@ export async function refreshGrades() {
  * server already holds are written over with the same values rather than
  * failing on a duplicate key.
  *
- * Message history and replies are left alone deliberately: those rows are the
- * server's own record of what it sent and received, and re-filing a copy of
- * somebody else's would be inventing correspondence that never happened.
+ * Message history and replies go too. They used to be skipped, on the reasoning
+ * that they are the server's own record of what it sent and received — which
+ * was true and still cost the teacher their whole inbox, because `hydrate`
+ * replaces those collections wholesale and the server had never been told. A
+ * copy of the correspondence is the honest thing: the teacher is looking at it
+ * either way, and the alternative is watching it disappear at the next refresh.
+ *
+ * The order matters and is the order below. A student cannot be filed before
+ * their group exists, a mark before its assessment, a delivery before its
+ * student — the queue is strictly serial, so listing parents first is what
+ * keeps every foreign key satisfied.
  */
-export function pushImported(): void {
-  if (!hasSupabase) return;
+export function pushImported(imported: ReadonlySet<string>): void {
+  if (!hasSupabase || !imported.size) return;
 
   const state = useStore.getState();
 
-  for (const group of state.groups) enqueue({ kind: 'group.create', group });
-  for (const student of state.students) enqueue({ kind: 'student.create', student });
-  for (const [key, marks] of Object.entries(state.attendance)) {
-    enqueue({ kind: 'attendance.save', key, marks });
+  /*
+    Nothing that points at a row which is not there.
+
+    An import has already had its references cleaned — see `reownBackup` — but
+    the store can hold older breakage too: a group deleted on this phone while
+    a student still lists it, an assessment whose group went with it. Sending
+    those is a foreign key violation, and the row it kills is the whole student
+    or the whole assessment, not the dangling link.
+  */
+  const groupIds = new Set(state.groups.map((g) => g.id));
+  const studentIds = new Set(state.students.map((s) => s.id));
+
+  /*
+    Only what the file brought.
+
+    Pushing the whole store instead was correct — every create upserts — and
+    wildly wasteful: adding one colleague's class to an account with three
+    hundred students queued three hundred and five writes, on connections where
+    each one is a real wait. Rows already here are already on the server, or
+    already in this queue.
+  */
+  const fromFile = (id: string) => imported.has(id);
+
+  for (const group of state.groups) {
+    if (fromFile(group.id)) enqueue({ kind: 'group.create', group });
   }
-  for (const event of state.events) enqueue({ kind: 'event.create', event });
-  for (const template of state.templates) enqueue({ kind: 'template.create', template });
-  for (const type of state.assessmentTypes) enqueue({ kind: 'assessmentType.create', type });
+
+  for (const student of state.students) {
+    if (!fromFile(student.id)) continue;
+    enqueue({
+      kind: 'student.create',
+      student: { ...student, groupIds: student.groupIds.filter((id) => groupIds.has(id)) },
+    });
+  }
+
+  /*
+    Faces, back into this account's own storage folder.
+
+    The path a backup carries belongs to the account that exported it and is
+    unreadable here, so it is dropped on import and the picture is uploaded
+    again from the copy the file brought with it. Queued per student, after the
+    student exists, because the upload finishes by writing the path onto their
+    row.
+  */
+  for (const student of state.students) {
+    if (!fromFile(student.id)) continue;
+    if (photoFile(student.id).exists) enqueue({ kind: 'student.photo', id: student.id });
+  }
+
+  for (const [key, marks] of Object.entries(state.attendance)) {
+    const groupId = key.split('@')[0];
+    // A register belongs to whichever import brought its group, and it has no
+    // id of its own to check against.
+    if (!groupIds.has(groupId) || !fromFile(groupId)) continue;
+
+    const known = Object.fromEntries(
+      Object.entries(marks).filter(([studentId]) => studentIds.has(studentId)),
+    );
+    if (Object.keys(known).length) enqueue({ kind: 'attendance.save', key, marks: known });
+  }
+
+  for (const event of state.events) {
+    if (fromFile(event.id)) enqueue({ kind: 'event.create', event });
+  }
+
+  for (const template of state.templates) {
+    if (fromFile(template.id)) enqueue({ kind: 'template.create', template });
+  }
+
+  for (const type of state.assessmentTypes) {
+    if (fromFile(type.id) && groupIds.has(type.groupId)) {
+      enqueue({ kind: 'assessmentType.create', type });
+    }
+  }
+
   for (const assessment of state.assessments) {
+    if (!fromFile(assessment.id) || !groupIds.has(assessment.groupId)) continue;
     enqueue({
       kind: 'assessment.save',
       assessment,
       scores: state.grades
-        .filter((g) => g.assessmentId === assessment.id)
+        .filter((g) => g.assessmentId === assessment.id && studentIds.has(g.studentId))
         .map((g) => ({ studentId: g.studentId, score: g.score })),
     });
   }
+
+  /*
+    History last, because a message names the groups it went to.
+
+    `message.restore`, not `message.log`: the log op owns the delivery receipts
+    and would wipe them for any message the server already holds. See
+    `api.restoreMessage`.
+  */
+  for (const message of state.messages) {
+    if (!fromFile(message.id)) continue;
+    enqueue({
+      kind: 'message.restore',
+      message: { ...message, groupIds: message.groupIds.filter((id) => groupIds.has(id)) },
+    });
+  }
+
+  for (const reply of state.replies) {
+    if (!fromFile(reply.id)) continue;
+    enqueue({
+      kind: 'reply.create',
+      // A reply about a student this account does not have is still the
+      // parent's message and still worth keeping; it simply loses the link that
+      // makes the avatar open their profile.
+      reply: reply.studentId && !studentIds.has(reply.studentId)
+        ? { ...reply, studentId: undefined }
+        : reply,
+    });
+  }
+}
+
+/**
+ * Take the rows a replacing import got rid of off the server too.
+ *
+ * "Replace everything" used to mean "replace everything on this phone". The
+ * account kept the old classes, and `hydrate` handed them straight back — so a
+ * teacher who chose replace watched the data they had just replaced reappear a
+ * minute later, mixed in with the new. Either the wording was wrong or the
+ * behaviour was; the wording is what the teacher agreed to.
+ *
+ * Only reached from the replace branch of an import, behind a confirmation that
+ * says so in the danger colour. Nothing else in the app calls it.
+ *
+ * Students are archived rather than deleted, which is what the rest of the app
+ * does: their attendance and their marks are part of other people's history —
+ * a group's register, a term's results — and deleting the row would take those
+ * with it.
+ */
+export function pushReplaced(removed: {
+  groups: string[];
+  students: string[];
+  events: string[];
+  templates: string[];
+  assessments: string[];
+  assessmentTypes: string[];
+  messages: string[];
+  replies: string[];
+}): void {
+  if (!hasSupabase) return;
+
+  // Children first, parents last: deleting a group cascades to its assessments,
+  // and a delete that arrives after its parent is already gone is a no-op that
+  // still costs a round trip.
+  for (const id of removed.assessments) enqueue({ kind: 'assessment.delete', id });
+  for (const id of removed.assessmentTypes) enqueue({ kind: 'assessmentType.delete', id });
+  for (const id of removed.students) enqueue({ kind: 'student.archive', id });
+  for (const id of removed.groups) enqueue({ kind: 'group.delete', id });
+  for (const id of removed.events) enqueue({ kind: 'event.delete', id });
+  for (const id of removed.templates) enqueue({ kind: 'template.delete', id });
+  if (removed.messages.length) enqueue({ kind: 'messages.delete', ids: removed.messages });
+  if (removed.replies.length) enqueue({ kind: 'replies.delete', ids: removed.replies });
 }
 
 /** Keep the inbox badge honest — replies arrive from webhooks, not from us. */

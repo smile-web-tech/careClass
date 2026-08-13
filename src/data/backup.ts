@@ -24,9 +24,11 @@
  * omits the outbox, because unsent writes belong to the device that made them
  * and replaying them from a second phone would send everything twice.
  */
+import * as Crypto from 'expo-crypto';
 import { Directory, File } from 'expo-file-system';
 
 import { backupsDirectory } from '@/lib/appFolder';
+import { readSetting, writeSetting } from '@/data/localDb';
 import { useStore } from '@/data/store';
 import { flushAll } from '@/data/persistence';
 import type {
@@ -66,6 +68,19 @@ export type Backup = {
     grades: Grade[];
     templates: MessageTemplate[];
     gradeTemplate: string | null;
+    /*
+      The three below arrived after the format did, and are optional for that
+      reason: a file written by an older build simply does not have them, and
+      reading one must not fail over it. Nothing here needs a version bump —
+      that is for changes an older app would misread, not for fields it will
+      ignore.
+    */
+    /** The wording sent when a student did not pass. */
+    gradeTemplateFail?: string | null;
+    /** Rewrites of the built-in templates, keyed by the template's id. */
+    templateOverrides?: Record<string, { title: string; body: string }>;
+    /** Built-in templates the teacher took off the list. */
+    hiddenTemplates?: string[];
   };
   /** Base64 JPEG per student id. Absent students simply have no picture. */
   photos: Record<string, string>;
@@ -154,6 +169,9 @@ export async function exportBackup(): Promise<File> {
       grades: state.grades,
       templates: state.templates,
       gradeTemplate: state.gradeTemplate,
+      gradeTemplateFail: state.gradeTemplateFail,
+      templateOverrides: state.templateOverrides,
+      hiddenTemplates: state.hiddenTemplates,
     },
     photos,
   };
@@ -258,9 +276,234 @@ export async function readBackup(file: File): Promise<Backup> {
       grades: backup.data.grades ?? [],
       templates: backup.data.templates ?? [],
       gradeTemplate: backup.data.gradeTemplate ?? null,
+      gradeTemplateFail: backup.data.gradeTemplateFail ?? null,
+      templateOverrides: backup.data.templateOverrides ?? {},
+      hiddenTemplates: backup.data.hiddenTemplates ?? [],
     },
     photos: backup.photos ?? {},
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Making the file this account's own                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The ids this device has already handed out to rows from earlier imports.
+ *
+ * Kept so importing the same file twice lands on the same rows instead of a
+ * second copy of every student. Grows by one entry per imported row and is
+ * never read except here, so a teacher who imports a colleague's class once a
+ * term will not notice it.
+ */
+const IMPORT_MAP_SETTING = 'importedIds';
+
+/** Same generator the store uses, so imported rows are indistinguishable. */
+const uid = () => Crypto.randomUUID();
+
+/**
+ * Give every row in the file an id this account is allowed to write.
+ *
+ * This is the difference between an import that works and one that appears to
+ * work. A `.classcare` file carries the ids the *exporting* account minted, and
+ * on the server those ids belong to that account: every row is protected by
+ * `teacher_id = auth.uid()`. Writing them back under a different teacher is
+ * refused — an upsert whose conflicting row is invisible to the policy raises
+ * either "row level security" or "already exists", one per row, which is the
+ * storm of errors an import used to produce. The rows still appeared on screen,
+ * because they had been written locally first, and then vanished at the next
+ * sync when `hydrate` pulled down the server's version — which had never
+ * received them.
+ *
+ * So: an id that this account already holds is kept, because that is the same
+ * row coming home — a teacher restoring their own backup, or re-importing a
+ * file they have imported before. Everything else is given a fresh id, and
+ * every reference to it is rewritten to match.
+ *
+ * References that point at nothing are dropped rather than repointed. A student
+ * listing a group the file does not contain, a mark for a student who was
+ * deleted before the export — those are already broken in the file, and sending
+ * them to the server is a foreign key violation that takes the whole row with
+ * it.
+ */
+export type Reowned = {
+  backup: Backup;
+  /**
+   * Every id the file ends up owning, kept or freshly minted.
+   *
+   * Handed to `pushImported` so it can queue exactly the rows that arrived
+   * rather than re-sending the whole account behind them.
+   */
+  ids: Set<string>;
+};
+
+export async function reownBackup(backup: Backup): Promise<Reowned> {
+  const state = useStore.getState();
+
+  const remembered = (await readSetting<Record<string, string>>(IMPORT_MAP_SETTING)) ?? {};
+  const minted: Record<string, string> = {};
+
+  /**
+   * Work out the new id for every row of one kind.
+   *
+   * `mine` is what this account holds right now. Note this is read before
+   * anything is applied, so it is still true for a replacing import.
+   */
+  const mapIds = (rows: { id: string }[], mine: Set<string>) => {
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (map.has(row.id)) continue;
+      const next = mine.has(row.id) ? row.id : (remembered[row.id] ?? uid());
+      map.set(row.id, next);
+      if (next !== row.id) minted[row.id] = next;
+    }
+    return map;
+  };
+
+  const idsOf = (rows: { id: string }[]) => new Set(rows.map((r) => r.id));
+
+  /**
+   * One row per id.
+   *
+   * A file listing the same id twice — hand-edited, or merged by someone with a
+   * text editor — would otherwise become two rows the app cannot tell apart,
+   * and the second write of the pair silently overwrites the first everywhere
+   * afterwards. The first occurrence wins, which matches how a merge treats a
+   * row it has already seen.
+   */
+  const unique = <T extends { id: string }>(rows: T[]): T[] => {
+    const seen = new Set<string>();
+    return rows.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  };
+
+  const groups = mapIds(backup.data.groups, idsOf(state.groups));
+  const students = mapIds(backup.data.students, idsOf(state.students));
+  const events = mapIds(backup.data.events, idsOf(state.events));
+  const assessments = mapIds(backup.data.assessments, idsOf(state.assessments));
+  const types = mapIds(backup.data.assessmentTypes, idsOf(state.assessmentTypes));
+  const templates = mapIds(backup.data.templates, idsOf(state.templates));
+  const messages = mapIds(backup.data.messages, idsOf(state.messages));
+  const replies = mapIds(backup.data.replies, idsOf(state.replies));
+
+  /** Grades carry no id of their own; they are keyed by the pair they join. */
+  const gradeRows = backup.data.grades
+    .map((g) => {
+      const assessmentId = assessments.get(g.assessmentId);
+      const studentId = students.get(g.studentId);
+      return assessmentId && studentId ? { ...g, assessmentId, studentId } : null;
+    })
+    .filter((g): g is Grade => g !== null);
+
+  /*
+    Attendance hides two foreign keys inside its own key.
+
+    `<groupId>@<YYYY-MM-DD>#<HH:MM>` is what the store uses and what the sync
+    queue splits apart again, so the group id has to be rewritten in place.
+  */
+  const attendance: Record<string, AttendanceRecord> = {};
+  for (const [key, record] of Object.entries(backup.data.attendance)) {
+    const [oldGroupId, rest] = key.split('@');
+    const groupId = groups.get(oldGroupId);
+    if (!groupId || rest === undefined) continue;
+
+    const marks: AttendanceRecord = {};
+    for (const [oldStudentId, status] of Object.entries(record)) {
+      const studentId = students.get(oldStudentId);
+      if (studentId) marks[studentId] = status;
+    }
+    if (Object.keys(marks).length) attendance[`${groupId}@${rest}`] = marks;
+  }
+
+  const photos: Record<string, string> = {};
+  for (const [oldStudentId, base64] of Object.entries(backup.photos)) {
+    const studentId = students.get(oldStudentId);
+    if (studentId) photos[studentId] = base64;
+  }
+
+  // Remember what was handed out, so the next import of this file recognises
+  // these rows instead of duplicating them.
+  if (Object.keys(minted).length) {
+    await writeSetting(IMPORT_MAP_SETTING, { ...remembered, ...minted });
+  }
+
+  const ids = new Set<string>();
+  for (const map of [groups, students, events, assessments, types, templates, messages, replies]) {
+    for (const id of map.values()) ids.add(id);
+  }
+
+  const reowned: Backup = {
+    ...backup,
+    data: {
+      ...backup.data,
+      groups: unique(backup.data.groups.map((g) => ({ ...g, id: groups.get(g.id)! }))),
+
+      /*
+        `photoPath` is deliberately dropped.
+
+        It names an object under the *exporting* teacher's folder in storage,
+        which this account may not read, and it is keyed by the old student id
+        besides. The picture itself travelled in the file and is written to the
+        device; `pushImported` then queues an upload that puts it back in
+        storage under this account, and the path comes from that.
+      */
+      students: unique(
+        backup.data.students.map((s) => ({
+          ...s,
+          id: students.get(s.id)!,
+          groupIds: [
+            ...new Set(s.groupIds.map((id) => groups.get(id)).filter((id): id is string => !!id)),
+          ],
+          photoPath: undefined,
+        })),
+      ),
+      attendance,
+      // Only the message and the classes it went to. A `Message` keeps two
+      // counts rather than a list of recipients, so there is nothing per-student
+      // here to repoint.
+      messages: unique(
+        backup.data.messages.map((m) => ({
+          ...m,
+          id: messages.get(m.id)!,
+          groupIds: [
+            ...new Set(m.groupIds.map((id) => groups.get(id)).filter((id): id is string => !!id)),
+          ],
+        })),
+      ),
+      replies: unique(
+        backup.data.replies.map((r) => ({
+          ...r,
+          id: replies.get(r.id)!,
+          studentId: r.studentId ? students.get(r.studentId) : undefined,
+        })),
+      ),
+      events: unique(backup.data.events.map((e) => ({ ...e, id: events.get(e.id)! }))),
+      assessments: unique(
+        backup.data.assessments
+          .map((a) => {
+            const groupId = groups.get(a.groupId);
+            return groupId ? { ...a, id: assessments.get(a.id)!, groupId } : null;
+          })
+          .filter((a): a is Assessment => a !== null),
+      ),
+      assessmentTypes: unique(
+        backup.data.assessmentTypes
+          .map((t) => {
+            const groupId = groups.get(t.groupId);
+            return groupId ? { ...t, id: types.get(t.id)!, groupId } : null;
+          })
+          .filter((t): t is AssessmentType => t !== null),
+      ),
+      grades: gradeRows,
+      templates: unique(backup.data.templates.map((t) => ({ ...t, id: templates.get(t.id)! }))),
+    },
+    photos,
+  };
+
+  return { backup: reowned, ids };
 }
 
 /**
@@ -333,6 +576,13 @@ export async function mergeBackup(backup: Backup): Promise<void> {
     // The teacher's own wording stays theirs. Taking the file's would rewrite
     // what every parent reads, which is not what "add these students" asked for.
     gradeTemplate: state.gradeTemplate ?? backup.data.gradeTemplate,
+    gradeTemplateFail: state.gradeTemplateFail ?? backup.data.gradeTemplateFail ?? null,
+    // Same rule one level down: an override this device already has wins, and
+    // the file's fills in only where there is none.
+    templateOverrides: { ...backup.data.templateOverrides, ...state.templateOverrides },
+    hiddenTemplates: [
+      ...new Set([...state.hiddenTemplates, ...(backup.data.hiddenTemplates ?? [])]),
+    ],
   });
 
   await flushAll();
@@ -364,6 +614,9 @@ export async function applyBackup(backup: Backup): Promise<void> {
     grades: backup.data.grades,
     templates: backup.data.templates,
     gradeTemplate: backup.data.gradeTemplate,
+    gradeTemplateFail: backup.data.gradeTemplateFail ?? null,
+    templateOverrides: backup.data.templateOverrides ?? {},
+    hiddenTemplates: backup.data.hiddenTemplates ?? [],
   });
 
   // Straight to disk rather than waiting for the debounce: the teacher may

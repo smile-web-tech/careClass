@@ -15,7 +15,7 @@ import Constants from 'expo-constants';
 import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { showAlert, showError } from '@/components/Dialog';
@@ -260,6 +260,17 @@ function ReminderSettings() {
   const lead = useStore((s) => s.reminderLead);
   const setReminders = useStore((s) => s.setReminders);
 
+  /*
+    Below this the six lead-time chips stop fitting side by side.
+
+    360pt is the common Android width and the row is comfortable there; the
+    phones these teachers actually carry go down to 320, where the same row has
+    40pt less to divide between six chips and the label was being clipped
+    mid-word. Tightened rather than wrapped: two ragged rows of chips read as a
+    layout that broke, and the chips are still a comfortable tap target.
+  */
+  const narrow = useWindowDimensions().width < 360;
+
   const [blocked, setBlocked] = useState(false);
   const [count, setCount] = useState(0);
 
@@ -318,7 +329,7 @@ function ReminderSettings() {
         {on ? (
           <>
             <Divider inset={15} />
-            <View style={styles.leadRow}>
+            <View style={[styles.leadRow, { gap: narrow ? 5 : 8 }]}>
               {LEADS.map((m) => {
                 const active = m === lead;
                 return (
@@ -336,9 +347,18 @@ function ReminderSettings() {
                       },
                     ]}>
                     <Text
+                      numberOfLines={1}
+                      // Six chips share one row, so the widest label decides
+                      // whether any of them fit. "60 мин" on a 320pt phone does
+                      // not, and the word used to be clipped to "60 м". Shrinks
+                      // by a fifth at most, below which it would be unreadable
+                      // rather than merely small.
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
                       style={[
                         styles.leadLabel,
                         { color: active ? color.primaryInk : color.inkSoft },
+                        narrow && { fontSize: 11.5 },
                       ]}>
                       {t('profile.minutes', { count: m })}
                     </Text>

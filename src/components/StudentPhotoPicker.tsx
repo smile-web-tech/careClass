@@ -23,8 +23,8 @@ import { describeError } from '@/lib/errors';
 import {
   capturePhoto,
   deletePhoto,
-  photoUri,
   requestPhotoPermission,
+  useStudentPhoto,
   type PhotoSource,
 } from '@/lib/studentPhoto';
 import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -47,13 +47,15 @@ export function StudentPhotoPicker({
   const styles = useThemedStyles(makeStyles);
 
   /*
-    The URI is held in state with a cache-busting suffix rather than read on
-    every render. `expo-image` caches by URI, and the path never changes when a
-    photo is replaced — so without this the teacher retakes a picture and the
-    old one stays on screen.
+    Shared, not local.
+
+    This used to keep its own copy of the URI and its own cache-busting counter,
+    which fixed the picture here and nowhere else: the form showed the new face
+    and the register, the profile and the reply thread all went on showing the
+    old one. The counter now lives beside the file in `lib/studentPhoto`, so
+    every avatar for this student changes at the same moment.
   */
-  const [uri, setUri] = useState<string | null>(() => photoUri(studentId));
-  const [version, setVersion] = useState(0);
+  const photo = useStudentPhoto(studentId);
   const [busy, setBusy] = useState(false);
 
   const take = async (source: PhotoSource) => {
@@ -72,8 +74,8 @@ export function StudentPhotoPicker({
       const saved = await capturePhoto(studentId, source);
       if (!saved) return; // Backed out of the camera. Nothing to say.
 
-      setUri(saved);
-      setVersion((v) => v + 1);
+      // `capturePhoto` has already bumped the shared counter, so every screen
+      // showing this student is redrawing by the time this line runs.
       onChanged?.(true);
     } catch (e) {
       const described = describeError(e);
@@ -85,8 +87,6 @@ export function StudentPhotoPicker({
 
   const remove = () => {
     deletePhoto(studentId);
-    setUri(null);
-    setVersion((v) => v + 1);
     onChanged?.(false);
   };
 
@@ -99,7 +99,7 @@ export function StudentPhotoPicker({
       actions: [
         { label: t('photo.takePhoto'), value: 'camera', intent: 'primary' },
         { label: t('photo.choosePhoto'), value: 'library', intent: 'primary' },
-        ...(uri ? [{ label: t('photo.remove'), value: 'remove', intent: 'danger' as const }] : []),
+        ...(photo ? [{ label: t('photo.remove'), value: 'remove', intent: 'danger' as const }] : []),
         { label: t('common.cancel'), value: 'cancel', intent: 'quiet' as const },
       ],
     });
@@ -123,24 +123,19 @@ export function StudentPhotoPicker({
         <View style={styles.frame}>
           {busy ? (
             <ActivityIndicator color={color.primary} />
-          ) : uri ? (
-            <Image
-              source={{ uri: `${uri}?v=${version}` }}
-              style={styles.image}
-              contentFit="cover"
-              cachePolicy="none"
-            />
+          ) : photo ? (
+            <Image source={photo} style={styles.image} contentFit="cover" cachePolicy="none" />
           ) : (
             <Text style={styles.initials}>{initials}</Text>
           )}
 
           <View style={[styles.badge, { backgroundColor: color.primary }]}>
-            <Icon name={uri ? 'pencil' : 'plus'} size={12} color="#ffffff" />
+            <Icon name={photo ? 'pencil' : 'plus'} size={12} color="#ffffff" />
           </View>
         </View>
       </Press>
 
-      <Text style={styles.hint}>{uri ? t('photo.change') : t('photo.add')}</Text>
+      <Text style={styles.hint}>{photo ? t('photo.change') : t('photo.add')}</Text>
     </View>
   );
 }

@@ -18,6 +18,8 @@
  * inside ClassCare.
  */
 import { Directory, File, Paths } from 'expo-file-system';
+import { useMemo } from 'react';
+import { create } from 'zustand';
 
 import { moveIfPresent, photosDirectory } from '@/lib/appFolder';
 import { translateNow } from '@/i18n/useT';
@@ -86,6 +88,53 @@ const QUALITY = 0.8;
 const LEGACY_PHOTO_DIR = 'student-photos';
 
 export type PhotoSource = 'camera' | 'library';
+
+/* -------------------------------------------------------------------------- */
+/* Knowing a picture changed                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How many times each student's picture has been written on this device.
+ *
+ * Every student's photo lives at one unchanging path — `photos/<id>.jpg` — which
+ * is what makes export, import and deletion simple, and is also why a new
+ * picture used to show up on some screens and not others. Two things went
+ * wrong at once: a screen already mounted had no reason to re-read the file,
+ * and a screen that did re-read it was handed the same URI, so the image cache
+ * returned the bytes it already had. The register showed the new face and the
+ * profile showed the old one, or the other way round.
+ *
+ * A counter fixes both. Bumping it re-renders every avatar for that student,
+ * and it goes into the `cacheKey` so the loader treats the new picture as a
+ * different image rather than the same one it has already decoded.
+ *
+ * Not persisted. It only has to outlive the screens holding the old picture,
+ * and after a restart nothing is cached anyway.
+ */
+const usePhotoVersion = create<Record<string, number>>(() => ({}));
+
+/** Say that this student's picture is not what it was. */
+export function bumpPhoto(studentId: string) {
+  usePhotoVersion.setState((state) => ({ [studentId]: (state[studentId] ?? 0) + 1 }));
+}
+
+/**
+ * This student's picture, as something to hand straight to `<Image source>`.
+ *
+ * Null when there is none, so the caller falls back to initials. Re-renders
+ * when the picture is replaced, wherever in the app that happened.
+ */
+export function useStudentPhoto(studentId: string | undefined | null) {
+  const version = usePhotoVersion((state) => (studentId ? (state[studentId] ?? 0) : 0));
+
+  return useMemo(() => {
+    if (!studentId) return null;
+    const uri = photoUri(studentId);
+    // The URI itself stays clean: a `file://` path with a query string on the
+    // end is a path that does not exist. The version travels beside it instead.
+    return uri ? { uri, cacheKey: `${studentId}#${version}` } : null;
+  }, [studentId, version]);
+}
 
 /** Where this student's picture lives on the device. */
 export function photoFile(studentId: string): File {
@@ -203,6 +252,10 @@ export async function storeOptimised(studentId: string, sourceUri: string): Prom
   const temporary = new File(saved.uri);
   await temporary.move(destination);
 
+  // Same path, different face. Every avatar for this student has to be told,
+  // or the screens already showing the old one keep showing it.
+  bumpPhoto(studentId);
+
   // The manipulator writes to the cache directory. Moving it out is the tidy
   // thing, and also means the cache being cleared cannot take the photo.
   return destination.uri;
@@ -213,6 +266,7 @@ export function deletePhoto(studentId: string) {
   try {
     const file = photoFile(studentId);
     if (file.exists) file.delete();
+    bumpPhoto(studentId);
   } catch {
     // A picture that will not delete is not worth interrupting anyone over.
   }
@@ -238,6 +292,7 @@ export function writePhotoBase64(studentId: string, base64: string) {
   if (destination.exists) destination.delete();
   destination.create();
   destination.write(base64ToBytes(base64));
+  bumpPhoto(studentId);
 }
 
 /**
@@ -332,6 +387,7 @@ export async function downloadPhoto(studentId: string, path: string): Promise<bo
   const destination = photoFile(studentId);
   destination.create();
   destination.write(new Uint8Array(buffer));
+  bumpPhoto(studentId);
   return true;
 }
 

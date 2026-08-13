@@ -338,6 +338,27 @@ export async function writeSetting(key: string, value: unknown) {
   ]);
 }
 
+/**
+ * One setting, without loading the whole snapshot.
+ *
+ * `loadSnapshot` reads every collection on the device, which is the wrong price
+ * to pay for a single key — and the settings the import path needs are wanted
+ * before the store has been touched, not as part of starting up.
+ */
+export async function readSetting<T>(key: string): Promise<T | null> {
+  const db = await openLocalDb();
+  const row = await db.getFirstAsync<{ value: string }>(
+    'select value from settings where key = ?',
+    [key],
+  );
+  if (!row) return null;
+  try {
+    return JSON.parse(row.value) as T;
+  } catch {
+    return row.value as unknown as T;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Outbox                                                                     */
 /* -------------------------------------------------------------------------- */

@@ -189,7 +189,20 @@ export async function fetchAttendance(since?: Date): Promise<Record<string, Atte
   return out;
 }
 
-export async function fetchMessages(limit = 50): Promise<Message[]> {
+/**
+ * How much history a sync pulls back.
+ *
+ * Was 50, which is roughly a fortnight for a teacher with four groups — and a
+ * hard ceiling that quietly deleted the rest. A backup carrying a term of sent
+ * messages imported fine and then lost everything past the newest fifty at the
+ * first sync, which reads exactly like the import having failed.
+ *
+ * 500 is more than a year for the same teacher, and these rows are small: a
+ * body, a few delivery states, no attachments.
+ */
+const HISTORY_LIMIT = 500;
+
+export async function fetchMessages(limit = HISTORY_LIMIT): Promise<Message[]> {
   const rows = unwrap(
     await supabase
       .from('messages')
@@ -211,7 +224,7 @@ export async function fetchMessages(limit = 50): Promise<Message[]> {
   );
 }
 
-export async function fetchReplies(limit = 50): Promise<Reply[]> {
+export async function fetchReplies(limit = HISTORY_LIMIT): Promise<Reply[]> {
   const rows = unwrap(
     await supabase
       .from('replies')
@@ -394,7 +407,7 @@ export async function createGroup(group: Group): Promise<Group> {
       await supabase
         .from('group_slots')
         .insert(
-          group.slots.map((s) => ({
+          distinctSlots(group.slots).map((s) => ({
             group_id: row.id,
             teacher_id: teacherId,
             weekday: s.day,
@@ -408,6 +421,26 @@ export async function createGroup(group: Group): Promise<Group> {
 
   return { ...group, id: row.id };
 }
+
+/**
+ * One slot per day and start time, which is what the table allows.
+ *
+ * `group_slots` is unique on `(group_id, weekday, starts_at)`. A form that
+ * produced the same day twice — easily done by adding Monday, changing your
+ * mind, and adding it again — used to reach the server as two identical rows
+ * and come back as "Already exists" against the whole group, which reads as the
+ * *group* being a duplicate and sends the teacher looking for a clash that is
+ * not there.
+ */
+const distinctSlots = <T extends { day: number; start: string }>(slots: T[]): T[] => {
+  const seen = new Set<string>();
+  return slots.filter((s) => {
+    const key = `${s.day}#${s.start}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
 
 /* -------------------------------------------------------------------------- */
 /* Calendar events                                                            */
@@ -522,7 +555,7 @@ export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>)
     if (patch.slots.length) {
       unwrap(
         await supabase.from('group_slots').insert(
-          patch.slots.map((s) => ({
+          distinctSlots(patch.slots).map((s) => ({
             group_id: id,
             teacher_id: teacherId,
             weekday: s.day,
@@ -585,12 +618,20 @@ export async function createStudent(student: Student): Promise<Student> {
       .single(),
   ) as StudentRow;
 
-  if (student.groupIds.length) {
+  // Cleared first, and de-duplicated, for the same reason `createGroup` clears
+  // its slots: a create can be replayed — a retry after a timeout that actually
+  // succeeded, or a row from an imported backup — and inserting the same
+  // (student, group) pair twice is a duplicate key error that fails the whole
+  // student, not just the link.
+  unwrap(await supabase.from('student_groups').delete().eq('student_id', row.id));
+
+  const groupIds = [...new Set(student.groupIds)];
+  if (groupIds.length) {
     unwrap(
       await supabase
         .from('student_groups')
         .insert(
-          student.groupIds.map((group_id) => ({
+          groupIds.map((group_id) => ({
             student_id: row.id,
             group_id,
             teacher_id: teacherId,
@@ -639,12 +680,15 @@ export async function updateStudent(id: string, patch: Partial<Student>) {
   if (patch.groupIds) {
     const teacherId = await requireUser();
     unwrap(await supabase.from('student_groups').delete().eq('student_id', id).select());
-    if (patch.groupIds.length) {
+    // De-duplicated: the same group listed twice is a duplicate key on the
+    // (student, group) pair, and the whole edit fails on it.
+    const groupIds = [...new Set(patch.groupIds)];
+    if (groupIds.length) {
       unwrap(
         await supabase
           .from('student_groups')
           .insert(
-            patch.groupIds.map((group_id) => ({
+            groupIds.map((group_id) => ({
               student_id: id,
               group_id,
               teacher_id: teacherId,
@@ -958,6 +1002,40 @@ export async function fetchMessageAttachments(messageId: string): Promise<Stored
   }));
 }
 
+/**
+ * Put a reply on the server that this device already holds.
+ *
+ * Replies normally arrive the other way round — the inbound-email function
+ * writes them and the app fetches them — so there was no path for one that came
+ * in from a backup file. Without this an imported inbox is local-only, and the
+ * first `hydrate` replaces it with the server's copy, which has never heard of
+ * any of it. That is the "inbox is empty after refreshing" the teacher sees.
+ *
+ * `inbound_message_id` is left null on purpose. It is the natural key of the
+ * *email* that produced the reply, unique across the table, and claiming the
+ * original's would collide with the row the webhook already wrote in whichever
+ * account exported the file.
+ */
+export async function createReply(reply: Reply) {
+  const teacherId = await requireUser();
+
+  unwrap(
+    await supabase
+      .from('replies')
+      .upsert({
+        id: reply.id,
+        teacher_id: teacherId,
+        student_id: reply.studentId ?? null,
+        author_name: reply.authorName,
+        context: reply.context,
+        body: reply.body,
+        received_at: new Date(reply.at).toISOString(),
+        read_at: reply.unread ? null : new Date(reply.at).toISOString(),
+      })
+      .select(),
+  );
+}
+
 export async function markRepliesRead() {
   unwrap(
     await supabase
@@ -1042,6 +1120,48 @@ export async function logSentMessage(entry: SentMessageLog) {
           error: d.error ?? null,
         })),
       ),
+    );
+  }
+}
+
+/**
+ * Put a message from a backup back in the history, without touching receipts.
+ *
+ * Deliberately not `logSentMessage`. That one owns the delivery rows and clears
+ * them before writing its own, which is right for a send the phone just made
+ * and catastrophic for a restore: a message the server already holds would have
+ * its real per-recipient receipts deleted and replaced with nothing, because a
+ * backup does not carry them — the device only ever stored the two counts.
+ *
+ * So this writes the message and the groups it went to, and leaves
+ * `message_deliveries` exactly as it found it. A message the server already had
+ * keeps its receipts; one that is genuinely new arrives with none, and shows a
+ * recipient count of zero. That is the truthful answer — the file never knew
+ * who it went to — and it beats inventing rows to make a number look right.
+ */
+export async function restoreMessage(message: Message) {
+  const teacherId = await requireUser();
+
+  unwrap(
+    await supabase
+      .from('messages')
+      .upsert({
+        id: message.id,
+        teacher_id: teacherId,
+        body: message.body,
+        audience: message.audience,
+        channels: message.channels,
+        announcement: message.announcement ?? message.groupIds.length === 0,
+        sent_at: new Date(message.sentAt).toISOString(),
+      })
+      .select(),
+  );
+
+  if (message.groupIds.length) {
+    unwrap(
+      await supabase
+        .from('message_groups')
+        .upsert(message.groupIds.map((group_id) => ({ message_id: message.id, group_id }))),
     );
   }
 }
