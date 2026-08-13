@@ -147,6 +147,14 @@ export default function EventForm() {
             ) : null}
           </Card>
 
+          {/* Said here because it is not obvious that writing something in the
+              calendar also arranges to be told about it. All-day entries have no
+              start time for a lead to count back from, so they say when they
+              actually arrive. */}
+          <Text style={styles.reminderNote}>
+            {allDay ? t('calendar.remindMorning') : t('calendar.remindBefore')}
+          </Text>
+
           <Overline style={styles.label}>{t('groups.colour')}</Overline>
           <View style={styles.accentRow}>
             {accentNames.map((a) => {
@@ -256,6 +264,14 @@ const makeStyles = ({ color }: Theme) =>
       justifyContent: 'center',
     },
     swatchDot: { width: 16, height: 16, borderRadius: 5 },
+    reminderNote: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: color.mutedLight,
+      marginTop: 12,
+    },
+
     accentName: {
       fontFamily: display[600],
       fontSize: 13,

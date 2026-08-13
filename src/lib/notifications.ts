@@ -19,7 +19,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import type { Group, Student } from '@/data/types';
+import type { CalendarEvent, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import { at, fromKey, toKey } from '@/lib/date';
 import { sessionsOn } from '@/lib/schedule';
@@ -37,6 +37,26 @@ const MAX_BIRTHDAYS = 20;
 
 /** Marks our reminders so we never clear a notification we did not set. */
 const REMINDER_KIND = 'class-reminder';
+
+/**
+ * The same thing for something the teacher wrote in the calendar themselves.
+ *
+ * A separate kind rather than a flag on the first, because tapping one has to
+ * open the event and tapping the other has to open the group — but they are
+ * planned together, cancelled together and counted together, because from the
+ * teacher's side there is one setting called Reminders and it means everything
+ * in the calendar.
+ */
+const EVENT_KIND = 'calendar-event';
+
+/**
+ * When an all-day entry is raised.
+ *
+ * "Fifteen minutes before" has no meaning for something with no time on it, so
+ * the lead is ignored and it arrives at eight in the morning — early enough to
+ * change the day around, late enough not to be a 6am alarm.
+ */
+const ALL_DAY_HOUR = 8;
 
 export type ReminderLead = 0 | 5 | 10 | 15 | 20 | 30 | 60;
 
@@ -130,13 +150,23 @@ export async function ensureAndroidChannel() {
 }
 
 /**
- * Rebuild the reminder schedule from the current groups.
+ * Rebuild the whole reminder schedule: classes and calendar entries together.
+ *
+ * One function and one lead time, because there is one switch in Profile and it
+ * says Reminders. A teacher who asks to be told fifteen minutes before means
+ * fifteen minutes before whatever it is — a lesson, a parents' evening, an exam
+ * they typed in themselves. Splitting that into two settings would be asking
+ * the same question twice.
  *
  * Cancels and re-creates rather than diffing: the set is small, and a diff that
  * gets it subtly wrong leaves a teacher being reminded about a class they moved
  * last week. Correctness is worth more than the handful of syscalls.
  */
-export async function rescheduleClassReminders(groups: Group[], lead: ReminderLead) {
+export async function rescheduleReminders(
+  groups: Group[],
+  events: CalendarEvent[],
+  lead: ReminderLead,
+) {
   if (!Device.isDevice) return 0;
   const { granted } = await Notifications.getPermissionsAsync();
   if (!granted) return 0;
@@ -145,39 +175,95 @@ export async function rescheduleClassReminders(groups: Group[], lead: ReminderLe
   await ensureAndroidChannel();
 
   const now = Date.now();
-  const planned: { when: Date; group: Group; start: string }[] = [];
+
+  /** One pending reminder, whichever kind of thing it is about. */
+  type Planned = {
+    when: Date;
+    title: string;
+    body: string;
+    data: Record<string, string>;
+  };
+  const planned: Planned[] = [];
+
+  /*
+    The text is frozen into the OS at scheduling time, not read when it fires —
+    which is why switching language has to re-plan the whole set.
+  */
+  const leadText = (start: string) =>
+    lead === 0
+      ? translateNow('notif.startingNow')
+      : translateNow('notif.startsIn', { min: lead, time: start });
 
   for (let d = 0; d < HORIZON_DAYS; d++) {
     const day = new Date();
     day.setDate(day.getDate() + d);
+
     for (const s of sessionsOn(groups, day)) {
       const group = groups.find((g) => g.id === s.groupId);
       if (!group) continue;
       const fireAt = new Date(at(toKey(day), s.start).getTime() - lead * 60_000);
       // A lead time can push the reminder into the past for today's classes.
       if (fireAt.getTime() <= now + 30_000) continue;
-      planned.push({ when: fireAt, group, start: s.start });
+
+      const when = leadText(s.start);
+      planned.push({
+        when: fireAt,
+        title: group.name,
+        // A room is optional in practice even though the type says otherwise:
+        // an online class has none, and " · undefined" in a notification is
+        // the kind of detail that makes an app look unfinished.
+        body: group.room?.trim() ? `${when} · ${group.room.trim()}` : when,
+        data: { kind: REMINDER_KIND, groupId: group.id, start: s.start },
+      });
     }
+  }
+
+  /*
+    Everything the teacher put in the calendar themselves, on the same terms.
+
+    Reminders used to cover classes and nothing else, so a parents' evening
+    typed into the calendar was a note the app kept and never mentioned again —
+    which is the one thing a teacher writes it down for.
+  */
+  const horizonEnd = now + HORIZON_DAYS * 86_400_000;
+
+  for (const event of events) {
+    const day = fromKey(event.date);
+    if (Number.isNaN(day.getTime())) continue;
+
+    const fireAt = event.allDay
+      ? new Date(day.getFullYear(), day.getMonth(), day.getDate(), ALL_DAY_HOUR, 0, 0, 0)
+      : event.start
+        ? new Date(at(event.date, event.start).getTime() - lead * 60_000)
+        : null;
+
+    if (!fireAt) continue;
+    if (fireAt.getTime() <= now + 30_000) continue;
+    if (fireAt.getTime() > horizonEnd) continue;
+
+    planned.push({
+      when: fireAt,
+      title: event.title,
+      body:
+        event.allDay || !event.start
+          ? translateNow('notif.todayAllDay')
+          : leadText(event.start),
+      data: { kind: EVENT_KIND, eventId: event.id },
+    });
   }
 
   planned.sort((a, b) => a.when.getTime() - b.when.getTime());
 
+  // The cap is shared rather than one budget each. iOS allows 64 pending
+  // notifications per app whatever they are about, and a teacher with a full
+  // calendar should get the next sixty things in order, not sixty classes and
+  // none of the events they typed in themselves.
   for (const p of planned.slice(0, MAX_SCHEDULED)) {
-    // The text is frozen into the OS at scheduling time, not read when it
-    // fires — which is why switching language has to re-plan the whole set.
-    const when =
-      lead === 0
-        ? translateNow('notif.startingNow')
-        : translateNow('notif.startsIn', { min: lead, time: p.start });
-
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: p.group.name,
-        // A room is optional in practice even though the type says otherwise:
-        // an online class has none, and " · undefined" in a notification is
-        // the kind of detail that makes an app look unfinished.
-        body: p.group.room?.trim() ? `${when} · ${p.group.room.trim()}` : when,
-        data: { kind: REMINDER_KIND, groupId: p.group.id, start: p.start },
+        title: p.title,
+        body: p.body,
+        data: p.data,
         ...(Platform.OS === 'android' ? { channelId: 'classes' } : {}),
       },
       trigger: {
@@ -275,12 +361,15 @@ export async function cancelBirthdays() {
   );
 }
 
+/** True for a reminder this app planned, class or calendar entry alike. */
+const isReminder = (kind: unknown) => kind === REMINDER_KIND || kind === EVENT_KIND;
+
 /** Remove only our reminders, leaving any other notification alone. */
 export async function cancelClassReminders() {
   const pending = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     pending
-      .filter((n) => n.content.data?.kind === REMINDER_KIND)
+      .filter((n) => isReminder(n.content.data?.kind))
       .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
   );
 }
@@ -288,7 +377,7 @@ export async function cancelClassReminders() {
 /** How many reminders are currently queued — shown in the profile screen. */
 export async function scheduledReminderCount() {
   const pending = await Notifications.getAllScheduledNotificationsAsync();
-  return pending.filter((n) => n.content.data?.kind === REMINDER_KIND).length;
+  return pending.filter((n) => isReminder(n.content.data?.kind)).length;
 }
 
 /**

@@ -34,7 +34,7 @@ import {
   type PermissionKey,
   type PermissionState,
 } from '@/lib/permissions';
-import { rescheduleBirthdays, rescheduleClassReminders } from '@/lib/notifications';
+import { rescheduleBirthdays, rescheduleReminders } from '@/lib/notifications';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -91,8 +91,8 @@ export default function Permissions() {
       foreground. A teacher who grants notifications and then has a class in an
       hour gets nothing, which reads as reminders being broken.
     */
-    const { groups, students, remindersOn, reminderLead } = useStore.getState();
-    if (remindersOn) void rescheduleClassReminders(groups, reminderLead);
+    const { groups, events, students, remindersOn, reminderLead } = useStore.getState();
+    if (remindersOn) void rescheduleReminders(groups, events, reminderLead);
     void rescheduleBirthdays(students);
 
     router.replace('/(tabs)');

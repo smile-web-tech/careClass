@@ -21,9 +21,11 @@ import { useT } from '@/i18n/useT';
 import { SUPPORT_EMAIL } from '@/lib/brand';
 import {
   cancelClassReminders,
+  getDevicePushToken,
+  notificationPermissionStatus,
   registerForPush,
   requestNotificationPermission,
-  rescheduleClassReminders,
+  rescheduleReminders,
   scheduledReminderCount,
   type ReminderLead,
 } from '@/lib/notifications';
@@ -499,15 +501,20 @@ function InfoRow({ icon, label, value }: { icon: IconName; label: string; value:
 const LEADS: ReminderLead[] = [5, 10, 15, 20, 30, 60];
 
 /**
- * Class reminders, raised by the phone itself rather than by the server — the
- * schedule is already on the device, so a reminder must not depend on the
+ * Reminders, raised by the phone itself rather than by the server — the
+ * calendar is already on the device, so a reminder must not depend on the
  * network being up. See `lib/notifications.ts`.
+ *
+ * One switch and one lead time for everything in the calendar. It used to say
+ * "Remind before class" and mean exactly that, so an event a teacher typed in
+ * themselves was kept and never mentioned again.
  */
 function ReminderSettings() {
   const t = useT();
   const { color } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const groups = useGroups();
+  const events = useStore((s) => s.events);
   const on = useStore((s) => s.remindersOn);
   const lead = useStore((s) => s.reminderLead);
   const setReminders = useStore((s) => s.setReminders);
@@ -541,11 +548,11 @@ function ReminderSettings() {
         void registerForPush((pushToken) => updateTeacher({ pushToken }));
       }
       setReminders(nextOn, nextLead);
-      if (nextOn) await rescheduleClassReminders(groups, nextLead);
+      if (nextOn) await rescheduleReminders(groups, events, nextLead);
       else await cancelClassReminders();
       await refresh();
     },
-    [groups, refresh, setReminders],
+    [events, groups, refresh, setReminders],
   );
 
   return (
@@ -553,7 +560,7 @@ function ReminderSettings() {
       <Card style={styles.group}>
         <View style={styles.toggleRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.actionLabel}>{t('profile.remindBeforeClass')}</Text>
+            <Text style={styles.actionLabel}>{t('profile.remindBefore')}</Text>
             <Text style={styles.actionHint} numberOfLines={2}>
               {on
                 ? count
@@ -604,11 +611,76 @@ function ReminderSettings() {
         <Press onPress={() => Linking.openSettings()} style={styles.blockedRow}>
           <Icon name="info" size={15} color={color.warningDeep} />
           <Text style={[styles.actionHint, { color: color.warningDeep, flex: 1 }]}>
-            Notifications are turned off for ClassCare. Tap to open Settings.
+            {t('profile.notificationsBlocked')}
           </Text>
         </Press>
       ) : null}
+
+      <PushStatus />
     </>
+  );
+}
+
+/**
+ * Whether this phone can receive a push at all.
+ *
+ * Reminders are raised by the phone; a parent's reply is raised by the server,
+ * and that needs a device token registered against the account. When it is
+ * missing there is nothing on screen to say so — push simply never arrives, and
+ * from the teacher's side that is indistinguishable from nobody having written
+ * back. This says which of the three it is, and retries when tapped.
+ */
+function PushStatus() {
+  const t = useT();
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  const [state, setState] = useState<'checking' | 'ready' | 'unavailable' | 'off'>('checking');
+
+  const check = useCallback(async () => {
+    const permission = await notificationPermissionStatus();
+    if (permission !== 'granted') {
+      setState('off');
+      return;
+    }
+    // A token means Play Services answered and the build carries the FCM
+    // config. No token is the answer to "why does push do nothing".
+    setState((await getDevicePushToken()) ? 'ready' : 'unavailable');
+  }, []);
+
+  useEffect(() => {
+    void check();
+  }, [check]);
+
+  const retry = async () => {
+    setState('checking');
+    await registerForPush((pushToken) => updateTeacher({ pushToken })).catch(() => false);
+    await check();
+  };
+
+  const hint: TranslationKey =
+    state === 'ready'
+      ? 'profile.pushReady'
+      : state === 'unavailable'
+        ? 'profile.pushUnavailable'
+        : state === 'off'
+          ? 'profile.pushOff'
+          : 'profile.pushChecking';
+
+  return (
+    <Card style={[styles.group, { marginTop: 10 }]}>
+      <Press onPress={() => void retry()} style={styles.toggleRow}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.actionLabel}>{t('profile.pushTitle')}</Text>
+          <Text style={styles.actionHint}>{t(hint)}</Text>
+        </View>
+        <Icon
+          name={state === 'ready' ? 'check' : 'refresh'}
+          size={16}
+          color={state === 'ready' ? color.successDeep : color.inkSoft}
+        />
+      </Press>
+    </Card>
   );
 }
 

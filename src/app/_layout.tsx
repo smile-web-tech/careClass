@@ -38,7 +38,7 @@ import {
 import {
   registerForPush,
   rescheduleBirthdays,
-  rescheduleClassReminders,
+  rescheduleReminders,
 } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -130,15 +130,16 @@ function useFlushOnForeground() {
 }
 
 /**
- * Keep local class reminders true to the schedule.
+ * Keep local reminders true to the calendar.
  *
- * Reminders are scheduled from the group list, so editing a group's day or time
- * must re-plan them — otherwise the teacher is reminded about a class that
- * moved. Also re-plans on foreground, because the horizon is finite and a phone
- * left closed for a week would otherwise run dry.
+ * Reminders are scheduled from the groups and the events, so editing either has
+ * to re-plan them — otherwise the teacher is reminded about a class that moved
+ * or an evening they cancelled. Also re-plans on foreground, because the horizon
+ * is finite and a phone left closed for a week would otherwise run dry.
  */
 function useClassReminders() {
   const groups = useGroups();
+  const events = useStore((s) => s.events);
   const students = useStore((s) => s.students);
   const on = useStore((s) => s.remindersOn);
   const lead = useStore((s) => s.reminderLead);
@@ -149,8 +150,8 @@ function useClassReminders() {
 
   useEffect(() => {
     if (!on) return;
-    void rescheduleClassReminders(groups, lead);
-  }, [groups, on, lead, language]);
+    void rescheduleReminders(groups, events, lead);
+  }, [groups, events, on, lead, language]);
 
   /*
     Birthdays follow the roster rather than the reminder switch: a teacher who
@@ -168,10 +169,10 @@ function useClassReminders() {
   useEffect(() => {
     if (!on) return;
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void rescheduleClassReminders(groups, lead);
+      if (state === 'active') void rescheduleReminders(groups, events, lead);
     });
     return () => sub.remove();
-  }, [groups, on, lead, language]);
+  }, [groups, events, on, lead, language]);
 }
 
 /**
@@ -194,7 +195,7 @@ function useNotificationRouting() {
     if (!response || !signedIn) return;
 
     const data = response.notification.request.content.data as
-      { kind?: string; groupId?: string; replyId?: string; studentId?: string } | undefined;
+      { kind?: string; groupId?: string; replyId?: string; studentId?: string; eventId?: string } | undefined;
 
     if (data?.kind === 'class-reminder' && data.groupId) {
       router.push({ pathname: '/group/[id]', params: { id: data.groupId } });
@@ -205,6 +206,12 @@ function useNotificationRouting() {
     // usually wants the phone number that is on that screen.
     if (data?.kind === 'student-birthday' && data.studentId) {
       router.push({ pathname: '/student/[id]', params: { id: data.studentId } });
+      return;
+    }
+
+    // Their own calendar entry, opened where they can read the note on it.
+    if (data?.kind === 'calendar-event' && data.eventId) {
+      router.push(`/event/new?id=${data.eventId}`);
       return;
     }
 
