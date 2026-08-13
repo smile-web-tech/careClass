@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
+import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { EmptyState, IconButton, Press } from '@/components/ui';
 import { useEvents, useGroups, useStudents } from '@/data/store';
@@ -34,13 +35,20 @@ import { sessionPhase, sessionsOn, roomLabel } from '@/lib/schedule';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
+/**
+ * Where a class is in its day, as a colour and a word.
+ *
+ * The word is a key rather than the word itself: these four were written in
+ * English and stayed English in every language, so a Turkmen teacher read
+ * "Done" and "Now" on an otherwise translated screen.
+ */
 const phaseBadge = ({ color, status }: Theme) =>
   ({
-    done: { label: 'Done', bg: status.present.tint, fg: status.present.ink },
-    live: { label: 'Now', bg: status.present.tint, fg: status.present.ink },
-    next: { label: 'Next', bg: color.primaryTint, fg: color.primaryInk },
-    later: { label: 'Later', bg: color.fill, fg: color.muted },
-  }) as const;
+    done: { label: 'calendar.phaseDone', bg: status.present.tint, fg: status.present.ink },
+    live: { label: 'calendar.phaseLive', bg: status.present.tint, fg: status.present.ink },
+    next: { label: 'calendar.phaseNext', bg: color.primaryTint, fg: color.primaryInk },
+    later: { label: 'calendar.phaseLater', bg: color.fill, fg: color.muted },
+  }) as const satisfies Record<string, { label: TranslationKey; bg: string; fg: string }>;
 
 /** Height of one row of day cells. The grid animates between 1 and 6 of these. */
 const ROW_H = 62;
@@ -456,7 +464,7 @@ function TimelineRow({
               {group.name}
             </Text>
             <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-              <Text style={[styles.badgeLabel, { color: badge.fg }]}>{badge.label}</Text>
+              <Text style={[styles.badgeLabel, { color: badge.fg }]}>{t(badge.label)}</Text>
             </View>
           </View>
           <Text style={styles.sessionMeta}>

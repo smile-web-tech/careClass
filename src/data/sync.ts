@@ -19,7 +19,7 @@ import type {
 import { isLanguage, setActiveLanguage, type Language, type TranslationKey } from '@/i18n';
 import { translateNow } from '@/i18n/useT';
 import { describeError, isOfflineError } from '@/lib/errors';
-import { photoFile, syncMissingPhotos, uploadPhoto } from '@/lib/studentPhoto';
+import { deleteRemotePhoto, photoFile, syncMissingPhotos, uploadPhoto } from '@/lib/studentPhoto';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
 /**
@@ -134,6 +134,19 @@ export type Op =
  */
 async function uploadStudentPhoto(studentId: string) {
   if (!photoFile(studentId).exists) {
+    /*
+      Take the object with the row.
+
+      Clearing `photo_path` on its own left the JPEG sitting in storage under
+      the teacher's folder forever: invisible, unreferenced, and still counted
+      against the account. A replaced photo overwrites its object because the
+      path is derived from the student's id, but a *removed* one had nothing to
+      overwrite it.
+
+      Before the row, so a failure here leaves a row pointing at a file that is
+      still there — recoverable — rather than one pointing at nothing.
+    */
+    await deleteRemotePhoto(studentId);
     await api.updateStudent(studentId, { photoPath: undefined });
     useStore.setState((state) => ({
       students: state.students.map((s) =>

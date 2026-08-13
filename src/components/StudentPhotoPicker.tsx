@@ -23,6 +23,7 @@ import { describeError } from '@/lib/errors';
 import {
   capturePhoto,
   deletePhoto,
+  PHOTO_CACHE_POLICY,
   requestPhotoPermission,
   useStudentPhoto,
   type PhotoSource,
@@ -124,7 +125,7 @@ export function StudentPhotoPicker({
           {busy ? (
             <ActivityIndicator color={color.primary} />
           ) : photo ? (
-            <Image source={photo} style={styles.image} contentFit="cover" cachePolicy="none" />
+            <Image source={photo} style={styles.image} contentFit="cover" cachePolicy={PHOTO_CACHE_POLICY} />
           ) : (
             <Text style={styles.initials}>{initials}</Text>
           )}

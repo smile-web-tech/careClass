@@ -123,6 +123,10 @@ export function bumpPhoto(studentId: string) {
  *
  * Null when there is none, so the caller falls back to initials. Re-renders
  * when the picture is replaced, wherever in the app that happened.
+ *
+ * Pair it with `PHOTO_CACHE_POLICY` on the same `<Image>`. The counter is only
+ * half the job: it re-renders the screen, but the loader would still hand back
+ * the picture it decoded last time.
  */
 export function useStudentPhoto(studentId: string | undefined | null) {
   const version = usePhotoVersion((state) => (studentId ? (state[studentId] ?? 0) : 0));
@@ -130,11 +134,33 @@ export function useStudentPhoto(studentId: string | undefined | null) {
   return useMemo(() => {
     if (!studentId) return null;
     const uri = photoUri(studentId);
-    // The URI itself stays clean: a `file://` path with a query string on the
-    // end is a path that does not exist. The version travels beside it instead.
+    // The version is in the object so this is a new source on every change,
+    // which is what makes the view re-request rather than sit on what it drew.
     return uri ? { uri, cacheKey: `${studentId}#${version}` } : null;
   }, [studentId, version]);
 }
+
+/**
+ * Never cache a student's picture. Required, not an optimisation to weigh up.
+ *
+ * Every student's photo lives at one path for its whole life, so replacing the
+ * picture leaves the path identical — and the image loader keys its cache on
+ * exactly that. Worse, it keys on the path *and the size it was drawn at*, so
+ * the 44pt avatar in the register and the 76pt one on the profile are two
+ * separate entries: one gets re-read and the other serves the old face, which
+ * is precisely the "new photo in the list, old photo on the details page" this
+ * is here to stop.
+ *
+ * `cacheKey` looks like it should solve this and does not. On Android a
+ * `file://` source returns a raw model before the cache key is ever consulted —
+ * see `SourceMap.getGlideModel` — so the key is silently ignored for exactly
+ * the sources that need it.
+ *
+ * The cost is re-reading a 40 KB JPEG off local storage when a view mounts.
+ * There is no network in it, and `expo-image` already skips the memory cache
+ * under its default policy, so this gives up less than it appears to.
+ */
+export const PHOTO_CACHE_POLICY = 'none' as const;
 
 /** Where this student's picture lives on the device. */
 export function photoFile(studentId: string): File {
@@ -365,6 +391,21 @@ export async function uploadPhoto(studentId: string): Promise<string> {
   if (error) throw new Error(error.message);
 
   return path;
+}
+
+/**
+ * Remove this student's picture from storage.
+ *
+ * Quiet about a file that is not there: the teacher may never have had one on
+ * the server, or a second device may have removed it already, and neither is a
+ * failure worth stopping a save for.
+ */
+export async function deleteRemotePhoto(studentId: string): Promise<void> {
+  const { data: auth } = await supabase.auth.getSession();
+  const teacherId = auth.session?.user?.id;
+  if (!teacherId) return;
+
+  await supabase.storage.from('attachments').remove([photoStoragePath(teacherId, studentId)]);
 }
 
 /**

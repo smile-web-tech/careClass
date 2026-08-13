@@ -20,7 +20,7 @@ import {
 import Svg, { Circle, G, Path } from 'react-native-svg';
 
 import { Icon, type IconName } from '@/components/Icon';
-import { useStudentPhoto } from '@/lib/studentPhoto';
+import { PHOTO_CACHE_POLICY, useStudentPhoto } from '@/lib/studentPhoto';
 import {
   PRESS_OPACITY,
   radius,
@@ -260,6 +260,9 @@ export function Avatar({
     return (
       <Image
         source={photo}
+        // Not optional — see `PHOTO_CACHE_POLICY`. Without it this avatar keeps
+        // whichever face it drew first, at whichever size it drew it.
+        cachePolicy={PHOTO_CACHE_POLICY}
         style={[
           {
             width: size,

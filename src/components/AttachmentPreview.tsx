@@ -22,6 +22,7 @@ import { Icon } from '@/components/Icon';
 import { Button, Press } from '@/components/ui';
 import { useT } from '@/i18n/useT';
 import { formatBytes, signedAttachmentUrl } from '@/lib/attachments';
+import { PHOTO_CACHE_POLICY } from '@/lib/studentPhoto';
 import { radius, useThemedStyles } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -130,6 +131,17 @@ export function AttachmentPreview({
                 style={styles.image}
                 contentFit="contain"
                 transition={120}
+                /*
+                  Local files are never cached; downloaded ones still are.
+
+                  This viewer opens both a student's photo off the disk and an
+                  attachment pulled from storage. The photo lives at a path that
+                  never changes as the picture behind it does, so a cached copy
+                  is a stale copy — see `PHOTO_CACHE_POLICY`. An attachment cost
+                  mobile data to fetch and is immutable once fetched, so it keeps
+                  its cache.
+                */
+                cachePolicy={source.startsWith('file://') ? PHOTO_CACHE_POLICY : 'disk'}
                 onError={() => setFailed(true)}
               />
             ) : (

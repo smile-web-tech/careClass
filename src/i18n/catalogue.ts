@@ -498,6 +498,10 @@ const tk = {
   'calendar.deleteTitle': '«{title}» pozulsynmy?',
   'calendar.cannotUndo': 'Yzyna gaýtaryp bolmaz.',
   'calendar.nothingToday': 'Meýilnama ýok',
+  'calendar.phaseDone': 'Geçdi',
+  'calendar.phaseLive': 'Häzir',
+  'calendar.phaseNext': 'Indiki',
+  'calendar.phaseLater': 'Soňra',
   'calendar.addYourOwn': 'Öz wakaňy goşmak üçin + bas',
 
   /* ------------------------------------------------------------- Profile */
@@ -1267,6 +1271,10 @@ const ru: Record<TranslationKey, string> = {
   'calendar.deleteTitle': 'Удалить «{title}»?',
   'calendar.cannotUndo': 'Отменить будет нельзя.',
   'calendar.nothingToday': 'Ничего не запланировано',
+  'calendar.phaseDone': 'Прошло',
+  'calendar.phaseLive': 'Сейчас',
+  'calendar.phaseNext': 'Следующее',
+  'calendar.phaseLater': 'Позже',
   'calendar.addYourOwn': 'Нажмите +, чтобы добавить своё',
 
   /* ------------------------------------------------------------- Profile */
@@ -2034,6 +2042,10 @@ const en: Record<TranslationKey, string> = {
   'calendar.deleteTitle': 'Delete \u201c{title}\u201d?',
   'calendar.cannotUndo': 'This cannot be undone.',
   'calendar.nothingToday': 'Nothing scheduled',
+  'calendar.phaseDone': 'Done',
+  'calendar.phaseLive': 'Now',
+  'calendar.phaseNext': 'Next',
+  'calendar.phaseLater': 'Later',
   'calendar.addYourOwn': 'Tap + to add something of your own',
 
   /* ------------------------------------------------------------- Profile */
