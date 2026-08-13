@@ -219,8 +219,8 @@ export default function StudentProfile() {
               },
             ].flatMap((parent, index) => {
               const label = parent.name
-                ? `${t(index === 0 ? 'student.parent1' : 'student.parent2')} · ${parent.name}`
-                : t(index === 0 ? 'student.parent1' : 'student.parent2');
+                ? `${t(index === 0 ? 'student.mother' : 'student.father')} · ${parent.name}`
+                : t(index === 0 ? 'student.mother' : 'student.father');
 
               return [
                 parent.phone ? (
@@ -331,13 +331,13 @@ function StudentDetails({ student }: { student: Student }) {
   }
   if (student.parentWork) {
     rows.push({
-      label: `${t('student.parent1')} · ${t('student.work')}`,
+      label: `${t('student.mother')} · ${t('student.work')}`,
       value: student.parentWork,
     });
   }
   if (student.parent2Work) {
     rows.push({
-      label: `${t('student.parent2')} · ${t('student.work')}`,
+      label: `${t('student.father')} · ${t('student.work')}`,
       value: student.parent2Work,
     });
   }

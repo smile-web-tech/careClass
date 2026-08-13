@@ -313,7 +313,7 @@ export function StudentForm({
             />
           </Card>
 
-          <Overline style={styles.label}>{t('student.parent1')}</Overline>
+          <Overline style={styles.label}>{t('student.mother')}</Overline>
           <Card style={styles.group}>
             <FieldRow
               label={t('students.name')}
@@ -350,7 +350,7 @@ export function StudentForm({
             />
           </Card>
 
-          <Overline style={styles.label}>{t('student.parent2')}</Overline>
+          <Overline style={styles.label}>{t('student.father')}</Overline>
           <Card style={styles.group}>
             <FieldRow
               label={t('students.name')}
