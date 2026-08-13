@@ -54,8 +54,19 @@ moving Reply-To off the teacher's address, so it is paid back explicitly.
    ```
 6. **Apply `0006_inbound_replies.sql`**, which adds the dedupe key.
 
-Until `RESEND_INBOUND_DOMAIN` is set, `send-message` keeps using the teacher's
-own address as Reply-To and nothing changes. The rollout is one secret.
+Until `RESEND_INBOUND_DOMAIN` is set, `send-message` and `send-grades` keep
+using the teacher's own address as Reply-To and nothing changes. The rollout is
+one secret.
+
+`send-grades` only joined this in the same change that made it record its sends.
+It had no `message_deliveries` rows at all, and without a delivery id there is
+no token to put in the address — so a student replying to ask about a mark
+reached the teacher's mailbox and never the app. **Redeploy it**, or results
+keep behaving the old way however the secrets are set:
+
+```bash
+supabase functions deploy send-grades
+```
 
 ## Things worth knowing
 
