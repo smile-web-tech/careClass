@@ -97,6 +97,8 @@ type State = {
    * language instead of freezing in whichever one was active at sign-up.
    */
   gradeTemplate: string | null;
+  /** The wording for a mark below the pass mark. Null uses the app default. */
+  gradeTemplateFail: string | null;
   groups: Group[];
   students: Student[];
   /** Saved attendance, keyed by `attendanceKey`. */
@@ -188,6 +190,7 @@ type State = {
   setLanguage: (language: Language) => void;
   /** Null puts the teacher back on the app's translated default. */
   setGradeTemplate: (template: string | null) => void;
+  setGradeTemplateFail: (template: string | null) => void;
   setReminders: (on: boolean, lead?: ReminderLead) => void;
 
   addEvent: (e: Omit<CalendarEvent, 'id'>) => string;
@@ -238,6 +241,7 @@ export type StoreMirror = {
   }) => void;
   setLanguage: (language: Language) => void;
   setGradeTemplate: (template: string | null) => void;
+  setGradeTemplateFail: (template: string | null) => void;
   markRepliesRead: () => void;
   markReplyRead: (id: string) => void;
   deleteReply: (id: string) => void;
@@ -282,6 +286,7 @@ export const useStore = create<State>()((set, get) => ({
   teacherAvatarUrl: null,
   teacherProvider: 'email',
   gradeTemplate: null,
+  gradeTemplateFail: null,
   groups: [],
   students: [],
   attendance: {},
@@ -319,6 +324,7 @@ export const useStore = create<State>()((set, get) => ({
       teacherAvatarUrl: null,
       teacherProvider: 'email',
       gradeTemplate: null,
+      gradeTemplateFail: null,
       groups: [],
       students: [],
       attendance: {},
@@ -510,6 +516,11 @@ export const useStore = create<State>()((set, get) => ({
   setGradeTemplate: (template) => {
     set({ gradeTemplate: template });
     if (get().signedIn) mirror.setGradeTemplate?.(template);
+  },
+
+  setGradeTemplateFail: (template) => {
+    set({ gradeTemplateFail: template });
+    if (get().signedIn) mirror.setGradeTemplateFail?.(template);
   },
 
   markRepliesRead: () => {

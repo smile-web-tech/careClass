@@ -26,6 +26,7 @@ import { useStore, useTemplates } from '@/data/store';
 import type { MessageTemplate } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import {
+  defaultFailTemplate,
   defaultGradeTemplate,
   GRADE_PLACEHOLDERS,
   previewGradeTemplate,
@@ -35,7 +36,7 @@ import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
 export default function Templates() {
-  const { color, scheme } = useTheme();
+  const { accents, color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const t = useT();
@@ -43,7 +44,9 @@ export default function Templates() {
   const mine = useTemplates();
   const teacherName = useStore((s) => s.teacherName);
   const storedGradeTemplate = useStore((s) => s.gradeTemplate);
+  const storedFailTemplate = useStore((s) => s.gradeTemplateFail);
   const setGradeTemplate = useStore((s) => s.setGradeTemplate);
+  const setGradeTemplateFail = useStore((s) => s.setGradeTemplateFail);
   const addTemplate = useStore((s) => s.addTemplate);
   const updateTemplate = useStore((s) => s.updateTemplate);
   const removeTemplate = useStore((s) => s.removeTemplate);
@@ -59,10 +62,11 @@ export default function Templates() {
     it cannot be deleted, and it is not something you pick when composing. It
     is the wording every reported mark goes out with.
   */
-  const [editingGrade, setEditingGrade] = useState(false);
+  const [editingGrade, setEditingGrade] = useState<'pass' | 'fail' | null>(null);
   const [gradeText, setGradeText] = useState('');
 
-  const gradeTemplate = storedGradeTemplate ?? defaultGradeTemplate(t);
+  const passTemplate = storedGradeTemplate ?? defaultGradeTemplate(t);
+  const failTemplate = storedFailTemplate ?? defaultFailTemplate(t);
 
   const builtIn = builtInTemplates(t);
   const ready = title.trim().length > 1 && text.trim().length > 1;
@@ -98,7 +102,12 @@ export default function Templates() {
     if (yes) removeTemplate(template.id);
   };
 
+  /** The default for whichever of the two is open. */
+  const defaultFor = (which: 'pass' | 'fail') =>
+    which === 'pass' ? defaultGradeTemplate(t) : defaultFailTemplate(t);
+
   const saveGrade = () => {
+    if (!editingGrade) return;
     const next = gradeText.trim();
     if (next.length < 5) {
       void showAlert(t('grades.templateTitle'), t('template.saveFirst'), 'danger');
@@ -107,27 +116,34 @@ export default function Templates() {
     // Storing null when it matches the default keeps the teacher on the
     // translated text: they would otherwise be pinned to whichever language
     // was active on the day they opened this screen.
-    setGradeTemplate(next === defaultGradeTemplate(t).trim() ? null : next);
-    setEditingGrade(false);
+    const value = next === defaultFor(editingGrade).trim() ? null : next;
+    if (editingGrade === 'pass') setGradeTemplate(value);
+    else setGradeTemplateFail(value);
+    setEditingGrade(null);
   };
 
   const resetGrade = async () => {
+    if (!editingGrade) return;
     const yes = await confirm({
       title: t('grades.templateReset'),
       message: t('grades.templateResetConfirm'),
       confirmLabel: t('grades.templateReset'),
     });
     if (!yes) return;
-    setGradeTemplate(null);
-    setGradeText(defaultGradeTemplate(t));
+    if (editingGrade === 'pass') setGradeTemplate(null);
+    else setGradeTemplateFail(null);
+    setGradeText(defaultFor(editingGrade));
   };
 
   /* ------------------------------------------------- Editing the result */
 
-  if (editingGrade) {
+  if (editingGrade !== null) {
     return (
       <Screen>
-        <TopBar title={t('grades.templateTitle')} dismiss />
+        <TopBar
+          title={t(editingGrade === 'pass' ? 'grades.templatePass' : 'grades.templateFail')}
+          dismiss
+        />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -183,7 +199,7 @@ export default function Templates() {
         </KeyboardAvoidingView>
 
         <StickyFooter style={{ gap: 10 }}>
-          <Press onPress={() => setEditingGrade(false)} style={styles.cancel}>
+          <Press onPress={() => setEditingGrade(null)} style={styles.cancel}>
             <Text style={styles.cancelLabel}>{t('common.cancel')}</Text>
           </Press>
           <Button grow label={t('common.save')} height={50} onPress={saveGrade} />
@@ -269,24 +285,48 @@ export default function Templates() {
           paddingBottom: insets.bottom + 120,
         }}
         showsVerticalScrollIndicator={false}>
+        {/*
+          Two wordings, because a result is two different pieces of news. One
+          message cannot serve both: "you scored 31 out of 50" congratulates
+          when the pass mark is 25 and rebukes when it is 35.
+        */}
         <Overline style={styles.label}>{t('grades.templateTitle')}</Overline>
-        <Press
-          onPress={() => {
-            setGradeText(gradeTemplate);
-            setEditingGrade(true);
-          }}>
-          <Card style={styles.gradeCard}>
-            <View style={[styles.gradeGlyph, { backgroundColor: color.primaryTint }]}>
-              <Icon name="pencil" size={15} color={color.primaryInk} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.rowBody} numberOfLines={3}>
-                {gradeTemplate}
-              </Text>
-              <Text style={styles.gradeAction}>{t('grades.templateEdit')}</Text>
-            </View>
-          </Card>
-        </Press>
+        {[
+          { which: 'pass' as const, body: passTemplate, labelKey: 'grades.templatePass' as const },
+          { which: 'fail' as const, body: failTemplate, labelKey: 'grades.templateFail' as const },
+        ].map((entry) => (
+          <Press
+            key={entry.which}
+            onPress={() => {
+              setGradeText(entry.body);
+              setEditingGrade(entry.which);
+            }}
+            style={{ marginBottom: 10 }}>
+            <Card style={styles.gradeCard}>
+              <View
+                style={[
+                  styles.gradeGlyph,
+                  {
+                    backgroundColor:
+                      entry.which === 'pass' ? accents.emerald.tint : accents.amber.tint,
+                  },
+                ]}>
+                <Icon
+                  name={entry.which === 'pass' ? 'check' : 'warning'}
+                  size={15}
+                  color={entry.which === 'pass' ? accents.emerald.ink : accents.amber.ink}
+                />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.gradeKind}>{t(entry.labelKey)}</Text>
+                <Text style={styles.rowBody} numberOfLines={3}>
+                  {entry.body}
+                </Text>
+                <Text style={styles.gradeAction}>{t('grades.templateEdit')}</Text>
+              </View>
+            </Card>
+          </Press>
+        ))}
 
         <Overline style={[styles.label, { marginTop: 22 }]}>{t('template.mine')}</Overline>
         {mine.length === 0 ? (
@@ -406,6 +446,7 @@ const makeStyles = ({ color }: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    gradeKind: { fontFamily: body[700], fontSize: 13, color: color.ink, marginBottom: 4 },
     gradeAction: { fontFamily: body[700], fontSize: 12.5, color: color.primary, marginTop: 8 },
 
     previewCard: { paddingHorizontal: 15, paddingVertical: 14 },

@@ -104,6 +104,7 @@ const SETTINGS = [
   'teacherAvatarUrl',
   'teacherProvider',
   'gradeTemplate',
+  'gradeTemplateFail',
   'language',
   'languageChosen',
   'permissionsAsked',

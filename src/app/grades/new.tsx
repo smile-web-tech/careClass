@@ -94,6 +94,17 @@ export default function RecordGrades() {
   const [newType, setNewType] = useState<string | null>(null);
   const [title, setTitle] = useState(existing?.title ?? '');
   const [maxScore, setMaxScore] = useState(String(existing?.maxScore ?? 100));
+  /*
+    Half the total, unless the teacher already set one.
+
+    A default rather than a blank: leaving it empty means every result is
+    reported as a pass, which is a quiet way for the fail wording to never be
+    used by anyone who did not notice the field. Half is the convention here
+    and it is one tap to change.
+  */
+  const [passMark, setPassMark] = useState(
+    String(existing?.passMark ?? Math.round((existing?.maxScore ?? 100) / 2)),
+  );
   const [saving, setSaving] = useState(false);
 
   // Kept as strings while typing: "" is "no mark", and a number cannot hold
@@ -110,6 +121,11 @@ export default function RecordGrades() {
 
   const max = Number(maxScore);
   const maxValid = Number.isFinite(max) && max > 0;
+
+  // A pass mark above the total is a typo, not a decision, and storing it
+  // would mark the whole class as failing.
+  const pass = Number(passMark);
+  const passValid = passMark.trim() !== '' && Number.isFinite(pass) && pass >= 0 && pass <= max;
 
   const entered = Object.entries(scores).filter(([, v]) => v.trim() !== '');
   const invalid = entered.filter(([, v]) => {
@@ -181,6 +197,7 @@ export default function RecordGrades() {
       kindLabel: chosenKind,
       title: title.trim(),
       maxScore: max,
+      passMark: passValid ? pass : undefined,
       takenOn: existing?.takenOn ?? toKey(new Date()),
     };
 
@@ -281,7 +298,16 @@ export default function RecordGrades() {
               onChangeText={setMaxScore}
               keyboardType="numeric"
             />
+            <Divider inset={15} />
+            <FieldRow
+              label={t('grades.passMark')}
+              placeholder={String(Math.round(max / 2) || 50)}
+              value={passMark}
+              onChangeText={setPassMark}
+              keyboardType="numeric"
+            />
           </Card>
+          <Text style={styles.passHint}>{t('grades.passMarkHint')}</Text>
           {!maxValid ? <Text style={styles.error}>{t('grades.maxScoreError')}</Text> : null}
 
           <View style={styles.rosterHead}>
@@ -401,6 +427,14 @@ const makeStyles = ({ color }: Theme) =>
       fontSize: 12.5,
       color: color.dangerDeep,
       marginTop: 10,
+    },
+    passHint: {
+      fontFamily: body[400],
+      fontSize: 12,
+      lineHeight: 17,
+      color: color.mutedLight,
+      marginTop: 8,
+      marginBottom: 4,
     },
     typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
     addType: {

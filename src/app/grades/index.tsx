@@ -56,7 +56,12 @@ import {
   type SmsOutcome,
   type SmsRecipient,
 } from '@/lib/deviceSms';
-import { defaultGradeTemplate, renderGradeTemplate } from '@/lib/gradeTemplate';
+import {
+  defaultFailTemplate,
+  defaultGradeTemplate,
+  passed,
+  renderGradeTemplate,
+} from '@/lib/gradeTemplate';
 import { SmsRunSheet } from '@/components/SmsRunSheet';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
@@ -95,6 +100,7 @@ export default function Grades() {
 
   const teacherName = useStore((s) => s.teacherName);
   const storedTemplate = useStore((s) => s.gradeTemplate);
+  const storedFailTemplate = useStore((s) => s.gradeTemplateFail);
 
   // Same derived-default pattern as the composer: follow the data until the
   // teacher picks, so a screen opened before hydration finishes still works.
@@ -151,7 +157,11 @@ export default function Grades() {
    * numbers and the marks in its hand, and it needs them whether or not there
    * is a connection at the time.
    */
-  const smsRecipientsFor = (assessment: Assessment, audience: Audience, template: string) => {
+  const smsRecipientsFor = (
+    assessment: Assessment,
+    audience: Audience,
+    templates: { pass: string; fail: string },
+  ) => {
     const kindLabel = assessmentKindLabel(assessment, t);
     const date = shortDate(fromKey(assessment.takenOn));
     const recipients: SmsRecipient[] = [];
@@ -160,6 +170,11 @@ export default function Grades() {
     for (const grade of grades.filter((g) => g.assessmentId === assessment.id)) {
       const student = students.find((s) => s.id === grade.studentId);
       if (!student) continue;
+
+      // The wording follows the mark, not the batch: one send can carry
+      // congratulations to most of the class and a different sentence to the
+      // three who did not reach the pass mark.
+      const template = passed(grade.score, assessment.passMark) ? templates.pass : templates.fail;
 
       const vars = {
         student: student.name,
@@ -213,7 +228,10 @@ export default function Grades() {
   };
 
   const notify = async (assessment: Assessment) => {
-    const template = storedTemplate ?? defaultGradeTemplate(t);
+    const templates = {
+      pass: storedTemplate ?? defaultGradeTemplate(t),
+      fail: storedFailTemplate ?? defaultFailTemplate(t),
+    };
     const canText = deviceSmsSupported();
 
     /*
@@ -267,7 +285,9 @@ export default function Grades() {
           const report = await sendGrades({
             assessmentId: assessment.id,
             audience,
-            template,
+            template: templates.pass,
+            failTemplate: templates.fail,
+            passMark: assessment.passMark ?? null,
             labels: {
               whyStudent: t('grades.mailWhyStudent'),
               whyParent: t('grades.mailWhyParent'),
@@ -294,7 +314,7 @@ export default function Grades() {
       }
 
       if (channel !== 'email') {
-        const sent = await textResults(assessment, audience, template, lines);
+        const sent = await textResults(assessment, audience, templates, lines);
         anySent ||= sent;
       }
 
@@ -324,7 +344,7 @@ export default function Grades() {
   const textResults = async (
     assessment: Assessment,
     audience: Audience,
-    template: string,
+    templates: { pass: string; fail: string },
     lines: string[],
   ): Promise<boolean> => {
     if (!hasSmsPermission()) {
@@ -345,7 +365,7 @@ export default function Grades() {
       }
     }
 
-    const { recipients, noPhone } = smsRecipientsFor(assessment, audience, template);
+    const { recipients, noPhone } = smsRecipientsFor(assessment, audience, templates);
     if (noPhone) lines.push(t('grades.smsSkippedNoPhone', { count: noPhone }));
     if (!recipients.length) return false;
 
@@ -363,6 +383,18 @@ export default function Grades() {
 
     const delivered = results.filter((r) => r.state === 'sent');
     lines.push(t('grades.smsSent', { count: delivered.length }));
+
+    // Say which wording went where. A teacher who set the pass mark wrongly
+    // finds out here rather than from a parent.
+    if (assessment.passMark != null) {
+      const marks = grades.filter((g) => g.assessmentId === assessment.id);
+      const passes = marks.filter((g) => passed(g.score, assessment.passMark)).length;
+      lines.push(
+        `${t('grades.passedCount', { count: passes })} · ${t('grades.failedCount2', {
+          count: marks.length - passes,
+        })}`,
+      );
+    }
 
     // Only the students something actually reached are marked reported, so a
     // second run re-sends exactly what failed.

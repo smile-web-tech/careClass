@@ -27,6 +27,16 @@ type Payload = {
    */
   template?: string;
   /**
+   * The wording for a mark below `passMark`.
+   *
+   * One send covers a whole class, and a class is rarely all one thing. The
+   * function picks per student rather than the app sending twice, which would
+   * mean two round trips and two chances for half of them to fail.
+   */
+  failTemplate?: string;
+  /** Null or absent means no threshold, and everything is reported as a pass. */
+  passMark?: number | null;
+  /**
    * The three sentences around the message that are not the teacher's words:
    * why this address is receiving it, and how to stop. Also translated by the
    * app for the same reason.
@@ -47,8 +57,9 @@ const json = (body: unknown, status = 200) =>
   });
 
 const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
 
 const KIND_LABEL: Record<string, string> = {
@@ -194,9 +205,7 @@ function renderGradeEmail(opts: {
   );
 
   const stop = fill(opts.labels.stop ?? 'To stop these, reply STOP.');
-  const reply = fill(
-    opts.labels.reply ?? 'Reply to this email if you have a question about it.',
-  );
+  const reply = fill(opts.labels.reply ?? 'Reply to this email if you have a question about it.');
 
   const text = [body, '', reply, '', opts.teacherName, opts.groupName, '', why, stop].join('\n');
 
@@ -364,6 +373,22 @@ Deno.serve(async (req) => {
 
   const audience: Audience = payload.audience ?? 'students';
 
+  /**
+   * Which wording this mark gets.
+   *
+   * No pass mark means the teacher set none, and everything goes out with the
+   * pass wording — quietly switching a class to failure notices because a
+   * threshold was left blank would be the worst possible default. An absent
+   * fail template does the same, so an older app that sends only one still
+   * behaves exactly as it did.
+   */
+  const passTemplate = payload.template?.trim() || FALLBACK_TEMPLATE;
+  const failTemplate = payload.failTemplate?.trim() || passTemplate;
+  const passMark = typeof payload.passMark === 'number' ? payload.passMark : null;
+
+  const pickTemplate = (score: number) =>
+    passMark === null || score >= passMark ? passTemplate : failTemplate;
+
   let notified = 0;
   let failed = 0;
   let skipped = 0;
@@ -410,7 +435,7 @@ Deno.serve(async (req) => {
       for (const target of targets) {
         try {
           const { subject, text, html } = renderGradeEmail({
-            template: payload.template?.trim() || FALLBACK_TEMPLATE,
+            template: pickTemplate(Number(grade.score)),
             labels: payload.labels ?? {},
             recipientName: target.name,
             studentName: student.name,

@@ -41,8 +41,10 @@ export type TeacherRow = {
   phone: string | null;
   /** 'tk' | 'ru' — the app's language and the language students are written in. */
   language: string;
-  /** The teacher's own wording for a result. Null means use the app default. */
+  /** The teacher's own wording for a pass. Null means use the app default. */
   grade_template: string | null;
+  /** The wording for a mark below the pass mark. Null means the app default. */
+  grade_template_fail: string | null;
   created_at: string;
 };
 
@@ -176,6 +178,7 @@ export type AssessmentRow = {
   kind_label: string | null;
   title: string;
   max_score: number;
+  pass_mark: number | null;
   taken_on: string;
   created_at: string;
 };

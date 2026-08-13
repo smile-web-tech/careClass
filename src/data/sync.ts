@@ -96,7 +96,8 @@ export type Op =
   | { kind: 'event.update'; id: string; patch: Partial<Omit<CalendarEvent, 'id'>> }
   | { kind: 'event.delete'; id: string }
   | { kind: 'teacher.language'; language: Language }
-  | { kind: 'teacher.gradeTemplate'; template: string | null };
+  | { kind: 'teacher.gradeTemplate'; template: string | null }
+  | { kind: 'teacher.gradeTemplateFail'; template: string | null };
 
 /**
  * Upload one student's picture, then point their row at it.
@@ -190,6 +191,8 @@ function perform(op: Op): Promise<unknown> {
       return api.updateTeacher({ language: op.language });
     case 'teacher.gradeTemplate':
       return api.updateTeacher({ gradeTemplate: op.template });
+    case 'teacher.gradeTemplateFail':
+      return api.updateTeacher({ gradeTemplateFail: op.template });
   }
 }
 
@@ -217,7 +220,7 @@ function labelOf(op: Op): string {
                 ? 'sync.item.reply'
                 : op.kind === 'teacher.language'
                   ? 'sync.item.language'
-                  : op.kind === 'teacher.gradeTemplate'
+                  : op.kind.startsWith('teacher.gradeTemplate')
                     ? 'sync.item.template'
                     : 'sync.item.message';
   return translateNow(key);
@@ -417,6 +420,7 @@ function supersedes(a: Op, b: Op): boolean {
       return a.key === (b as typeof a).key;
     case 'teacher.language':
     case 'teacher.gradeTemplate':
+    case 'teacher.gradeTemplateFail':
     case 'replies.read':
       return true;
     case 'reply.read':
@@ -680,6 +684,7 @@ export async function hydrate() {
       teacherAvatarUrl: teacher.avatarUrl,
       teacherProvider: teacher.provider,
       gradeTemplate: teacher.gradeTemplate,
+      gradeTemplateFail: teacher.gradeTemplateFail,
     }),
   });
 
@@ -745,6 +750,9 @@ export const remote: StoreMirror = {
 
   setGradeTemplate: (template: string | null) =>
     enqueue({ kind: 'teacher.gradeTemplate', template }),
+
+  setGradeTemplateFail: (template: string | null) =>
+    enqueue({ kind: 'teacher.gradeTemplateFail', template }),
 
   markRepliesRead: () => enqueue({ kind: 'replies.read' }),
 

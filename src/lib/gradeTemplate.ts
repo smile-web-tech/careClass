@@ -62,6 +62,26 @@ const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
  */
 export const defaultGradeTemplate = (t: Translate) => t('grades.templateDefault');
 
+/**
+ * The starting wording for a mark below the pass mark.
+ *
+ * Written to be usable as it stands: it states the result and says what
+ * happens next, without praise it has not earned or blame the teacher did not
+ * ask for. A message that tells a fourteen-year-old they have failed should be
+ * the teacher's own sentence, and the point of this being editable is that it
+ * can be.
+ */
+export const defaultFailTemplate = (t: Translate) => t('grades.templateFailDefault');
+
+/**
+ * Which wording a mark gets.
+ *
+ * No pass mark means the teacher set none, and everything is reported with the
+ * pass wording — silently switching a class to failure notices because a
+ * threshold was left blank would be the worst possible default.
+ */
+export const passed = (score: number, passMark?: number) => passMark == null || score >= passMark;
+
 export function renderGradeTemplate(template: string, vars: GradeVars): string {
   return template
     .replaceAll('{name}', vars.name)

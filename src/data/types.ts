@@ -167,6 +167,14 @@ export type Assessment = {
   kindLabel?: string;
   title: string;
   maxScore: number;
+  /**
+   * Lowest score counted as a pass, and the line between the two wordings.
+   *
+   * Per assessment rather than per teacher: a mock exam out of 100 and a
+   * vocabulary quiz out of 10 do not share a threshold. Undefined means the
+   * teacher set none and every result goes out with the pass wording.
+   */
+  passMark?: number;
   /** `YYYY-MM-DD`, the same key format the schedule uses. */
   takenOn: string;
 };

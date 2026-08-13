@@ -232,8 +232,10 @@ export type TeacherProfile = {
   createdAt: string;
   /** Null until the teacher picks one; the device's choice then fills it in. */
   language: string | null;
-  /** What a result message says. Null until the teacher writes their own. */
+  /** What a passing result says. Null until the teacher writes their own. */
   gradeTemplate: string | null;
+  /** What a failing result says. Null until the teacher writes their own. */
+  gradeTemplateFail: string | null;
 };
 
 export async function fetchTeacher(): Promise<TeacherProfile | null> {
@@ -265,6 +267,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
       // A row that does not exist yet has chosen nothing; the device's pick wins.
       language: null,
       gradeTemplate: null,
+      gradeTemplateFail: null,
     };
 
     // Create it rather than returning a convincing-looking profile that exists
@@ -301,6 +304,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
     createdAt: row.created_at,
     language: row.language ?? null,
     gradeTemplate: row.grade_template ?? null,
+    gradeTemplateFail: row.grade_template_fail ?? null,
   };
 }
 
@@ -311,6 +315,7 @@ export async function updateTeacher(patch: {
   language?: string;
   /** Null clears it, which puts the teacher back on the translated default. */
   gradeTemplate?: string | null;
+  gradeTemplateFail?: string | null;
 }) {
   const teacherId = await requireUser();
   unwrap(
@@ -322,6 +327,9 @@ export async function updateTeacher(patch: {
         ...(patch.pushToken !== undefined && { push_token: patch.pushToken }),
         ...(patch.language !== undefined && { language: patch.language }),
         ...(patch.gradeTemplate !== undefined && { grade_template: patch.gradeTemplate }),
+        ...(patch.gradeTemplateFail !== undefined && {
+          grade_template_fail: patch.gradeTemplateFail,
+        }),
       })
       .eq('id', teacherId)
       .select(),
@@ -1055,6 +1063,7 @@ const toAssessment = (row: AssessmentRow): Assessment => ({
   kind: row.kind,
   kindLabel: row.kind_label ?? undefined,
   title: row.title,
+  passMark: row.pass_mark == null ? undefined : Number(row.pass_mark),
   maxScore: Number(row.max_score),
   takenOn: row.taken_on,
 });
@@ -1103,6 +1112,7 @@ export async function saveAssessment(
         kind: assessment.kind,
         kind_label: assessment.kindLabel ?? null,
         title: assessment.title,
+        pass_mark: assessment.passMark ?? null,
         max_score: assessment.maxScore,
         taken_on: assessment.takenOn,
       })
@@ -1190,6 +1200,15 @@ export async function sendGrades(input: {
    * guessing that.
    */
   template: string;
+  /**
+   * The wording for a mark below `passMark`.
+   *
+   * Sent alongside the pass wording rather than instead of it, because one
+   * send covers a whole class and the two halves of it need different words.
+   */
+  failTemplate: string;
+  /** Null means no threshold was set, and every result is reported as a pass. */
+  passMark: number | null;
   /**
    * The sentences that are not the teacher's: why this address is receiving
    * the message, and how to stop. Translated here and filled in by the
