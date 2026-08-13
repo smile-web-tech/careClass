@@ -1,6 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import * as api from '@/data/api';
+import { loadSnapshot, readOutbox, replaceOutbox, writeSetting } from '@/data/localDb';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
 import { useSyncStatus } from '@/data/syncStatus';
 import type {
@@ -210,7 +209,7 @@ const retryDelay = (attempts: number) => Math.min(2 ** attempts * 1000, 30_000);
 
 /* ------------------------------ persistence ------------------------------ */
 
-const OUTBOX_KEY = 'classcare-outbox-v1';
+const OWNER_KEY = 'outbox_owner';
 
 /**
  * Whose queue this is.
@@ -236,9 +235,14 @@ function persistQueue() {
   // work it exists to protect.
   queueOwner = queueOwner ?? useStore.getState().teacherId;
 
-  const snapshot = JSON.stringify({ teacherId: queueOwner, ops: queue.map((q) => q.op) });
+  const ops = queue.map((q) => q.op);
+  const owner = queueOwner;
+
   writing = writing
-    .then(() => AsyncStorage.setItem(OUTBOX_KEY, snapshot))
+    .then(async () => {
+      await replaceOutbox(ops);
+      await writeSetting(OWNER_KEY, owner);
+    })
     .catch((e) => console.warn('[classcare] could not save the outbox:', e));
 }
 
@@ -253,25 +257,25 @@ export async function restoreQueue(teacherId: string | null) {
   queueOwner = teacherId;
 
   // Once per process. `SIGNED_IN` can fire again on a re-auth, and reading the
-  // file a second time would push every pending op into the queue twice — two
+  // table a second time would push every pending op into the queue twice — two
   // registers, two groups, from one tap.
   if (restored) return;
   restored = true;
 
   try {
-    const raw = await AsyncStorage.getItem(OUTBOX_KEY);
-    if (!raw) return;
+    const snapshot = await loadSnapshot();
+    const saved = await readOutbox();
+    if (!saved.length) return;
 
-    const saved = JSON.parse(raw) as { teacherId?: string | null; ops?: Op[] };
-
-    // Someone else's unsent work, or a queue from before this field existed.
-    // Either way it must not be replayed under this account.
-    if ((saved.teacherId ?? null) !== teacherId) {
-      await AsyncStorage.removeItem(OUTBOX_KEY);
+    // Someone else's unsent work. It must never be replayed under this
+    // account: it would file their students into the wrong teacher's classes.
+    const owner = (snapshot.settings[OWNER_KEY] as string | null | undefined) ?? null;
+    if (owner !== teacherId) {
+      await replaceOutbox([]);
       return;
     }
 
-    for (const op of saved.ops ?? []) queue.push({ op, attempts: 0 });
+    for (const row of saved) queue.push({ op: row.op as Op, attempts: 0 });
     publish();
     if (queue.length) void drain();
   } catch (e) {
@@ -288,7 +292,8 @@ export async function clearQueue() {
   publish();
   useSyncStatus.getState().report({ offline: false, failure: null });
   try {
-    await AsyncStorage.removeItem(OUTBOX_KEY);
+    await replaceOutbox([]);
+    await writeSetting(OWNER_KEY, null);
   } catch {
     // Nothing to do about it, and the in-memory queue is already empty.
   }

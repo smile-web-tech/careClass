@@ -24,6 +24,7 @@ import { DialogHost } from '@/components/Dialog';
 import { Intro } from '@/components/Intro';
 import { SyncBanner } from '@/components/SyncBanner';
 import { updateTeacher } from '@/data/api';
+import { loadLocal, startPersistence, wipeLocal } from '@/data/persistence';
 import { useGroups, useStore } from '@/data/store';
 import {
   clearQueue,
@@ -71,6 +72,9 @@ function useSupabaseSession() {
       if (signedIn && userId && userId !== useStore.getState().teacherId) {
         useStore.getState().resetAccount();
         void clearQueue();
+        // The tables as well as the store. Leaving them would put the previous
+        // teacher's students back on screen at the next launch.
+        void wipeLocal();
       }
 
       useStore.setState({
@@ -307,7 +311,41 @@ function SplashGate({ fontsReady }: { fontsReady: boolean }) {
   return null;
 }
 
+/**
+ * Read the device's database before the first frame.
+ *
+ * Rendering from an empty store would send a signed-in teacher to the welcome
+ * screen for a moment and then jump them to the tabs, which reads as having
+ * been signed out. The splash stays up instead — it is already up for the
+ * fonts, so this costs nothing visible.
+ */
+function useLocalStore() {
+  const [localReady, setLocalReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    loadLocal()
+      .catch((e) => {
+        // A database that cannot be read is not a reason to refuse to start.
+        // The teacher gets an empty app that syncs itself back from the
+        // server, which is bad, and a locked splash screen, which is worse.
+        console.warn('[classcare] could not read the local database:', e);
+      })
+      .finally(() => {
+        if (!alive) return;
+        startPersistence();
+        setLocalReady(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return localReady;
+}
+
 export default function RootLayout() {
+  const localReady = useLocalStore();
   const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
@@ -323,7 +361,7 @@ export default function RootLayout() {
   // Holding the splash avoids a flash of system-font text before Space Grotesk
   // and Plus Jakarta are ready — every heading in the app depends on them.
   const fontsReady = fontsLoaded || !!fontError;
-  if (!fontsReady) return null;
+  if (!fontsReady || !localReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

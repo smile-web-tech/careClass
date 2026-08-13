@@ -1,8 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { useMemo } from 'react';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type {
   Assessment,
@@ -246,15 +244,56 @@ export const setStoreMirror = (m: Partial<StoreMirror>) => {
   mirror = m;
 };
 
-export const useStore = create<State>()(
-  persist(
-    (set, get) => ({
-      signedIn: false,
+/**
+ * The store screens read from.
+ *
+ * No persistence middleware any more. It lived in AsyncStorage as one JSON
+ * blob, rewritten in full on every change, which is fine until the change is
+ * the thirtieth mark of a register and the phone is killed halfway through the
+ * write. `data/persistence.ts` now loads this from — and saves it to — the
+ * SQLite database in `data/localDb.ts`, a collection at a time.
+ */
+export const useStore = create<State>()((set, get) => ({
+  signedIn: false,
+  teacherId: null,
+  // Empty, not seeded. A public build must never show a new teacher a class
+  // of invented students — they look real, they are indistinguishable from
+  // a sync that half-worked, and one of them ending up in a message would
+  // be unforgivable.
+  teacherName: '',
+  teacherEmail: null,
+  teacherAvatarUrl: null,
+  teacherProvider: 'email',
+  gradeTemplate: null,
+  groups: [],
+  students: [],
+  attendance: {},
+  messages: [],
+  replies: [],
+  events: [],
+  assessments: [],
+  assessmentTypes: [],
+  grades: [],
+  templates: [],
+  language: DEFAULT_LANGUAGE,
+  languageChosen: false,
+  remindersOn: false,
+  reminderLead: 15,
+
+  signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
+
+  // Signing out clears the account's data as well as the flag. Leaving it
+  // in place meant the next teacher to sign in on this phone saw the last
+  // one's classes — and a shared staffroom phone is exactly how this app
+  // gets used.
+  signOut: () => {
+    get().resetAccount();
+    set({ signedIn: false });
+  },
+
+  resetAccount: () =>
+    set({
       teacherId: null,
-      // Empty, not seeded. A public build must never show a new teacher a class
-      // of invented students — they look real, they are indistinguishable from
-      // a sync that half-worked, and one of them ending up in a message would
-      // be unforgivable.
       teacherName: '',
       teacherEmail: null,
       teacherAvatarUrl: null,
@@ -270,381 +309,307 @@ export const useStore = create<State>()(
       assessmentTypes: [],
       grades: [],
       templates: [],
-      language: DEFAULT_LANGUAGE,
-      languageChosen: false,
+      // Reminders are scheduled against groups that have just been dropped,
+      // so the schedule is meaningless now. `useClassReminders` re-plans
+      // from whatever the next account turns out to have.
       remindersOn: false,
-      reminderLead: 15,
+    }),
 
-      signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
+  addGroup: (g) => {
+    const id = uid();
+    const group = {
+      ...g,
+      id,
+      accent: g.accent ?? accentNames[get().groups.length % accentNames.length],
+    };
+    set((s) => ({ groups: [...s.groups, group] }));
+    mirror.createGroup?.(group);
+    return id;
+  },
 
-      // Signing out clears the account's data as well as the flag. Leaving it
-      // in place meant the next teacher to sign in on this phone saw the last
-      // one's classes — and a shared staffroom phone is exactly how this app
-      // gets used.
-      signOut: () => {
-        get().resetAccount();
-        set({ signedIn: false });
-      },
+  /**
+   * Edit a group. Slots are replaced wholesale, matching what the API does
+   * — see `updateGroup` there for why diffing them would be wrong.
+   */
+  updateGroup: (id, patch) => {
+    set((s) => ({
+      groups: s.groups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
+    }));
+    mirror.updateGroup?.(id, patch);
+  },
 
-      resetAccount: () =>
-        set({
-          teacherId: null,
-          teacherName: '',
-          teacherEmail: null,
-          teacherAvatarUrl: null,
-          teacherProvider: 'email',
-          gradeTemplate: null,
-          groups: [],
-          students: [],
-          attendance: {},
-          messages: [],
-          replies: [],
-          events: [],
-          assessments: [],
-          assessmentTypes: [],
-          grades: [],
-          templates: [],
-          // Reminders are scheduled against groups that have just been dropped,
-          // so the schedule is meaningless now. `useClassReminders` re-plans
-          // from whatever the next account turns out to have.
-          remindersOn: false,
-        }),
+  /**
+   * Remove a group. Students stay — they are people, not memberships — but
+   * lose this group from their `groupIds`, mirroring the `student_groups`
+   * cascade on the server.
+   */
+  removeGroup: (id) => {
+    set((s) => ({
+      groups: s.groups.filter((g) => g.id !== id),
+      students: s.students.map((st) =>
+        st.groupIds.includes(id) ? { ...st, groupIds: st.groupIds.filter((g) => g !== id) } : st,
+      ),
+    }));
+    mirror.deleteGroup?.(id);
+  },
 
-      addGroup: (g) => {
-        const id = uid();
-        const group = {
-          ...g,
-          id,
-          accent: g.accent ?? accentNames[get().groups.length % accentNames.length],
+  addStudent: (input) => {
+    const id = uid();
+    const student: Student = {
+      ...input,
+      id,
+      accent: accentNames[get().students.length % accentNames.length],
+    };
+    set((s) => ({ students: [...s.students, student] }));
+    mirror.createStudent?.(student);
+    return id;
+  },
+
+  updateStudent: (id, patch) => {
+    set((s) => ({
+      students: s.students.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    }));
+    mirror.updateStudent?.(id, patch);
+  },
+
+  removeStudent: (id) => {
+    set((s) => ({ students: s.students.filter((x) => x.id !== id) }));
+    mirror.archiveStudent?.(id);
+  },
+
+  /**
+   * Replace a group's roster with exactly `studentIds`.
+   *
+   * Membership lives on the student (`groupIds`), mirroring the
+   * `student_groups` join table, so this walks the students rather than the
+   * group. Only the ones whose membership actually changes are written —
+   * both to keep the local update small and, more importantly, because each
+   * mirrored `updateStudent` rewrites that student's whole membership row
+   * set on the server.
+   */
+  setGroupRoster: (groupId, studentIds) => {
+    const wanted = new Set(studentIds);
+
+    const changes = get()
+      .students.map((st) => {
+        const isMember = st.groupIds.includes(groupId);
+        if (isMember === wanted.has(st.id)) return null;
+        return {
+          id: st.id,
+          groupIds: isMember ? st.groupIds.filter((g) => g !== groupId) : [...st.groupIds, groupId],
         };
-        set((s) => ({ groups: [...s.groups, group] }));
-        mirror.createGroup?.(group);
-        return id;
-      },
+      })
+      .filter((c) => c !== null);
 
-      /**
-       * Edit a group. Slots are replaced wholesale, matching what the API does
-       * — see `updateGroup` there for why diffing them would be wrong.
-       */
-      updateGroup: (id, patch) => {
-        set((s) => ({
-          groups: s.groups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
-        }));
-        mirror.updateGroup?.(id, patch);
-      },
+    if (changes.length === 0) return;
 
-      /**
-       * Remove a group. Students stay — they are people, not memberships — but
-       * lose this group from their `groupIds`, mirroring the `student_groups`
-       * cascade on the server.
-       */
-      removeGroup: (id) => {
-        set((s) => ({
-          groups: s.groups.filter((g) => g.id !== id),
-          students: s.students.map((st) =>
-            st.groupIds.includes(id)
-              ? { ...st, groupIds: st.groupIds.filter((g) => g !== id) }
-              : st,
-          ),
-        }));
-        mirror.deleteGroup?.(id);
-      },
+    const next = new Map(changes.map((c) => [c.id, c.groupIds]));
+    set((s) => ({
+      students: s.students.map((st) => {
+        const groupIds = next.get(st.id);
+        return groupIds ? { ...st, groupIds } : st;
+      }),
+    }));
 
-      addStudent: (input) => {
-        const id = uid();
-        const student: Student = {
-          ...input,
-          id,
-          accent: accentNames[get().students.length % accentNames.length],
-        };
-        set((s) => ({ students: [...s.students, student] }));
-        mirror.createStudent?.(student);
-        return id;
-      },
+    for (const c of changes) mirror.updateStudent?.(c.id, { groupIds: c.groupIds });
+  },
 
-      updateStudent: (id, patch) => {
-        set((s) => ({
-          students: s.students.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        }));
-        mirror.updateStudent?.(id, patch);
-      },
+  setReminders: (on, lead) =>
+    set((s) => ({ remindersOn: on, reminderLead: lead ?? s.reminderLead })),
 
-      removeStudent: (id) => {
-        set((s) => ({ students: s.students.filter((x) => x.id !== id) }));
-        mirror.archiveStudent?.(id);
-      },
+  addEvent: (input) => {
+    const id = uid();
+    const event: CalendarEvent = { ...input, id };
+    set((s) => ({ events: [...s.events, event] }));
+    mirror.createEvent?.(event);
+    return id;
+  },
 
-      /**
-       * Replace a group's roster with exactly `studentIds`.
-       *
-       * Membership lives on the student (`groupIds`), mirroring the
-       * `student_groups` join table, so this walks the students rather than the
-       * group. Only the ones whose membership actually changes are written —
-       * both to keep the local update small and, more importantly, because each
-       * mirrored `updateStudent` rewrites that student's whole membership row
-       * set on the server.
-       */
-      setGroupRoster: (groupId, studentIds) => {
-        const wanted = new Set(studentIds);
+  updateEvent: (id, patch) => {
+    set((s) => ({
+      events: s.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    }));
+    mirror.updateEvent?.(id, patch);
+  },
 
-        const changes = get()
-          .students.map((st) => {
-            const isMember = st.groupIds.includes(groupId);
-            if (isMember === wanted.has(st.id)) return null;
-            return {
-              id: st.id,
-              groupIds: isMember
-                ? st.groupIds.filter((g) => g !== groupId)
-                : [...st.groupIds, groupId],
-            };
-          })
-          .filter((c) => c !== null);
+  removeEvent: (id) => {
+    set((s) => ({ events: s.events.filter((e) => e.id !== id) }));
+    mirror.deleteEvent?.(id);
+  },
 
-        if (changes.length === 0) return;
+  saveAttendance: (key, record) => {
+    set((s) => ({ attendance: { ...s.attendance, [key]: record } }));
+    mirror.saveAttendance?.(key, record);
+  },
 
-        const next = new Map(changes.map((c) => [c.id, c.groupIds]));
-        set((s) => ({
-          students: s.students.map((st) => {
-            const groupIds = next.get(st.id);
-            return groupIds ? { ...st, groupIds } : st;
-          }),
-        }));
-
-        for (const c of changes) mirror.updateStudent?.(c.id, { groupIds: c.groupIds });
-      },
-
-      setReminders: (on, lead) =>
-        set((s) => ({ remindersOn: on, reminderLead: lead ?? s.reminderLead })),
-
-      addEvent: (input) => {
-        const id = uid();
-        const event: CalendarEvent = { ...input, id };
-        set((s) => ({ events: [...s.events, event] }));
-        mirror.createEvent?.(event);
-        return id;
-      },
-
-      updateEvent: (id, patch) => {
-        set((s) => ({
-          events: s.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
-        }));
-        mirror.updateEvent?.(id, patch);
-      },
-
-      removeEvent: (id) => {
-        set((s) => ({ events: s.events.filter((e) => e.id !== id) }));
-        mirror.deleteEvent?.(id);
-      },
-
-      saveAttendance: (key, record) => {
-        set((s) => ({ attendance: { ...s.attendance, [key]: record } }));
-        mirror.saveAttendance?.(key, record);
-      },
-
-      sendMessage: ({ groupIds, audience, channels, body, total, announcement }) => {
-        set((s) => ({
-          messages: [
-            {
-              id: uid(),
-              groupIds,
-              audience,
-              channels,
-              body,
-              total,
-              // Optimistic. The Edge Function replaces this with real per-
-              // recipient delivery states as the gateways report back.
-              delivered: total,
-              sentAt: Date.now(),
-              announcement,
-            },
-            ...s.messages,
-          ],
-        }));
-        mirror.sendMessage?.({
+  sendMessage: ({ groupIds, audience, channels, body, total, announcement }) => {
+    set((s) => ({
+      messages: [
+        {
+          id: uid(),
           groupIds,
           audience,
           channels,
           body,
+          total,
+          // Optimistic. The Edge Function replaces this with real per-
+          // recipient delivery states as the gateways report back.
+          delivered: total,
+          sentAt: Date.now(),
           announcement,
-        });
-      },
+        },
+        ...s.messages,
+      ],
+    }));
+    mirror.sendMessage?.({
+      groupIds,
+      audience,
+      channels,
+      body,
+      announcement,
+    });
+  },
 
-      setLanguage: (language) => {
-        setActiveLanguage(language);
-        set({ language, languageChosen: true });
+  setLanguage: (language) => {
+    setActiveLanguage(language);
+    set({ language, languageChosen: true });
 
-        // Only mirrored once there is an account to mirror it *to*. The picker
-        // also appears on the welcome screen, before anyone has signed in, and
-        // queueing a write there produced "session expired, nothing saved" as
-        // the first thing a new teacher ever saw — a real error about a real
-        // failed write, for a preference that had in fact been saved locally
-        // and belongs to the device until an account exists.
-        //
-        // `hydrate` pushes the pending choice up at sign-in, so nothing is lost.
-        if (get().signedIn) mirror.setLanguage?.(language);
-      },
+    // Only mirrored once there is an account to mirror it *to*. The picker
+    // also appears on the welcome screen, before anyone has signed in, and
+    // queueing a write there produced "session expired, nothing saved" as
+    // the first thing a new teacher ever saw — a real error about a real
+    // failed write, for a preference that had in fact been saved locally
+    // and belongs to the device until an account exists.
+    //
+    // `hydrate` pushes the pending choice up at sign-in, so nothing is lost.
+    if (get().signedIn) mirror.setLanguage?.(language);
+  },
 
-      setGradeTemplate: (template) => {
-        set({ gradeTemplate: template });
-        if (get().signedIn) mirror.setGradeTemplate?.(template);
-      },
+  setGradeTemplate: (template) => {
+    set({ gradeTemplate: template });
+    if (get().signedIn) mirror.setGradeTemplate?.(template);
+  },
 
-      markRepliesRead: () => {
-        set((s) => ({
-          replies: s.replies.map((r) => ({ ...r, unread: false })),
-        }));
-        mirror.markRepliesRead?.();
-      },
+  markRepliesRead: () => {
+    set((s) => ({
+      replies: s.replies.map((r) => ({ ...r, unread: false })),
+    }));
+    mirror.markRepliesRead?.();
+  },
 
-      /**
-       * Reading one reply marks that one read.
-       *
-       * Opening the tab used to mark every reply read, which meant a teacher
-       * glancing at the badge lost the list of what they had not answered yet.
-       * The unread mark is only useful if it survives being looked at.
-       */
-      markReplyRead: (id) => {
-        if (!get().replies.some((r) => r.id === id && r.unread)) return;
-        set((s) => ({
-          replies: s.replies.map((r) => (r.id === id ? { ...r, unread: false } : r)),
-        }));
-        mirror.markReplyRead?.(id);
-      },
+  /**
+   * Reading one reply marks that one read.
+   *
+   * Opening the tab used to mark every reply read, which meant a teacher
+   * glancing at the badge lost the list of what they had not answered yet.
+   * The unread mark is only useful if it survives being looked at.
+   */
+  markReplyRead: (id) => {
+    if (!get().replies.some((r) => r.id === id && r.unread)) return;
+    set((s) => ({
+      replies: s.replies.map((r) => (r.id === id ? { ...r, unread: false } : r)),
+    }));
+    mirror.markReplyRead?.(id);
+  },
 
-      removeReply: (id) => {
-        set((s) => ({ replies: s.replies.filter((r) => r.id !== id) }));
-        mirror.deleteReply?.(id);
-      },
+  removeReply: (id) => {
+    set((s) => ({ replies: s.replies.filter((r) => r.id !== id) }));
+    mirror.deleteReply?.(id);
+  },
 
-      removeMessage: (id) => {
-        set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
-        mirror.deleteMessage?.(id);
-      },
+  removeMessage: (id) => {
+    set((s) => ({ messages: s.messages.filter((m) => m.id !== id) }));
+    mirror.deleteMessage?.(id);
+  },
 
-      removeReplies: (ids) => {
-        const gone = new Set(ids);
-        set((s) => ({ replies: s.replies.filter((r) => !gone.has(r.id)) }));
-        mirror.deleteReplies?.(ids);
-      },
+  removeReplies: (ids) => {
+    const gone = new Set(ids);
+    set((s) => ({ replies: s.replies.filter((r) => !gone.has(r.id)) }));
+    mirror.deleteReplies?.(ids);
+  },
 
-      removeMessages: (ids) => {
-        const gone = new Set(ids);
-        set((s) => ({ messages: s.messages.filter((m) => !gone.has(m.id)) }));
-        mirror.deleteMessages?.(ids);
-      },
+  removeMessages: (ids) => {
+    const gone = new Set(ids);
+    set((s) => ({ messages: s.messages.filter((m) => !gone.has(m.id)) }));
+    mirror.deleteMessages?.(ids);
+  },
 
-      /**
-       * Save an assessment and its marks together.
-       *
-       * Scores replace whatever was there for the same student, matching the
-       * upsert on the server — a teacher re-entering a mark is correcting it.
-       */
-      saveAssessment: (assessment, scores) => {
-        set((s) => {
-          const others = s.grades.filter((g) => g.assessmentId !== assessment.id);
-          const existing = new Map(
-            s.grades.filter((g) => g.assessmentId === assessment.id).map((g) => [g.studentId, g]),
-          );
-          return {
-            assessments: [assessment, ...s.assessments.filter((a) => a.id !== assessment.id)],
-            grades: [
-              ...others,
-              ...scores.map(({ studentId, score }) => {
-                const prior = existing.get(studentId);
-                return {
-                  id: prior?.id ?? uid(),
-                  assessmentId: assessment.id,
-                  studentId,
-                  score,
-                  // A corrected mark has not been reported at its new value.
-                  notifiedAt: prior?.score === score ? prior?.notifiedAt : undefined,
-                };
-              }),
-            ],
-          };
-        });
-        mirror.saveAssessment?.(assessment, scores);
-      },
+  /**
+   * Save an assessment and its marks together.
+   *
+   * Scores replace whatever was there for the same student, matching the
+   * upsert on the server — a teacher re-entering a mark is correcting it.
+   */
+  saveAssessment: (assessment, scores) => {
+    set((s) => {
+      const others = s.grades.filter((g) => g.assessmentId !== assessment.id);
+      const existing = new Map(
+        s.grades.filter((g) => g.assessmentId === assessment.id).map((g) => [g.studentId, g]),
+      );
+      return {
+        assessments: [assessment, ...s.assessments.filter((a) => a.id !== assessment.id)],
+        grades: [
+          ...others,
+          ...scores.map(({ studentId, score }) => {
+            const prior = existing.get(studentId);
+            return {
+              id: prior?.id ?? uid(),
+              assessmentId: assessment.id,
+              studentId,
+              score,
+              // A corrected mark has not been reported at its new value.
+              notifiedAt: prior?.score === score ? prior?.notifiedAt : undefined,
+            };
+          }),
+        ],
+      };
+    });
+    mirror.saveAssessment?.(assessment, scores);
+  },
 
-      addTemplate: (title, body) => {
-        const template = { id: uid(), title, body };
-        set((s) => ({ templates: [...s.templates, template] }));
-        mirror.createTemplate?.(template);
-        return template.id;
-      },
+  addTemplate: (title, body) => {
+    const template = { id: uid(), title, body };
+    set((s) => ({ templates: [...s.templates, template] }));
+    mirror.createTemplate?.(template);
+    return template.id;
+  },
 
-      updateTemplate: (id, patch) => {
-        set((s) => ({
-          templates: s.templates.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        }));
-        mirror.updateTemplate?.(id, patch);
-      },
+  updateTemplate: (id, patch) => {
+    set((s) => ({
+      templates: s.templates.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+    }));
+    mirror.updateTemplate?.(id, patch);
+  },
 
-      removeTemplate: (id) => {
-        set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
-        mirror.deleteTemplate?.(id);
-      },
+  removeTemplate: (id) => {
+    set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
+    mirror.deleteTemplate?.(id);
+  },
 
-      addAssessmentType: (groupId, name) => {
-        const id = uid();
-        // Appended, not sorted. "Test 1, Test 2, Final" is the order the
-        // teacher thinks in, and alphabetical would put Final in the middle.
-        const position = get().assessmentTypes.filter((x) => x.groupId === groupId).length;
-        const type: AssessmentType = { id, groupId, name, position };
-        set((s) => ({ assessmentTypes: [...s.assessmentTypes, type] }));
-        mirror.createAssessmentType?.(type);
-        return id;
-      },
+  addAssessmentType: (groupId, name) => {
+    const id = uid();
+    // Appended, not sorted. "Test 1, Test 2, Final" is the order the
+    // teacher thinks in, and alphabetical would put Final in the middle.
+    const position = get().assessmentTypes.filter((x) => x.groupId === groupId).length;
+    const type: AssessmentType = { id, groupId, name, position };
+    set((s) => ({ assessmentTypes: [...s.assessmentTypes, type] }));
+    mirror.createAssessmentType?.(type);
+    return id;
+  },
 
-      removeAssessmentType: (id) => {
-        set((s) => ({ assessmentTypes: s.assessmentTypes.filter((x) => x.id !== id) }));
-        mirror.deleteAssessmentType?.(id);
-      },
+  removeAssessmentType: (id) => {
+    set((s) => ({ assessmentTypes: s.assessmentTypes.filter((x) => x.id !== id) }));
+    mirror.deleteAssessmentType?.(id);
+  },
 
-      removeAssessment: (id) => {
-        set((s) => ({
-          assessments: s.assessments.filter((a) => a.id !== id),
-          grades: s.grades.filter((g) => g.assessmentId !== id),
-        }));
-        mirror.deleteAssessment?.(id);
-      },
-    }),
-    {
-      name: 'classcare-v1',
-      storage: createJSONStorage(() => AsyncStorage),
-      // The persisted language has to reach the holder in `@/i18n` too, or
-      // month names stay Turkmen after a relaunch for a teacher who picked
-      // Russian: `setLanguage` is not called on rehydrate.
-      onRehydrateStorage: () => (state) => {
-        if (state?.language) setActiveLanguage(state.language);
-      },
-      // Seeded collections are code, not user data — only persist what changed.
-      partialize: (s) => ({
-        signedIn: s.signedIn,
-        teacherId: s.teacherId,
-        teacherName: s.teacherName,
-        teacherEmail: s.teacherEmail,
-        teacherAvatarUrl: s.teacherAvatarUrl,
-        teacherProvider: s.teacherProvider,
-        gradeTemplate: s.gradeTemplate,
-        groups: s.groups,
-        students: s.students,
-        attendance: s.attendance,
-        messages: s.messages,
-        replies: s.replies,
-        events: s.events,
-        language: s.language,
-        languageChosen: s.languageChosen,
-        assessments: s.assessments,
-        assessmentTypes: s.assessmentTypes,
-        grades: s.grades,
-        templates: s.templates,
-        remindersOn: s.remindersOn,
-        reminderLead: s.reminderLead,
-      }),
-    },
-  ),
-);
+  removeAssessment: (id) => {
+    set((s) => ({
+      assessments: s.assessments.filter((a) => a.id !== id),
+      grades: s.grades.filter((g) => g.assessmentId !== id),
+    }));
+    mirror.deleteAssessment?.(id);
+  },
+}));
 
 /* -------------------------------------------------------------------------- */
 /* Derived reads                                                              */

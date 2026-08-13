@@ -11,6 +11,7 @@ import { Screen, TopBar } from '@/components/layout';
 import { Button, Card, Divider, Overline, Press, StatTile, Toggle } from '@/components/ui';
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
+import { wipeLocal } from '@/data/persistence';
 import { clearQueue, hydrate } from '@/data/sync';
 import { useSyncStatus } from '@/data/syncStatus';
 import type { TranslationKey } from '@/i18n';
@@ -106,6 +107,9 @@ export default function Profile() {
     }
     await clearQueue();
     doSignOut();
+    // The device's copy goes with the session. A shared staffroom phone is
+    // exactly how this app gets used.
+    await wipeLocal();
     router.replace('/sign-in');
   };
 

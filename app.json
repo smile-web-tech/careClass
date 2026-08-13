@@ -58,6 +58,15 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 96
         }
+      ],
+      "expo-sqlite",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ClassCare uses your photos so you can put a picture on a student.",
+          "cameraPermission": "ClassCare uses the camera so you can take a student’s picture."
+        }
       ]
     ],
     "experiments": {
