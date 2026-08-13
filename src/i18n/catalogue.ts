@@ -76,6 +76,7 @@ const tk = {
   'auth.attemptsLeft': 'Ýene {count} synanyşyk galdy.',
   'auth.alreadyRegistered':
     'Bu e-poçta eýýäm ClassCare hasaby bar. Aşakdan gir, ýa-da paroly ýatdan çykaran bolsaň, täzele.',
+  'auth.passwordChanged': 'Açar sözi täzelendi. Indi täze açar söz bilen gir.',
   'messages.noChannel': 'Usul ýok',
 
   'auth.heroTitle': 'Ähli synplaryň\nbir ýerde.',
@@ -837,6 +838,7 @@ const ru: Record<TranslationKey, string> = {
   'auth.attemptsLeft': 'Осталось попыток: {count}.',
   'auth.alreadyRegistered':
     'На эту почту уже есть аккаунт ClassCare. Войдите ниже или восстановите пароль, если забыли его.',
+  'auth.passwordChanged': 'Пароль изменён. Войдите с новым паролем.',
   'messages.noChannel': 'Способ не выбран',
 
   'auth.heroTitle': 'Все ваши классы\nв одном месте.',
@@ -1597,6 +1599,7 @@ const en: Record<TranslationKey, string> = {
   'auth.attemptsLeft': '{count} attempts left.',
   'auth.alreadyRegistered':
     'That email already has a ClassCare account. Sign in below, or reset your password if you have forgotten it.',
+  'auth.passwordChanged': 'Your password has been changed. Sign in with the new one.',
   'messages.noChannel': 'No channel',
 
   'auth.heroTitle': 'Your classes,\nall in one place.',

@@ -413,7 +413,18 @@ export async function requestPasswordReset(email: string) {
   if (error && /rate|too many/i.test(error.message)) throw error;
 }
 
-/** Verify the recovery code, then set the new password on the session it opens. */
+/**
+ * Verify the recovery code, set the new password, and end the recovery session.
+ *
+ * Verifying a recovery code signs the user in — that is how the new password
+ * can be set at all. Leaving that session in place walked them straight into
+ * the app, which is wrong twice over: the recovery code came from an inbox,
+ * which is not the same as knowing the password, and a teacher who has just
+ * chosen a new one has no way of finding out whether it works until the next
+ * time they are locked out.
+ *
+ * So the session is dropped and the caller sends them to sign in with it.
+ */
 export async function resetPassword(email: string, code: string, password: string) {
   const { error: verifyError } = await supabase.auth.verifyOtp({
     email: cleanEmail(email),
@@ -424,6 +435,11 @@ export async function resetPassword(email: string, code: string, password: strin
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw error;
+
+  await supabase.auth.signOut().catch(() => {
+    // The password is already changed, which is the part that mattered. A
+    // sign-out that fails leaves a session the login screen replaces anyway.
+  });
 }
 
 export async function signOut() {

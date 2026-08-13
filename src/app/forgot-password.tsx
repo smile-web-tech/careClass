@@ -18,7 +18,6 @@ import { OtpInput } from '@/components/OtpInput';
 import { PasswordField } from '@/components/PasswordField';
 import { Press } from '@/components/ui';
 import { requestPasswordReset, resetPassword } from '@/lib/auth';
-import { enterApp } from '@/lib/nav';
 import { MIN_LENGTH, passwordAcceptable, scorePassword } from '@/lib/password';
 import { useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
@@ -75,9 +74,15 @@ export default function ForgotPassword() {
     setError(null);
     try {
       await resetPassword(email, code, password);
-      // `resetPassword` leaves a live session behind, so there is nothing left
-      // to sign in to — go straight in.
-      enterApp(router);
+      /*
+        To the sign-in screen, not into the app.
+
+        The recovery session is gone by now, deliberately — see `resetPassword`.
+        Signing in once with the new password is what tells the teacher it took,
+        and it is the last step of the flow they started. The address is carried
+        across so all they type is the password they just chose.
+      */
+      router.replace(`/login?email=${encodeURIComponent(email.trim())}&reason=reset`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setCode('');

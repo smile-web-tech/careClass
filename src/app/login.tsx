@@ -142,6 +142,12 @@ export default function Login() {
         <AuthNotice tone="info">{t('auth.alreadyRegistered')}</AuthNotice>
       ) : null}
 
+      {/* Straight off the reset screen. Says the change took, and why they are
+          being asked to type a password they set thirty seconds ago. */}
+      {reason === 'reset' ? (
+        <AuthNotice tone="info">{t('auth.passwordChanged')}</AuthNotice>
+      ) : null}
+
       {error ? <AuthNotice>{error}</AuthNotice> : null}
 
       {/* Warn before the door closes rather than after. Someone who has
