@@ -14,7 +14,16 @@
 import { translateNow } from '@/i18n/useT';
 
 export type ErrorKind =
-  'offline' | 'auth' | 'permission' | 'notFound' | 'conflict' | 'server' | 'unknown';
+  | 'offline'
+  | 'auth'
+  | 'permission'
+  | 'notFound'
+  | 'conflict'
+  /** The device has no room left — the one failure here the teacher can fix. */
+  | 'storage'
+  | 'tooLarge'
+  | 'server'
+  | 'unknown';
 
 export type AppError = {
   kind: ErrorKind;
@@ -141,6 +150,50 @@ export function describeError(e: unknown): AppError {
       kind: 'conflict',
       title: translateNow('error.linkTitle'),
       message: translateNow('error.linkMessage'),
+      retryable: false,
+      detail,
+    };
+  }
+
+  /*
+    The device is out of room.
+
+    Worth its own case because it is the one failure here the teacher can
+    actually fix, and the raw message never says so — SQLite reports "database
+    or disk is full" and the file system reports ENOSPC, neither of which
+    reads as "delete some photos".
+  */
+  if (
+    text.includes('no space left') ||
+    text.includes('enospc') ||
+    text.includes('disk is full') ||
+    text.includes('sqlite_full')
+  ) {
+    return {
+      kind: 'storage',
+      title: translateNow('error.storageFullTitle'),
+      message: translateNow('error.storageFullMessage'),
+      retryable: false,
+      detail,
+    };
+  }
+
+  /*
+    Storage refused the object.
+
+    Almost always the bucket's size limit or its MIME allow-list, both of which
+    are ours rather than the teacher's — but the one they can act on is the
+    file being too big, so that is what it says.
+  */
+  if (
+    status === 413 ||
+    text.includes('payload too large') ||
+    text.includes('exceeded the maximum allowed size')
+  ) {
+    return {
+      kind: 'tooLarge',
+      title: translateNow('error.tooLargeTitle'),
+      message: translateNow('error.tooLargeMessage'),
       retryable: false,
       detail,
     };
