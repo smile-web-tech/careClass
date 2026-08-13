@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
 import { forwardRef, type ReactNode } from 'react';
 import {
   Platform,
@@ -19,6 +20,7 @@ import {
 import Svg, { Circle, G, Path } from 'react-native-svg';
 
 import { Icon, type IconName } from '@/components/Icon';
+import { photoUri } from '@/lib/studentPhoto';
 import {
   PRESS_OPACITY,
   radius,
@@ -232,6 +234,7 @@ export function Avatar({
   radius: r,
   fontSize,
   style,
+  photoId,
 }: {
   name: string;
   accent?: AccentName;
@@ -239,10 +242,38 @@ export function Avatar({
   radius?: number;
   fontSize?: number;
   style?: ViewStyle;
+  /**
+   * A student id. When that student has a picture on this device it is shown
+   * instead of their initials.
+   *
+   * Read from disk rather than passed in as a URI so that every avatar in the
+   * app picks a new photo up without each caller having to know about files.
+   */
+  photoId?: string;
 }) {
   const { accents } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const a = accents[accent];
+  const uri = photoId ? photoUri(photoId) : null;
+
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={[
+          {
+            width: size,
+            height: size,
+            borderRadius: r ?? Math.round(size * 0.33),
+            backgroundColor: a.tint,
+          },
+          style as object,
+        ]}
+        contentFit="cover"
+      />
+    );
+  }
+
   return (
     <View
       style={[

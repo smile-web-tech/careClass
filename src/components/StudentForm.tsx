@@ -9,10 +9,12 @@
  */
 import * as Contacts from 'expo-contacts';
 import { useState } from 'react';
+import * as Crypto from 'expo-crypto';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { showAlert } from '@/components/Dialog';
+import { StudentPhotoPicker } from '@/components/StudentPhotoPicker';
 import { useT } from '@/i18n/useT';
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
@@ -23,6 +25,14 @@ import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
 export type StudentDraft = {
+  /**
+   * Minted by the form rather than by the store.
+   *
+   * A photo can be taken before the student is saved, and it is stored under
+   * this id — so the id has to exist first, and has to be the one the row ends
+   * up with.
+   */
+  id: string;
   name: string;
   phone: string;
   email?: string;
@@ -84,6 +94,7 @@ export function StudentForm({
   const groups = useGroups();
 
   const [form, setForm] = useState(() => fieldsOf(initial));
+  const [draftId] = useState(() => initial?.id ?? Crypto.randomUUID());
   const [picked, setPicked] = useState<Record<string, boolean>>(() => {
     const out: Record<string, boolean> = {};
     for (const id of initial?.groupIds ?? preselectGroups) out[id] = true;
@@ -107,6 +118,7 @@ export function StudentForm({
 
   const trimmed = (v: string) => v.trim() || undefined;
   const draft = (): StudentDraft => ({
+    id: draftId,
     name: form.name.trim(),
     phone: form.phone.trim(),
     email: trimmed(form.email),
@@ -150,6 +162,8 @@ export function StudentForm({
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
+          <StudentPhotoPicker studentId={draftId} name={form.name} />
+
           <Press onPress={importFromContacts}>
             <Card style={styles.importCard}>
               <View style={styles.importIcon}>

@@ -348,7 +348,7 @@ function MatchedStudent({ student, onPress }: { student: Student; onPress: () =>
   return (
     <Press onPress={onPress}>
       <Card style={styles.matchedCard}>
-        <Avatar name={student.name} accent={student.accent} size={34} />
+        <Avatar name={student.name} accent={student.accent} photoId={student.id} size={34} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.matchedName} numberOfLines={1}>
             {student.name}

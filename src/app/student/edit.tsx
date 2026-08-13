@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StudentForm } from '@/components/StudentForm';
 import { useT } from '@/i18n/useT';
 import { useStore, useStudent } from '@/data/store';
+import { remote } from '@/data/sync';
 
 /**
  * Edit an existing student. Everything set at creation can be changed here,
@@ -23,7 +24,11 @@ export default function EditStudent() {
       submitLabel={t('common.saveChanges')}
       initial={student}
       onSubmit={(draft) => {
-        if (student) updateStudent(student.id, draft);
+        if (!student) return;
+        updateStudent(student.id, draft);
+        // The picture may have been taken, replaced or removed while the form
+        // was open. The op works out which when it runs.
+        remote.uploadStudentPhoto?.(student.id);
         router.back();
       }}
     />

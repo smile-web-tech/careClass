@@ -242,7 +242,13 @@ function RosterRow({
 
   return (
     <Press onPress={onPress} style={styles.rosterRow}>
-      <Avatar name={student.name} accent={student.accent} size={42} radius={radius.button} />
+      <Avatar
+        name={student.name}
+        accent={student.accent}
+        photoId={student.id}
+        size={42}
+        radius={radius.button}
+      />
 
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.nameRow}>

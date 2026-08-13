@@ -1,4 +1,6 @@
+import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
+import * as Sharing from 'expo-sharing';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -9,6 +11,7 @@ import { LanguagePicker } from '@/components/LanguagePicker';
 import { Icon, type IconName } from '@/components/Icon';
 import { Screen, TopBar } from '@/components/layout';
 import { Button, Card, Divider, Overline, Press, StatTile, Toggle } from '@/components/ui';
+import { applyBackup, BackupError, exportBackup, readBackup, summarise } from '@/data/backup';
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import { wipeLocal } from '@/data/persistence';
@@ -31,6 +34,14 @@ import { sessionsForWeek } from '@/lib/schedule';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme, type ThemePref } from '@/theme';
 import { body, display, text } from '@/theme/type';
+
+/** Why a chosen file could not be read, in words rather than in a code. */
+const BACKUP_ERROR_KEY: Record<BackupError['reason'], TranslationKey> = {
+  notJson: 'backup.errorNotJson',
+  notBackup: 'backup.errorNotBackup',
+  tooNew: 'backup.errorTooNew',
+  empty: 'backup.errorEmpty',
+};
 
 const PROVIDER_LABEL: Record<string, string> = {
   google: 'Signed in with Google',
@@ -56,6 +67,8 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(name);
   const [busy, setBusy] = useState(false);
+  /** Which backup job is running, so the row can say so and refuse a second. */
+  const [busyBackup, setBusyBackup] = useState<'export' | 'import' | null>(null);
 
   const t = useT();
   const live = hasSupabase;
@@ -78,6 +91,89 @@ export default function Profile() {
       await updateTeacher({ name: next, timezone });
     } catch (e) {
       showError(e, t('profile.couldNotSave'));
+    }
+  };
+
+  /**
+   * Write the whole account to a file and hand it to whatever the teacher
+   * wants to send it with.
+   *
+   * `shareAsync` rather than saving to Downloads: the file is on its way to
+   * another phone, and the share sheet is where Bluetooth, WhatsApp and the
+   * file manager all already are.
+   */
+  const doExport = async () => {
+    if (busyBackup) return;
+    setBusyBackup('export');
+    try {
+      const file = await exportBackup();
+
+      if (!(await Sharing.isAvailableAsync())) {
+        // No share sheet — a rooted or stripped device. The file exists, so
+        // say where it is rather than pretending nothing happened.
+        await showAlert(t('backup.exported'), t('backup.savedTo', { path: file.uri }));
+        return;
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/json',
+        dialogTitle: t('backup.export'),
+      });
+    } catch (e) {
+      showError(e, t('backup.exportFailed'));
+    } finally {
+      setBusyBackup(null);
+    }
+  };
+
+  /**
+   * Read a backup file and, once the teacher has seen what is in it, replace
+   * this device's data with it.
+   *
+   * Replace rather than merge, and the confirmation says so with the counts in
+   * it. Merging two copies of the same class means deciding which version of a
+   * mark is right, and there is no honest way to do that without asking about
+   * every difference.
+   */
+  const doImport = async () => {
+    if (busyBackup) return;
+
+    // One file, so the single-file overload: it hands back the `File` itself
+    // rather than an array.
+    const picked = await File.pickFileAsync({ mimeTypes: ['application/json', '*/*'] });
+    if (picked.canceled) return;
+
+    setBusyBackup('import');
+    try {
+      const backup = await readBackup(picked.result);
+      const summary = summarise(backup);
+
+      const yes = await confirm({
+        title: t('backup.importTitle'),
+        message: t('backup.importSummary', {
+          groups: summary.groups,
+          students: summary.students,
+          photos: summary.photos,
+          date: summary.exportedAt.slice(0, 10),
+        }),
+        confirmLabel: t('backup.importConfirm'),
+      });
+      if (!yes) return;
+
+      await applyBackup(backup);
+      await showAlert(
+        t('backup.imported'),
+        t('backup.importedBody', { students: summary.students }),
+        'success',
+      );
+    } catch (e) {
+      if (e instanceof BackupError) {
+        await showAlert(t('backup.importFailed'), t(BACKUP_ERROR_KEY[e.reason]), 'danger');
+      } else {
+        showError(e, t('backup.importFailed'));
+      }
+    } finally {
+      setBusyBackup(null);
     }
   };
 
@@ -280,6 +376,28 @@ export default function Profile() {
                 showAlert(t('error.cannotOpen'), t('error.noAppFor', { what: 'email' }), 'danger'),
               )
             }
+          />
+        </Card>
+
+        {/*
+          A file the teacher owns, that works with no server involved. Moving to
+          a new phone in a place where the connection is a sometimes thing
+          should not depend on anybody's infrastructure.
+        */}
+        <Overline style={styles.label}>{t('backup.section')}</Overline>
+        <Card style={[styles.group, { overflow: 'hidden' }]}>
+          <ActionRow
+            icon="cloudUp"
+            label={busyBackup === 'export' ? t('backup.exporting') : t('backup.export')}
+            hint={t('backup.exportHint')}
+            onPress={() => void doExport()}
+          />
+          <Divider inset={58} />
+          <ActionRow
+            icon="paperclip"
+            label={busyBackup === 'import' ? t('backup.importing') : t('backup.import')}
+            hint={t('backup.importHint')}
+            onPress={() => void doImport()}
           />
         </Card>
 

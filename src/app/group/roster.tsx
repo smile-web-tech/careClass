@@ -174,7 +174,13 @@ function PickRow({
       accessibilityState={{ checked }}
       accessibilityLabel={student.name}
       style={[styles.row, checked && styles.rowOn]}>
-      <Avatar name={student.name} accent={student.accent} size={40} radius={radius.button} />
+      <Avatar
+        name={student.name}
+        accent={student.accent}
+        photoId={student.id}
+        size={40}
+        radius={radius.button}
+      />
 
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={[text.rowTitleSm, styles.ink]} numberOfLines={1}>

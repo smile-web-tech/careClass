@@ -55,6 +55,12 @@ export function historicMark(studentId: string, key: string): AttendanceStatus {
 }
 
 type NewStudent = {
+  /**
+   * Optional, and supplied by the form so a photo can be stored against the
+   * student before they exist. Minting it here instead would mean the picture
+   * is taken under one id and the row saved under another.
+   */
+  id?: string;
   name: string;
   phone: string;
   email?: string;
@@ -211,6 +217,7 @@ export type StoreMirror = {
   createStudent: (student: Student) => void;
   updateStudent: (id: string, patch: Partial<Student>) => void;
   archiveStudent: (id: string) => void;
+  uploadStudentPhoto: (id: string) => void;
   saveAttendance: (key: string, marks: AttendanceRecord) => void;
   sendMessage: (input: {
     groupIds: string[];
@@ -354,7 +361,9 @@ export const useStore = create<State>()((set, get) => ({
   },
 
   addStudent: (input) => {
-    const id = uid();
+    // The form's id where it gave one, so a photo taken before saving belongs
+    // to the right student.
+    const id = input.id ?? uid();
     const student: Student = {
       ...input,
       id,

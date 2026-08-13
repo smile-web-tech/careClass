@@ -70,6 +70,7 @@ const toStudent = (row: StudentRow, groupIds: string[]): Student => ({
   parentPhone: row.parent_phone ?? undefined,
   parentEmail: row.parent_email ?? undefined,
   accent: row.accent,
+  photoPath: row.photo_path ?? undefined,
   note: row.note ?? undefined,
   avgScore: row.avg_score ?? undefined,
   groupIds,
@@ -535,6 +536,7 @@ export async function createStudent(student: Student): Promise<Student> {
         parent_phone: student.parentPhone ?? null,
         parent_email: student.parentEmail ?? null,
         accent: student.accent,
+        photo_path: student.photoPath ?? null,
         note: student.note ?? null,
       })
       .select()
@@ -577,6 +579,7 @@ export async function updateStudent(id: string, patch: Partial<Student>) {
           parent_email: patch.parentEmail ?? null,
         }),
         ...(patch.note !== undefined && { note: patch.note ?? null }),
+        ...(patch.photoPath !== undefined && { photo_path: patch.photoPath ?? null }),
       })
       .eq('id', id)
       .select(),

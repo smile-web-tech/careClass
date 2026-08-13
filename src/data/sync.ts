@@ -16,6 +16,7 @@ import type {
 import { isLanguage, setActiveLanguage, type Language, type TranslationKey } from '@/i18n';
 import { translateNow } from '@/i18n/useT';
 import { describeError, isOfflineError } from '@/lib/errors';
+import { photoFile, syncMissingPhotos, uploadPhoto } from '@/lib/studentPhoto';
 import { hasSupabase, supabaseUrl } from '@/lib/supabase';
 
 /**
@@ -54,6 +55,15 @@ export type Op =
   | { kind: 'student.create'; student: Student }
   | { kind: 'student.update'; id: string; patch: Partial<Student> }
   | { kind: 'student.archive'; id: string }
+  /**
+   * Send a student's picture up and record the path on their row.
+   *
+   * A queued op rather than an upload at save time: the photo is taken in a
+   * classroom as often as not, and the teacher should not have to be online to
+   * put a face on a student. The file is already on the device; this is only
+   * the trip to the server.
+   */
+  | { kind: 'student.photo'; id: string }
   | { kind: 'attendance.save'; key: string; marks: Record<string, AttendanceStatus> }
   | {
       kind: 'message.send';
@@ -88,6 +98,33 @@ export type Op =
   | { kind: 'teacher.language'; language: Language }
   | { kind: 'teacher.gradeTemplate'; template: string | null };
 
+/**
+ * Upload one student's picture, then point their row at it.
+ *
+ * Two steps, in this order. A row that names a file which is not there yet
+ * would have every other device trying to download nothing.
+ *
+ * A student whose photo has since been deleted from the device is not an
+ * error: the teacher removed it, the row is cleared, and the op is done.
+ */
+async function uploadStudentPhoto(studentId: string) {
+  if (!photoFile(studentId).exists) {
+    await api.updateStudent(studentId, { photoPath: undefined });
+    useStore.setState((state) => ({
+      students: state.students.map((s) =>
+        s.id === studentId ? { ...s, photoPath: undefined } : s,
+      ),
+    }));
+    return;
+  }
+
+  const path = await uploadPhoto(studentId);
+  await api.updateStudent(studentId, { photoPath: path });
+  useStore.setState((state) => ({
+    students: state.students.map((s) => (s.id === studentId ? { ...s, photoPath: path } : s)),
+  }));
+}
+
 /** Perform one queued change against the server. */
 function perform(op: Op): Promise<unknown> {
   switch (op.kind) {
@@ -103,6 +140,8 @@ function perform(op: Op): Promise<unknown> {
       return api.updateStudent(op.id, op.patch);
     case 'student.archive':
       return api.archiveStudent(op.id);
+    case 'student.photo':
+      return uploadStudentPhoto(op.id);
     case 'attendance.save': {
       // key === `${groupId}@${YYYY-MM-DD}#${HH:MM}`
       const [groupId, rest] = op.key.split('@');
@@ -645,6 +684,11 @@ export async function hydrate() {
   });
 
   if (teacher) reconcileLanguage(teacher.language);
+
+  // Faces this device has never seen: a second phone, or a reinstall. Not
+  // awaited — nothing on screen is waiting for it, and on a poor connection it
+  // is the slowest part of a sync by far.
+  void syncMissingPhotos(students).catch(() => {});
 }
 
 /**
@@ -689,6 +733,8 @@ export const remote: StoreMirror = {
     enqueue({ kind: 'student.update', id, patch }),
 
   archiveStudent: (id: string) => enqueue({ kind: 'student.archive', id }),
+
+  uploadStudentPhoto: (id: string) => enqueue({ kind: 'student.photo', id }),
 
   saveAttendance: (key: string, marks: Record<string, AttendanceStatus>) =>
     enqueue({ kind: 'attendance.save', key, marks }),

@@ -77,6 +77,7 @@ export type StudentRow = {
   parent_email: string | null;
   accent: GroupAccentRow;
   note: string | null;
+  photo_path: string | null;
   avg_score: number | null;
   photo_url: string | null;
   archived_at: string | null;

@@ -6,6 +6,8 @@ import { useT } from '@/i18n/useT';
 import { StudentForm, type StudentDraft } from '@/components/StudentForm';
 import { Card, Toggle } from '@/components/ui';
 import { useGroups, useStore } from '@/data/store';
+import { photoUri } from '@/lib/studentPhoto';
+import { remote } from '@/data/sync';
 import { smsNumber } from '@/lib/contact';
 import { slotDaysLabel, slotTimeLabel } from '@/lib/schedule';
 import { useThemedStyles, type Theme } from '@/theme';
@@ -19,6 +21,7 @@ export default function NewStudent() {
 
   const groups = useGroups();
   const addStudent = useStore((s) => s.addStudent);
+  const uploadStudentPhoto = remote.uploadStudentPhoto;
 
   const [welcome, setWelcome] = useState(true);
 
@@ -38,6 +41,9 @@ export default function NewStudent() {
 
   const commit = (draft: StudentDraft) => {
     addStudent(draft);
+    // Only if one was actually taken. The op checks again when it runs, but
+    // queueing nothing is better than queueing a no-op for every student.
+    if (photoUri(draft.id)) uploadStudentPhoto(draft.id);
 
     // A number is optional now, so the welcome text can only go where there is
     // one. Opening the composer addressed to nobody would look like a bug.

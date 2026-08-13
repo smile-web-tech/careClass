@@ -29,6 +29,14 @@ export type Student = {
   parentEmail?: string;
   groupIds: string[];
   accent: AccentName;
+  /**
+   * Where the picture sits in storage, once uploaded.
+   *
+   * The copy on the device is found by student id rather than recorded here —
+   * see `photoFile` — so the face is on screen offline whether or not this has
+   * reached the server yet.
+   */
+  photoPath?: string;
   note?: string;
   /** Out of 10, as shown on the group and student stat strips. */
   avgScore?: number;

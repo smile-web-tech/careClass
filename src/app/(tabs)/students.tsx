@@ -138,7 +138,13 @@ function StudentRow({
   const styles = useThemedStyles(makeStyles);
   return (
     <Press onPress={onPress} style={styles.row}>
-      <Avatar name={student.name} accent={student.accent} size={42} radius={radius.button} />
+      <Avatar
+        name={student.name}
+        accent={student.accent}
+        photoId={student.id}
+        size={42}
+        radius={radius.button}
+      />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={[text.rowTitleSm, styles.ink]} numberOfLines={1}>
           {student.name}
