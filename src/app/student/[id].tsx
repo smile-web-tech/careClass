@@ -1,6 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AttachmentPreview, type PreviewFile } from '@/components/AttachmentPreview';
@@ -18,6 +25,7 @@ import {
   Txt,
 } from '@/components/ui';
 import { useGroups, useRecentSessions, useStudent, useStudentStats } from '@/data/store';
+import { hydrate, useStudentPhotoUploading } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
@@ -53,6 +61,29 @@ export default function StudentProfile() {
     a dead tap target until the screen was left and come back to.
   */
   const photo = useStudentPhoto(id);
+
+  /** True while the picture is queued for the server or on its way there. */
+  const uploading = useStudentPhotoUploading(id);
+
+  /*
+    Pull down to fetch this student again, picture included.
+
+    The screen where "is my photo actually saved?" gets asked is the screen that
+    should be able to answer it. `hydrate` re-reads the account and downloads
+    any face this device does not have.
+  */
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await hydrate();
+    } catch {
+      // Offline. What is on screen is still the best copy this device has.
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   if (!student) {
     return (
@@ -96,6 +127,15 @@ export default function StudentProfile() {
     <Screen>
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={color.muted}
+            colors={[color.primary]}
+            progressBackgroundColor={color.surface}
+          />
+        }
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
           <View style={styles.headerBar}>
@@ -124,6 +164,20 @@ export default function StudentProfile() {
                 radius={radius.sheet}
                 fontSize={27}
               />
+              {/*
+                Over the face, not beside it.
+
+                This is the screen a teacher lands on straight after saving, so
+                it is where "has the picture actually gone up?" gets asked. A
+                spinner sitting on the corner of the avatar answers it without
+                taking any room, and it clears itself the moment the upload
+                finishes — including much later, when the phone finds a signal.
+              */}
+              {uploading ? (
+                <View style={styles.photoBusy}>
+                  <ActivityIndicator size="small" color="#ffffff" />
+                </View>
+              ) : null}
             </Press>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name}>{student.name}</Text>
@@ -447,6 +501,19 @@ const makeStyles = ({ color }: Theme) =>
       alignItems: 'center',
       gap: 16,
       marginTop: 20,
+    },
+    // Covers the avatar rather than sitting next to it, so the row does not
+    // change width when an upload starts and stops.
+    photoBusy: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      borderRadius: radius.sheet,
+      backgroundColor: 'rgba(0,0,0,0.42)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     name: { ...text.pageTitle, lineHeight: 27.6, color: color.ink },
     tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },

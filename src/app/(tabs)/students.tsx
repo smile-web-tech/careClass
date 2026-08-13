@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { Avatar, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStudents } from '@/data/store';
+import { hydrate } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, smsNumber } from '@/lib/contact';
@@ -29,6 +30,30 @@ export default function Students() {
   const students = useStudents();
   const groups = useGroups();
   const [query, setQuery] = useState('');
+
+  /*
+    Pull down to pull the account down.
+
+    Only the inbox had this, so a teacher who suspected the list was out of date
+    — a student added on another phone, a face that had not come through — had
+    no way to ask for a fresh copy short of killing the app. `hydrate` also
+    fetches any pictures this device is missing, which is the half of it people
+    actually notice.
+  */
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await hydrate();
+    } catch {
+      // Offline, or the proxy is down. The list keeps what it had; an alert
+      // would fire on every pull made on a bad connection, which is most of
+      // them here.
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -104,6 +129,15 @@ export default function Students() {
           paddingBottom: bottomInset,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={color.muted}
+            colors={[color.primary]}
+            progressBackgroundColor={color.surface}
+          />
+        }
         ListEmptyComponent={
           <EmptyState title={t('students.noMatches')} hint={t('students.tryAnother')} />
         }

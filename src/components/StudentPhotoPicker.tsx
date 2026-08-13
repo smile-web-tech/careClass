@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { showAlert, showDialog } from '@/components/Dialog';
+import { useStudentPhotoUploading } from '@/data/sync';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/ui';
 import { useT } from '@/i18n/useT';
@@ -57,6 +58,17 @@ export function StudentPhotoPicker({
     every avatar for this student changes at the same moment.
   */
   const photo = useStudentPhoto(studentId);
+
+  /**
+   * Still going to the server.
+   *
+   * Separate from `busy`, which is the phone shrinking and filing the picture
+   * and is over in a moment. This one can last as long as the connection does,
+   * and on a phone with no signal it stays on until there is some — which is
+   * the honest answer and the one that was missing.
+   */
+  const uploading = useStudentPhotoUploading(studentId);
+
   const [busy, setBusy] = useState(false);
 
   const take = async (source: PhotoSource) => {
@@ -130,13 +142,28 @@ export function StudentPhotoPicker({
             <Text style={styles.initials}>{initials}</Text>
           )}
 
+          {/*
+            The badge doubles as the upload light.
+
+            One corner, three states: plus when there is no picture, pencil when
+            there is one and it is safely up, a spinner while it is still on its
+            way. Reusing the corner rather than adding a second marker keeps the
+            control the same size and puts the answer where the teacher is
+            already looking.
+          */}
           <View style={[styles.badge, { backgroundColor: color.primary }]}>
-            <Icon name={photo ? 'pencil' : 'plus'} size={12} color="#ffffff" />
+            {uploading ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Icon name={photo ? 'pencil' : 'plus'} size={12} color="#ffffff" />
+            )}
           </View>
         </View>
       </Press>
 
-      <Text style={styles.hint}>{photo ? t('photo.change') : t('photo.add')}</Text>
+      <Text style={styles.hint}>
+        {uploading ? t('photo.sending') : photo ? t('photo.change') : t('photo.add')}
+      </Text>
     </View>
   );
 }

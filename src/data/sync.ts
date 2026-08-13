@@ -1,3 +1,5 @@
+import { create } from 'zustand';
+
 import * as api from '@/data/api';
 import { loadSnapshot, readOutbox, readSetting, replaceOutbox, writeSetting } from '@/data/localDb';
 import { setStoreMirror, useStore, type StoreMirror } from '@/data/store';
@@ -409,8 +411,40 @@ export async function clearQueue() {
   }
 }
 
+/**
+ * Which students have a picture still on its way to the server.
+ *
+ * Derived from the queue rather than tracked separately, so it cannot drift
+ * out of step with it: a photo is "sending" for exactly as long as there is an
+ * op for it waiting or in flight, including across a relaunch, because the
+ * queue itself is restored from disk.
+ *
+ * It exists because uploading was completely invisible. The teacher took a
+ * picture, saw it appear, and had no way to tell whether it had reached the
+ * account or was sitting on a phone with no signal — the two look identical
+ * until you open the student on a second device and find no face.
+ */
+export const usePhotoUploads = create<{ ids: string[] }>(() => ({ ids: [] }));
+
+/** True while this student's picture is queued or being sent. */
+export function useStudentPhotoUploading(studentId: string | undefined | null): boolean {
+  return usePhotoUploads((s) => (studentId ? s.ids.includes(studentId) : false));
+}
+
 function publish() {
   useSyncStatus.getState().report({ pending: queue.length });
+
+  const ids = queue
+    .filter((job) => job.op.kind === 'student.photo')
+    .map((job) => (job.op as { id: string }).id);
+
+  // Compared before writing: `publish` runs on every queued and every completed
+  // op, and a new array each time would re-render every avatar in the app for
+  // a list that has not changed.
+  const current = usePhotoUploads.getState().ids;
+  if (ids.length !== current.length || ids.some((id, i) => id !== current[i])) {
+    usePhotoUploads.setState({ ids });
+  }
 }
 
 function scheduleRetry(attempts: number) {
