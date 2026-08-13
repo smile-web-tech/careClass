@@ -110,7 +110,7 @@ export default function EventForm() {
               <Press
                 onPress={() => setDateKey(toKey(addDays(date, -1)))}
                 style={styles.stepper}
-                accessibilityLabel="Previous day">
+                accessibilityLabel={t('calendar.prevDay')}>
                 <Icon name="chevronLeft" size={16} color={color.inkSoft} />
               </Press>
               <View style={{ flex: 1, alignItems: 'center' }}>
@@ -122,7 +122,7 @@ export default function EventForm() {
               <Press
                 onPress={() => setDateKey(toKey(addDays(date, 1)))}
                 style={styles.stepper}
-                accessibilityLabel="Next day">
+                accessibilityLabel={t('calendar.nextDay')}>
                 <Icon name="chevronRight" size={16} color={color.inkSoft} />
               </Press>
             </View>

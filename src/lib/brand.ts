@@ -9,3 +9,13 @@
 
 export const DEVELOPER = 'Baylyyev Kerven';
 export const SUPPORT_EMAIL = 'kervenbalkan@gmail.com';
+
+/**
+ * The address account mail arrives from.
+ *
+ * Shown on the "check your inbox" screen so a teacher hunting through a spam
+ * folder knows what to look for. It must match `RESEND_FROM` on the server —
+ * telling somebody to look for an address nothing sends from is worse than
+ * saying nothing.
+ */
+export const MAIL_SENDER = 'notifications@smiletech.dev';

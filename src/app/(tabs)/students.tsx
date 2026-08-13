@@ -57,7 +57,7 @@ export default function Students() {
           <View style={{ flex: 1 }}>
             <Text style={[text.pageTitle, styles.ink]}>{t('nav.students')}</Text>
             <Text style={styles.count}>
-              {students.length} across {groups.length} groups
+              {t('students.acrossGroups', { count: students.length, groups: groups.length })}
             </Text>
           </View>
           <IconButton

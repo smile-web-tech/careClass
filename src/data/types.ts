@@ -154,6 +154,14 @@ export type SentMessageLog = {
 export type Reply = {
   id: string;
   authorName: string;
+  /**
+   * Who the reply is about, when the routing token identified them.
+   *
+   * Absent on a reply that arrived without one — an older send, or mail that
+   * reached the inbound address some other way. The screen uses it to open the
+   * student, so absent simply means the avatar is not a link.
+   */
+  studentId?: string;
   /** "parent of Amir" or the group name. */
   context: string;
   accent: AccentName;

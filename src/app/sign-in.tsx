@@ -140,7 +140,7 @@ export default function SignIn() {
                 <>
                   <Icon name="apple" size={17} color={color.appleInk} />
                   <Text style={[styles.providerLabel, { color: color.appleInk }]}>
-                    Continue with Apple
+                    {t('auth.continueWithApple')}
                   </Text>
                 </>
               )}

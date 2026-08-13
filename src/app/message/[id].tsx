@@ -41,6 +41,14 @@ export default function MessageDetail() {
   const groups = useGroups();
   const message = useStore((s) => s.messages.find((m) => m.id === id));
   const reply = useStore((s) => s.replies.find((r) => r.id === id));
+  /*
+    Looked up rather than trusted: a reply keeps the id of a student who may
+    since have been removed from the roster, and pushing a route for one that
+    is gone lands on "this student no longer exists".
+  */
+  const student = useStore((s) =>
+    s.students.find((x) => x.id === s.replies.find((r) => r.id === id)?.studentId),
+  );
   const markReplyRead = useStore((s) => s.markReplyRead);
   const removeMessage = useStore((s) => s.removeMessage);
   const removeReply = useStore((s) => s.removeReply);
@@ -84,7 +92,28 @@ export default function MessageDetail() {
           contentContainerStyle={{ padding: space.gutter, paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}>
           <View style={styles.author}>
-            <Avatar name={reply.authorName} accent={reply.accent} size={52} radius={radius.tile} />
+            {/*
+              The picture is the way through to whoever this is about.
+
+              A reply carries the student it belongs to — that is what the token
+              in the reply address is for — but the screen showed a coloured
+              square and stopped there, so a parent writing about an absence
+              meant leaving Messages and finding the student by hand. Their face
+              is on it too, which is what makes it obvious there is somewhere to
+              go.
+            */}
+            <Press
+              onPress={() => student && router.push(`/student/${student.id}`)}
+              disabled={!student}
+              accessibilityLabel={student ? t('messages.openStudent', { name: student.name }) : undefined}>
+              <Avatar
+                name={reply.authorName}
+                accent={reply.accent}
+                photoId={student?.id}
+                size={52}
+                radius={radius.tile}
+              />
+            </Press>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.authorName}>{reply.authorName}</Text>
               {reply.context ? (

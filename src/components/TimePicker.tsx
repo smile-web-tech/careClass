@@ -147,7 +147,7 @@ export function TimePicker({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Press style={styles.scrim} onPress={onCancel} accessibilityLabel="Dismiss" />
+      <Press style={styles.scrim} onPress={onCancel} accessibilityLabel={t('common.dismiss')} />
       <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
         <View style={styles.grabber} />
         <Text style={[text.sheetTitle, styles.ink]}>{title}</Text>
@@ -164,7 +164,7 @@ export function TimePicker({
         </View>
 
         {tooEarly ? (
-          <Text style={styles.warn}>Must be after {min}.</Text>
+          <Text style={styles.warn}>{t('time.mustBeAfter', { time: min ?? '' })}</Text>
         ) : (
           <Text style={styles.preview}>{picked}</Text>
         )}

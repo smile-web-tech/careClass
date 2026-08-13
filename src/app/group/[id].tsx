@@ -118,7 +118,7 @@ export default function GroupDetail() {
               tint="rgba(255,255,255,0.14)"
               fg="#fff"
               onPress={() => router.push(`/group/edit?id=${group.id}`)}
-              accessibilityLabel="Edit group"
+              accessibilityLabel={t('groups.edit')}
             />
           </View>
 

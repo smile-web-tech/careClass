@@ -620,14 +620,14 @@ export default function Compose() {
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <Overline style={styles.label}>To</Overline>
+          <Overline style={styles.label}>{t('messages.to')}</Overline>
 
           {focusIds.length ? (
             <Card style={styles.focusCard}>
               <View style={styles.focusHead}>
                 <Icon name="warning" size={16} color={color.warningDeep} />
                 <Text style={styles.focusTitle}>
-                  {focused.length} absentee{focused.length > 1 ? 's' : ''} from today
+                  {t('messages.absenteesToday', { count: focused.length })}
                 </Text>
               </View>
               <View style={styles.focusList}>
@@ -717,10 +717,7 @@ export default function Compose() {
           {noEmail > 0 ? (
             <View style={styles.warn}>
               <Icon name="info" size={18} color={color.warningDeep} />
-              <Text style={styles.warnText}>
-                {noEmail} of them {noEmail === 1 ? 'has' : 'have'} no email address on file and will
-                not be emailed. Add one on the student to include them.
-              </Text>
+              <Text style={styles.warnText}>{t('messages.noEmailWarn', { count: noEmail })}</Text>
             </View>
           ) : null}
 

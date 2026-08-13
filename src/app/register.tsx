@@ -27,6 +27,7 @@ import {
   registerWithPassword,
   resendSignupCode,
 } from '@/lib/auth';
+import { MAIL_SENDER } from '@/lib/brand';
 import { enterApp } from '@/lib/nav';
 import { MIN_LENGTH, passwordAcceptable, scorePassword } from '@/lib/password';
 import { useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -326,9 +327,7 @@ export default function Register() {
           busy={busy}
         />
 
-        <Text style={styles.terms}>
-          By creating an account you agree to the Terms and Privacy Policy.
-        </Text>
+        <Text style={styles.terms}>{t('auth.terms')}</Text>
       </AuthScreen>
     );
   }
@@ -373,9 +372,7 @@ export default function Register() {
         </Press>
       </View>
 
-      <Text style={styles.spamHint}>
-        Not there? Check your spam folder. The sender is notifications@smiletech.dev.
-      </Text>
+      <Text style={styles.spamHint}>{t('auth.spamHint', { sender: MAIL_SENDER })}</Text>
     </AuthScreen>
   );
 }

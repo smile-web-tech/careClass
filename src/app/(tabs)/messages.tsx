@@ -471,7 +471,17 @@ function ReplyCard({ reply }: { reply: Reply }) {
   const t = useT();
   return (
     <Card style={[styles.replyCard, !reply.unread && { opacity: 0.75 }]}>
-      <Avatar name={reply.authorName} accent={reply.accent} size={42} radius={radius.button} />
+      {/* The student's face, not the writer's — we have no picture of a
+          parent, and the class this is about is what the teacher is scanning
+          for. Tapping the row still opens the reply; the profile is one tap
+          further in, from the picture there. */}
+      <Avatar
+        name={reply.authorName}
+        accent={reply.accent}
+        photoId={reply.studentId}
+        size={42}
+        radius={radius.button}
+      />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={styles.replyHead}>
           <Text style={styles.replyName}>{reply.authorName}</Text>

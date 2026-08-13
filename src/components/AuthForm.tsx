@@ -79,6 +79,7 @@ export function AuthScreen({
   /** Sits under the form, outside the scroll padding — the "already a member" line. */
   footer?: ReactNode;
 }) {
+  const t = useT();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const styles = useThemedStyles(makeStyles);
@@ -117,7 +118,7 @@ export function AuthScreen({
         }}>
         <View ref={content} collapsable={false}>
           <View style={styles.headerRow}>
-            <Press onPress={back} style={styles.backButton} accessibilityLabel="Go back">
+            <Press onPress={back} style={styles.backButton} accessibilityLabel={t('common.goBack')}>
               <Icon name="chevronLeft" size={17} color={color.ink} />
             </Press>
             {step && steps ? <StepRail step={step} steps={steps} /> : null}

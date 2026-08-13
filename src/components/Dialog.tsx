@@ -223,7 +223,7 @@ export function DialogHost() {
         {dismissable ? (
           <Pressable
             style={StyleSheet.absoluteFill}
-            accessibilityLabel="Dismiss"
+            accessibilityLabel={t('common.dismiss')}
             onPress={() => close(null)}
           />
         ) : null}

@@ -110,7 +110,7 @@ export function GroupForm({
           <Card style={styles.group}>
             <FieldRow
               label={t('groups.name')}
-              placeholder="e.g. IELTS Advanced"
+              placeholder={t('groups.namePlaceholder')}
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
@@ -118,7 +118,7 @@ export function GroupForm({
             <Divider inset={15} />
             <FieldRow
               label={t('groups.subject')}
-              placeholder="e.g. English"
+              placeholder={t('groups.subjectPlaceholder')}
               value={subject}
               onChangeText={setSubject}
               autoCapitalize="words"

@@ -107,6 +107,7 @@ const toMessage = (
 const toReply = (row: ReplyRow, accent: Reply['accent']): Reply => ({
   id: row.id,
   authorName: row.author_name,
+  studentId: row.student_id ?? undefined,
   context: row.context,
   accent,
   body: row.body,
