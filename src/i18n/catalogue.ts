@@ -238,6 +238,10 @@ const tk = {
   'students.noMatches': 'Tapylmady',
   'students.tryAnother': 'Başga at ýa-da belgi synanyş',
   'students.gone': 'Bu okuwçy indi sanawyňda ýok.',
+  'contacts.whichNumber': 'Haýsy belgi?',
+  'contacts.noNumberTitle': 'Belgi ýok',
+  'contacts.noNumberBody': 'Saýlanan kontaktda telefon belgisi ýok.',
+  'contacts.pickNumber': 'Kontaktlardan belgi al',
   'students.contactsNeeded': 'Kontaktlara rugsat gerek',
   'students.contactsNeededMessage':
     'Formany awtomatik doldurmak üçin ClassCare-a kontaktlaryňy okamaga rugsat ber.',
@@ -1019,6 +1023,10 @@ const ru: Record<TranslationKey, string> = {
   'students.noMatches': 'Ничего не найдено',
   'students.tryAnother': 'Попробуйте другое имя или номер',
   'students.gone': 'Этого ученика больше нет в вашем списке.',
+  'contacts.whichNumber': 'Какой номер?',
+  'contacts.noNumberTitle': 'Нет номера',
+  'contacts.noNumberBody': 'У выбранного контакта нет телефонного номера.',
+  'contacts.pickNumber': 'Взять номер из контактов',
   'students.contactsNeeded': 'Нужен доступ к контактам',
   'students.contactsNeededMessage':
     'Разрешите ClassCare читать контакты, чтобы форма заполнялась автоматически.',
@@ -1796,6 +1804,10 @@ const en: Record<TranslationKey, string> = {
   'students.noMatches': 'No matches',
   'students.tryAnother': 'Try another name or number',
   'students.gone': 'That student is no longer on your roster.',
+  'contacts.whichNumber': 'Which number?',
+  'contacts.noNumberTitle': 'No number',
+  'contacts.noNumberBody': 'That contact has no phone number on it.',
+  'contacts.pickNumber': 'Take a number from contacts',
   'students.contactsNeeded': 'Contacts access needed',
   'students.contactsNeededMessage':
     'Allow ClassCare to read your contacts to fill this form automatically.',

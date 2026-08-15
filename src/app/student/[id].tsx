@@ -175,9 +175,11 @@ export default function StudentProfile() {
       if (student.parentPhone) phones.push({ label: 'home', number: student.parentPhone });
       if (student.parent2Phone) phones.push({ label: 'other', number: student.parent2Phone });
 
+      // `address`, not `email` — the field is named for the address it holds,
+      // and getting it wrong writes a contact with silently empty addresses.
       const emails = [student.email, student.parentEmail, student.parent2Email]
         .filter((e): e is string => !!e)
-        .map((email) => ({ label: 'other', email }));
+        .map((address) => ({ label: 'other', address }));
 
       await Contacts.Contact.presentCreateForm({
         givenName,

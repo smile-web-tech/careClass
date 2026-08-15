@@ -7,16 +7,16 @@
  * the parent email field would have been useless on day one: every student
  * already on the roster was created before it existed.
  */
-import * as Contacts from 'expo-contacts';
 import { useState } from 'react';
 import * as Crypto from 'expo-crypto';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { showAlert } from '@/components/Dialog';
+import { showError } from '@/components/Dialog';
 import { DatePicker } from '@/components/DatePicker';
 import { StudentPhotoPicker } from '@/components/StudentPhotoPicker';
 import { useT } from '@/i18n/useT';
+import { pickContact, pickPhoneNumber } from '@/lib/contactPicker';
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { Button, Card, Divider, FieldRow, Overline, Press, SelectChip } from '@/components/ui';
@@ -181,23 +181,57 @@ export function StudentForm({
     groupIds,
   });
 
+  /*
+    Fill the whole form from one contact.
+
+    Rewritten off `presentContactPickerAsync`, which is not merely deprecated in
+    SDK 57 — it throws the moment it is called, so this button had been dead for
+    as long as the app has been on this SDK. `Contact.presentPicker` is the
+    replacement, and it needs no permission of its own: the teacher picks the
+    one contact, which is the whole consent.
+
+    Each field fills only where there is nothing better already — a name the
+    teacher has typed is not overwritten by whatever the address book calls
+    that person.
+  */
   const importFromContacts = async () => {
-    const { granted } = await Contacts.requestPermissionsAsync();
-    if (!granted) {
-      showAlert(t('students.contactsNeeded'), t('students.contactsNeededMessage'));
-      return;
+    try {
+      const picked = await pickContact();
+      if (!picked) return;
+
+      setForm((f) => ({
+        ...f,
+        name: picked.name || f.name,
+        phone: picked.phone ?? f.phone,
+        email: picked.email ?? f.email,
+      }));
+    } catch (e) {
+      showError(e, t('students.contactsNeeded'));
     }
-
-    const contact = await Contacts.presentContactPickerAsync();
-    if (!contact) return;
-
-    setForm((f) => ({
-      ...f,
-      name: contact.name ?? f.name,
-      phone: contact.phoneNumbers?.[0]?.number?.trim() ?? f.phone,
-      email: contact.emails?.[0]?.email ?? f.email,
-    }));
   };
+
+  /**
+   * Put one number into one field, and touch nothing else.
+   *
+   * Parameterised by field because the form has three phone rows — the
+   * student's and both parents' — and every one of them wants this. The name
+   * attached to the number is deliberately discarded: the teacher is standing
+   * on the mother's row and already knows whose number they are fetching.
+   */
+  const numberAction = (field: 'phone' | 'parentPhone' | 'parent2Phone') => ({
+    icon: 'contacts' as const,
+    label: t('contacts.pickNumber'),
+    onPress: () => {
+      void (async () => {
+        try {
+          const number = await pickPhoneNumber();
+          if (number) setForm((f) => ({ ...f, [field]: number }));
+        } catch (e) {
+          showError(e, t('students.contactsNeeded'));
+        }
+      })();
+    },
+  });
 
   return (
     <Screen>
@@ -247,6 +281,7 @@ export function StudentForm({
               value={form.phone}
               onChangeText={set('phone')}
               keyboardType="phone-pad"
+              action={numberAction('phone')}
             />
             <Divider inset={15} />
             <FieldRow
@@ -329,6 +364,7 @@ export function StudentForm({
               value={form.parentPhone}
               onChangeText={set('parentPhone')}
               keyboardType="phone-pad"
+              action={numberAction('parentPhone')}
             />
             <Divider inset={15} />
             <FieldRow
@@ -366,6 +402,7 @@ export function StudentForm({
               value={form.parent2Phone}
               onChangeText={set('parent2Phone')}
               keyboardType="phone-pad"
+              action={numberAction('parent2Phone')}
             />
             <Divider inset={15} />
             <FieldRow

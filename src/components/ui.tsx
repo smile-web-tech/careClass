@@ -453,8 +453,22 @@ export function StatTile({
 export function FieldRow({
   label,
   labelWidth = 74,
+  action,
   ...input
-}: TextInputProps & { label: string; labelWidth?: number }) {
+}: TextInputProps & {
+  label: string;
+  labelWidth?: number;
+  /**
+   * A button on the right-hand end of the field.
+   *
+   * Inside the row rather than under it, because it belongs to this one field:
+   * a button that fills "the phone number" has to say *which* phone number, and
+   * on a form with three of them the only unambiguous way to say it is to sit
+   * in the row it fills. Typing is unaffected — it is a tap target beside the
+   * text, not a mode.
+   */
+  action?: { icon: IconName; onPress: () => void; label: string };
+}) {
   const { color, scheme } = useTheme();
   const styles = useThemedStyles(makeStyles);
   return (
@@ -467,6 +481,18 @@ export function FieldRow({
         selectionColor={color.primary}
         keyboardAppearance={scheme === 'dark' ? 'dark' : 'light'}
       />
+      {action ? (
+        <Press
+          onPress={action.onPress}
+          accessibilityLabel={action.label}
+          // Padded well past the icon: this sits next to a text field, and a
+          // 20pt target beside somewhere you are trying to tap to type is a
+          // button people hit by accident and never on purpose.
+          hitSlop={10}
+          style={styles.fieldAction}>
+          <Icon name={action.icon} size={17} color={color.primary} />
+        </Press>
+      ) : null}
     </View>
   );
 }
@@ -693,6 +719,16 @@ const makeStyles = ({ color }: Theme) =>
       paddingVertical: 12,
     },
     fieldLabel: { fontFamily: body[700], fontSize: 12.5, color: color.muted },
+    // Square, so a row with a button is exactly as tall as one without and the
+    // card does not step in and out as you go down the form.
+    fieldAction: {
+      width: 30,
+      height: 30,
+      borderRadius: radius.md,
+      backgroundColor: color.primaryTint,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     fieldInput: {
       flex: 1,
       minWidth: 0,
