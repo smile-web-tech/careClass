@@ -22,6 +22,7 @@ import type {
 import type { Language } from '@/i18n';
 import { DEFAULT_LANGUAGE, setActiveLanguage } from '@/i18n';
 import { at, toKey } from '@/lib/date';
+import { runsOn } from '@/lib/schedule';
 import { accentNames } from '@/theme';
 import type { ReminderLead } from '@/lib/notifications';
 
@@ -850,6 +851,28 @@ export function attendanceFor(
 export const isAttendanceSaved = (key: string) => !!useStore.getState().attendance[key];
 
 /**
+ * What a register nobody touched means.
+ *
+ * Present. Teachers here mark absences, not attendances: if everybody came,
+ * there is nothing to record and the register stays untouched. Treating that as
+ * missing evidence was technically honest and practically wrong — a group with
+ * near-perfect attendance produced a rate of "—" all term, because the only
+ * sessions with any data were the handful where somebody was out. The teacher
+ * saw no number precisely when the number was best.
+ *
+ * `attendanceFor` has always opened a fresh register with everyone present, so
+ * this is the same rule the screen already follows, applied to the figures the
+ * screen produces.
+ *
+ * Two things this deliberately does not do. It does not invent a *mark* — no
+ * absence and no lateness is ever conjured, and `historicMark` remains demo-only
+ * for exactly that reason. And it does not touch `marked`, which stays a count
+ * of registers a human actually filled in, so "marked in 6 of 24 sessions" is
+ * still there to be read.
+ */
+const UNMARKED: AttendanceStatus = 'present';
+
+/**
  * Attendance rate for a student (or a whole group) over the trailing `weeks`.
  *
  * Only sessions that were actually marked count. `rate` is null when there is
@@ -874,19 +897,19 @@ export function attendanceRate(
       const day = new Date(now);
       day.setDate(day.getDate() - d);
       const dow = day.getDay();
+      const dateKey = toKey(day);
+      if (!runsOn(g, dateKey)) continue;
       for (const slot of g.slots) {
         if (slot.day !== dow) continue;
-        const dateKey = toKey(day);
         if (at(dateKey, slot.end).getTime() > now.getTime()) continue;
         const key = `${g.id}@${dateKey}#${slot.start}`;
         const record = attendance[key];
-        if (!record && !invent) continue; // Never marked — not evidence of anything.
         sessions++;
         for (const sid of studentIds) {
-          // A register can exist without an entry for this student — they
-          // joined after it was taken. Falling back to `historicMark` there
-          // invented a mark for a real person on a real date.
-          const mark = record?.[sid] ?? (invent ? historicMark(sid, key) : undefined);
+          // Unmarked counts as present — see `UNMARKED`. `historicMark` is only
+          // ever reached on demo data, where inventing a mark is the point.
+          const mark =
+            record?.[sid] ?? (invent ? historicMark(sid, key) : UNMARKED);
           if (!mark) continue;
           total++;
           if (mark !== 'absent') hits++;
@@ -919,6 +942,7 @@ export function attendanceOnDay(
   if (!group) return empty;
 
   const dateKey = toKey(date);
+  if (!runsOn(group, dateKey)) return empty;
   const slot = group.slots.find((s) => s.day === date.getDay());
   if (!slot) return empty;
 
@@ -980,18 +1004,18 @@ export function recentSessionsFor(student: Student, limit = 3) {
     const dateKey = toKey(day);
     for (const g of groups) {
       if (!student.groupIds.includes(g.id)) continue;
+      if (!runsOn(g, dateKey)) continue;
       for (const slot of g.slots) {
         if (slot.day !== day.getDay()) continue;
         const end = at(dateKey, slot.end);
         if (end.getTime() > now.getTime()) continue;
         const key = `${g.id}@${dateKey}#${slot.start}`;
         const mark = attendance[key]?.[student.id];
-        if (!mark && !invent) continue; // Show what was recorded, nothing more.
         out.push({
           key,
           date: end,
           group: g,
-          mark: mark ?? historicMark(student.id, key),
+          mark: mark ?? (invent ? historicMark(student.id, key) : UNMARKED),
         });
       }
     }
@@ -1012,9 +1036,10 @@ function pastSessionKeys(groups: Group[], groupIds: string[], weeks: number, now
     for (let d = 0; d < weeks * 7; d++) {
       const day = new Date(now);
       day.setDate(day.getDate() - d);
+      const dateKey = toKey(day);
+      if (!runsOn(g, dateKey)) continue;
       for (const slot of g.slots) {
         if (slot.day !== day.getDay()) continue;
-        const dateKey = toKey(day);
         if (at(dateKey, slot.end).getTime() > now.getTime()) continue;
         keys.push(`${g.id}@${dateKey}#${slot.start}`);
       }
@@ -1057,17 +1082,17 @@ export function useStudentStats(student?: Student, weeks = 8) {
     let marked = 0;
 
     for (const key of keys) {
-      // Only this student's own mark counts. A register that predates them
-      // simply has no entry, and inventing one would show a teacher absences
-      // that never happened.
       const mark = attendance[key]?.[student.id];
-      if (!mark) continue;
-      marked++;
-      if (mark !== 'absent') present++;
+      // `marked` stays a count of registers a human filled in, which is what
+      // makes "marked in 6 of 24" worth showing. The rate is the separate
+      // question, and there an untouched register means present — see
+      // `UNMARKED`.
+      if (mark) marked++;
+      if ((mark ?? UNMARKED) !== 'absent') present++;
     }
 
     return {
-      rate: marked ? Math.round((present / marked) * 100) : null,
+      rate: keys.length ? Math.round((present / keys.length) * 100) : null,
       sessions: keys.length,
       marked,
       average: averagePercent(student.id, grades, assessments),
@@ -1107,6 +1132,7 @@ export function absenceCount(studentId: string, groupId: string, weeks = 6) {
     const day = new Date(now);
     day.setDate(day.getDate() - d);
     const dateKey = toKey(day);
+    if (!runsOn(g, dateKey)) continue;
     for (const slot of g.slots) {
       if (slot.day !== day.getDay()) continue;
       if (at(dateKey, slot.end).getTime() > now.getTime()) continue;

@@ -35,8 +35,22 @@ import { fromKey, monthLong, toKey, weekdayInitials } from '@/lib/date';
 import { radius, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
-/** How far back the year list goes. A teacher's oldest student, generously. */
+/**
+ * How far back the year list goes by default. A teacher's oldest student,
+ * generously — this picker was written for birthdays and that is still its
+ * commonest use.
+ */
 const YEARS_BACK = 90;
+
+/**
+ * Years ahead, for a date that has not happened yet.
+ *
+ * A course start date is the other thing this picker is asked for, and a list
+ * running only backwards cannot express next September. Kept as a prop rather
+ * than simply widening the default: offering 2031 while somebody enters a
+ * child's birthday is noise in the one list where scrolling is the whole cost.
+ */
+const YEARS_FORWARD = 0;
 
 /** Six weeks. The most any month can span, and the height the grid always is. */
 const GRID_CELLS = 42;
@@ -47,6 +61,9 @@ export function DatePicker({
   visible,
   value,
   title,
+  yearsBack = YEARS_BACK,
+  yearsForward = YEARS_FORWARD,
+  opensOn,
   onClose,
   onPick,
 }: {
@@ -54,6 +71,18 @@ export function DatePicker({
   /** `YYYY-MM-DD`, or undefined for nothing chosen yet. */
   value?: string;
   title: string;
+  /** How many years before this one to offer. */
+  yearsBack?: number;
+  /** How many after. Zero for a date that cannot be in the future. */
+  yearsForward?: number;
+  /**
+   * Which month to open on when nothing is chosen yet.
+   *
+   * Defaults to sixteen years ago, which is a sensible guess for a birthday and
+   * a terrible one for a course starting next month — so a caller asking for a
+   * date in the future passes today.
+   */
+  opensOn?: Date;
   onClose: () => void;
   onPick: (dateKey: string) => void;
 }) {
@@ -71,16 +100,16 @@ export function DatePicker({
     year when there is not — starting at today would put a fifteen-year-old
     fifteen years of paging away.
   */
-  const [cursor, setCursor] = useState(() => (value ? fromKey(value) : defaultView()));
+  const [cursor, setCursor] = useState(() => (value ? fromKey(value) : (opensOn ?? defaultView())));
   const [mode, setMode] = useState<Mode>('day');
 
   // Reopening should show the date on the field, not wherever the teacher had
   // paged to before they cancelled.
   useEffect(() => {
     if (!visible) return;
-    setCursor(value ? fromKey(value) : defaultView());
+    setCursor(value ? fromKey(value) : (opensOn ?? defaultView()));
     setMode('day');
-  }, [visible, value]);
+  }, [visible, value, opensOn]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -88,8 +117,13 @@ export function DatePicker({
   const days = useMemo(() => monthGrid(year, month), [year, month]);
   const years = useMemo(() => {
     const thisYear = new Date().getFullYear();
-    return Array.from({ length: YEARS_BACK }, (_, i) => thisYear - i);
-  }, []);
+    // Newest first, so a birthday list still opens on recent years and a
+    // schedule list still opens near today rather than at the far end.
+    return Array.from(
+      { length: yearsBack + yearsForward },
+      (_, i) => thisYear + yearsForward - i,
+    );
+  }, [yearsBack, yearsForward]);
 
   const stepMonth = (by: number) => {
     const next = new Date(cursor);
@@ -277,6 +311,38 @@ export function DatePicker({
 }
 
 /** Sixteen years ago, which is the middle of a tutor's roster. */
+/**
+ * A tappable row showing a chosen date, matching `TimeField` exactly.
+ *
+ * Deliberately the same shape as its time counterpart: a form that asks for a
+ * date and a time in one card should not have them look like two different
+ * kinds of control.
+ */
+export function DateField({
+  label,
+  value,
+  muted,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  /** Greys the value, for "ongoing" and other absences that are not a date. */
+  muted?: boolean;
+  onPress: () => void;
+}) {
+  const { color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <Press onPress={onPress} style={styles.field} accessibilityRole="button">
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.fieldValueWrap}>
+        <Text style={[styles.fieldValue, muted && { color: color.mutedLight }]}>{value}</Text>
+        <View style={[styles.fieldChevron, { borderColor: color.chevron }]} />
+      </View>
+    </Press>
+  );
+}
+
 function defaultView() {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 16);
@@ -304,8 +370,39 @@ function monthGrid(year: number, month: number): (Date | null)[] {
   return cells;
 }
 
-const makeStyles = ({ color }: Theme) =>
+const makeStyles = ({ color, shadow }: Theme) =>
   StyleSheet.create({
+    // Mirrors `TimeField` exactly — see `DateField`.
+    field: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+    },
+    fieldLabel: { fontFamily: body[600], fontSize: 14.5, color: color.inkSoft },
+    fieldValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    fieldValue: {
+      fontFamily: display[600],
+      fontSize: 16,
+      color: color.ink,
+      ...text.tabular,
+      ...shadow.segment,
+      backgroundColor: color.fill,
+      overflow: 'hidden',
+      borderRadius: radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    fieldChevron: {
+      width: 7,
+      height: 7,
+      borderRightWidth: 1.8,
+      borderBottomWidth: 1.8,
+      transform: [{ rotate: '45deg' }],
+      marginTop: -3,
+    },
     ink: { color: color.ink },
     scrim: { flex: 1, backgroundColor: color.scrim },
     sheet: {

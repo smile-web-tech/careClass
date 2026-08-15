@@ -9,23 +9,67 @@ import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DateField, DatePicker } from '@/components/DatePicker';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
+import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
+import { fromKey, longDate, toKey, weekdayInitials } from '@/lib/date';
 import { TimeField, TimePicker } from '@/components/TimePicker';
 import { Button, Card, Divider, FieldRow, Overline, Press } from '@/components/ui';
 import type { Group, Slot, Weekday } from '@/data/types';
 import { accentNames, radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
 
-const DAYS: { day: Weekday; label: string }[] = [
-  { day: 1, label: 'Mon' },
-  { day: 2, label: 'Tue' },
-  { day: 3, label: 'Wed' },
-  { day: 4, label: 'Thu' },
-  { day: 5, label: 'Fri' },
-  { day: 6, label: 'Sat' },
-  { day: 0, label: 'Sun' },
+/**
+ * Monday first, and labelled by the phone's own language.
+ *
+ * These were seven hardcoded English abbreviations, so a Turkmen teacher picked
+ * their class days off a row reading Mon Tue Wed. `weekdayInitials` returns them
+ * in the app's language, Sunday-first as `Date#getDay` numbers them, so the
+ * order here is the reordering.
+ */
+const DAY_NUMBERS: Weekday[] = [1, 2, 3, 4, 5, 6, 0];
+
+/**
+ * How long a course runs, offered as the lengths people actually book.
+ *
+ * Stored as an end date rather than as a length. A length is only meaningful
+ * beside a start, and the moment the teacher moves the start you have to guess
+ * whether they meant to move the end with it — so the picker computes a date
+ * and the date is what is kept. Choosing a duration again recomputes it.
+ */
+const DURATIONS: { key: string; labelKey: TranslationKey; days?: number; months?: number }[] = [
+  { key: '1w', labelKey: 'groups.oneWeek', days: 7 },
+  { key: '2w', labelKey: 'groups.twoWeeks', days: 14 },
+  { key: '1m', labelKey: 'groups.oneMonth', months: 1 },
+  { key: '3m', labelKey: 'groups.threeMonths', months: 3 },
+  { key: '6m', labelKey: 'groups.sixMonths', months: 6 },
+  { key: '1y', labelKey: 'groups.oneYear', months: 12 },
 ];
+
+/**
+ * The last day a course of this length covers, counting from its first.
+ *
+ * Inclusive at both ends, which is how people say it: a one-week course
+ * starting Monday finishes on Sunday, not on the Monday after. Months are
+ * added as calendar months and then backed off a day, so "three months from
+ * 15 January" is 14 April however many days those months hold.
+ */
+function endOfCourse(startKey: string, spec: { days?: number; months?: number }): string {
+  const end = fromKey(startKey);
+  if (spec.days) end.setDate(end.getDate() + spec.days - 1);
+  if (spec.months) {
+    const day = end.getDate();
+    end.setDate(1);
+    end.setMonth(end.getMonth() + spec.months);
+    // Clamped, so 31 January plus one month is 28 February rather than 3 March.
+    end.setDate(Math.min(day, daysInMonth(end.getFullYear(), end.getMonth())));
+    end.setDate(end.getDate() - 1);
+  }
+  return toKey(end);
+}
+
+const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
 
 export type GroupDraft = Omit<Group, 'id'>;
 
@@ -70,14 +114,40 @@ export function GroupForm({
 
   const [picking, setPicking] = useState<'start' | 'end' | null>(null);
 
-  const chosenDays = useMemo(() => DAYS.filter((d) => days[d.day]), [days]);
+  /*
+    When the course runs.
+
+    `startsOn` defaults to today for a new group, because a course a teacher is
+    entering has almost always either just begun or is about to. `endsOn` starts
+    empty, which means ongoing — the behaviour every group had before there were
+    dates at all, and still the right answer for a tutor whose classes simply
+    continue.
+  */
+  const [startsOn, setStartsOn] = useState(initial?.startsOn ?? toKey(new Date()));
+  const [endsOn, setEndsOn] = useState<string | undefined>(initial?.endsOn);
+  const [pickingDate, setPickingDate] = useState<'startsOn' | 'endsOn' | null>(null);
+
+  const dayLabels = weekdayInitials();
+  const chosenDays = useMemo(() => DAY_NUMBERS.filter((d) => days[d]), [days]);
+
+  /** Which duration chip, if any, matches the dates as they stand. */
+  const activeDuration = useMemo(
+    () => DURATIONS.find((d) => endsOn && endOfCourse(startsOn, d) === endsOn)?.key ?? null,
+    [startsOn, endsOn],
+  );
   // The wheel cannot produce a malformed time, so the only thing left to check
   // is that the teacher picked at least one day and named the thing.
   const ready =
-    name.trim().length > 1 && subject.trim().length > 1 && chosenDays.length > 0 && start < end;
+    name.trim().length > 1 &&
+    subject.trim().length > 1 &&
+    chosenDays.length > 0 &&
+    start < end &&
+    // A course that ends before it begins is the one impossible pair. The end
+    // picker refuses it too; this is the belt to that pair of braces.
+    (!endsOn || endsOn >= startsOn);
 
   const submit = () => {
-    const slots: Slot[] = chosenDays.map((d) => ({ day: d.day, start, end }));
+    const slots: Slot[] = chosenDays.map((d) => ({ day: d, start, end }));
     onSubmit({
       name: name.trim(),
       subject: subject.trim(),
@@ -87,8 +157,22 @@ export function GroupForm({
       room: room.trim(),
       accent,
       slots,
+      startsOn,
+      endsOn,
     });
   };
+
+  /** How many classes the course actually contains, once its dates are known. */
+  const sessionCount = useMemo(() => {
+    if (!endsOn || !chosenDays.length) return null;
+    let n = 0;
+    for (let d = fromKey(startsOn); toKey(d) <= endsOn; d.setDate(d.getDate() + 1)) {
+      if (chosenDays.includes(d.getDay() as Weekday)) n += 1;
+      // A mistyped year could otherwise walk a century a day at a time.
+      if (n > 999) return null;
+    }
+    return n;
+  }, [startsOn, endsOn, chosenDays]);
 
   return (
     <Screen>
@@ -134,13 +218,13 @@ export function GroupForm({
 
           <Overline style={styles.label}>{t('groups.meetsOn')}</Overline>
           <View style={styles.dayRow}>
-            {DAYS.map((d) => {
-              const on = !!days[d.day];
+            {DAY_NUMBERS.map((day) => {
+              const on = !!days[day];
               return (
                 <Press
-                  key={d.day}
+                  key={day}
                   haptic
-                  onPress={() => setDays((x) => ({ ...x, [d.day]: !x[d.day] }))}
+                  onPress={() => setDays((x) => ({ ...x, [day]: !x[day] }))}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: on }}
                   style={[
@@ -151,7 +235,7 @@ export function GroupForm({
                     },
                   ]}>
                   <Text style={[styles.dayLabel, { color: on ? '#fff' : color.inkSoft }]}>
-                    {d.label}
+                    {dayLabels[day]}
                   </Text>
                 </Press>
               );
@@ -168,6 +252,81 @@ export function GroupForm({
             <Divider inset={15} />
             <TimeField label={t('groups.ends')} value={end} onPress={() => setPicking('end')} />
           </Card>
+
+          <Overline style={styles.label}>{t('groups.runs')}</Overline>
+          <Card style={styles.group}>
+            <DateField
+              label={t('groups.firstClass')}
+              value={longDate(fromKey(startsOn))}
+              onPress={() => setPickingDate('startsOn')}
+            />
+            <Divider inset={15} />
+            <DateField
+              label={t('groups.lastClass')}
+              value={endsOn ? longDate(fromKey(endsOn)) : t('groups.ongoing')}
+              muted={!endsOn}
+              onPress={() => setPickingDate('endsOn')}
+            />
+          </Card>
+
+          {/*
+            Durations as shortcuts, not as the model.
+
+            Tapping one sets the end date and the chip lights up because the
+            dates happen to match it — so moving either date afterwards simply
+            un-highlights the chip rather than leaving the form claiming a
+            length it no longer has. "Ongoing" is the same control saying there
+            is no end, which is a real answer and not a missing one.
+          */}
+          <View style={styles.durationRow}>
+            {DURATIONS.map((d) => {
+              const on = activeDuration === d.key;
+              return (
+                <Press
+                  key={d.key}
+                  haptic
+                  onPress={() => setEndsOn(endOfCourse(startsOn, d))}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  style={[
+                    styles.durationChip,
+                    {
+                      backgroundColor: on ? color.primaryTint : color.surface,
+                      borderColor: on ? color.primary : color.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[styles.durationLabel, { color: on ? color.primaryInk : color.inkSoft }]}>
+                    {t(d.labelKey)}
+                  </Text>
+                </Press>
+              );
+            })}
+            <Press
+              haptic
+              onPress={() => setEndsOn(undefined)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: !endsOn }}
+              style={[
+                styles.durationChip,
+                {
+                  backgroundColor: !endsOn ? color.primaryTint : color.surface,
+                  borderColor: !endsOn ? color.primary : color.border,
+                },
+              ]}>
+              <Text
+                style={[styles.durationLabel, { color: !endsOn ? color.primaryInk : color.inkSoft }]}>
+                {t('groups.ongoing')}
+              </Text>
+            </Press>
+          </View>
+
+          {/* The number the teacher is really deciding: how many lessons. */}
+          <Text style={styles.runsHint}>
+            {sessionCount !== null
+              ? t('groups.classesInCourse', { count: sessionCount })
+              : t('groups.ongoingHint')}
+          </Text>
 
           <Overline style={styles.label}>{t('groups.colour')}</Overline>
           <View style={styles.accentRow}>
@@ -205,6 +364,30 @@ export function GroupForm({
       <StickyFooter>
         <Button grow label={submitLabel} height={50} onPress={submit} disabled={!ready || busy} />
       </StickyFooter>
+
+      <DatePicker
+        visible={pickingDate !== null}
+        title={t(pickingDate === 'endsOn' ? 'groups.lastClass' : 'groups.firstClass')}
+        value={pickingDate === 'endsOn' ? endsOn : startsOn}
+        // A course runs now or soon, so the year list has to reach forwards —
+        // the default is a birthday's, ninety years of the past and none ahead.
+        yearsBack={4}
+        yearsForward={6}
+        opensOn={new Date()}
+        onClose={() => setPickingDate(null)}
+        onPick={(key) => {
+          if (pickingDate === 'endsOn') {
+            // An end before the start is not a date the teacher can have meant.
+            setEndsOn(key < startsOn ? startsOn : key);
+          } else {
+            setStartsOn(key);
+            // Drag the end along rather than leave an impossible pair on screen,
+            // matching what the time fields above already do.
+            if (endsOn && endsOn < key) setEndsOn(key);
+          }
+          setPickingDate(null);
+        }}
+      />
 
       <TimePicker
         visible={picking !== null}
@@ -251,6 +434,24 @@ const makeStyles = ({ color }: Theme) =>
       justifyContent: 'center',
     },
     dayLabel: { fontFamily: body[600], fontSize: 12.5 },
+
+    durationRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    durationChip: {
+      paddingHorizontal: 14,
+      height: 38,
+      borderRadius: radius.field,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    durationLabel: { fontFamily: body[700], fontSize: 12.5 },
+    runsHint: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      marginTop: 10,
+      marginBottom: 22,
+    },
 
     // Twelve colours would make a row of labelled pills far too tall, so the
     // picker is a swatch grid and the chosen name is spelled out beneath it.

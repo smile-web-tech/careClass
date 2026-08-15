@@ -55,6 +55,9 @@ export type GroupRow = {
   subject: string;
   room: string;
   accent: GroupAccentRow;
+  /** `YYYY-MM-DD`. Null on every group that predates migration 0016. */
+  starts_on: string | null;
+  ends_on: string | null;
   archived_at: string | null;
   created_at: string;
 };

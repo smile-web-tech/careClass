@@ -17,6 +17,25 @@ export type Group = {
   accent: AccentName;
   room: string;
   slots: Slot[];
+
+  /*
+    When the course runs, as opposed to which days of the week it meets.
+
+    `slots` says "Monday and Thursday at four". These two say "for the eight
+    weeks beginning in September". Without them a group meets on those days
+    forever in both directions, so a course that finished in June still fills
+    next January's calendar, and its attendance rate is computed against
+    sessions that will never happen.
+
+    Both optional, and both absent means exactly what it always meant: a group
+    with no end, which is the right default for a tutor whose classes simply
+    continue. Every group that existed before these columns is that.
+  */
+
+  /** `YYYY-MM-DD`. The first day the group meets; before it, nothing. */
+  startsOn?: string;
+  /** `YYYY-MM-DD`, inclusive — the last day it can meet. Absent means ongoing. */
+  endsOn?: string;
 };
 
 export type Student = {

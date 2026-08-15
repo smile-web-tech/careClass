@@ -19,8 +19,14 @@ import {
 } from '@/data/store';
 import type { Student } from '@/data/types';
 import { callNumber, smsNumber } from '@/lib/contact';
-import { toKey } from '@/lib/date';
-import { nextSessionForGroup, slotDaysLabel, slotTimeLabel, roomLabel } from '@/lib/schedule';
+import { fromKey, shortDate, toKey } from '@/lib/date';
+import {
+  hasEnded,
+  nextSessionForGroup,
+  slotDaysLabel,
+  slotTimeLabel,
+  roomLabel,
+} from '@/lib/schedule';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -132,6 +138,23 @@ export default function GroupDetail() {
               <MetaChip label={slotDaysLabel(group)} />
               <MetaChip label={slotTimeLabel(group)} />
               <MetaChip label={roomLabel(group.room, t)} />
+              {/*
+                Only when there is something to say.
+
+                A group with no end date is the ordinary case and does not need
+                a chip announcing it. One that has finished does: its sessions
+                have stopped appearing in the calendar, and without this the
+                teacher is left wondering where their Tuesday class went.
+              */}
+              {group.endsOn ? (
+                <MetaChip
+                  label={
+                    hasEnded(group)
+                      ? t('groups.ended')
+                      : `${t('groups.lastClass')} · ${shortDate(fromKey(group.endsOn))}`
+                  }
+                />
+              ) : null}
             </View>
           </View>
         </View>

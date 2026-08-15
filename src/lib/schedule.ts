@@ -1,5 +1,5 @@
 import type { Group, Session, Weekday } from '@/data/types';
-import { addDays, at, minutesOf, startOfDay, toKey } from '@/lib/date';
+import { addDays, at, fromKey, minutesOf, startOfDay, toKey } from '@/lib/date';
 
 /** Sessions are derived, so their ids must be reconstructible from the parts. */
 export const sessionId = (groupId: string, dateKey: string) => `${groupId}@${dateKey}`;
@@ -9,12 +9,36 @@ export function parseSessionId(id: string) {
   return { groupId, date };
 }
 
+/**
+ * Whether this group is running on the given day.
+ *
+ * The one place the course window is interpreted, so a group cannot be inside
+ * its term on the calendar and outside it in its attendance rate. Both bounds
+ * are inclusive and compared as `YYYY-MM-DD` strings, which sort correctly by
+ * date and cannot be knocked sideways by a timezone the way parsing to `Date`
+ * and comparing timestamps can.
+ *
+ * A missing bound is an open one. Both missing is a group that runs forever,
+ * which is what every group did before there was a window at all.
+ */
+export function runsOn(group: Group, dateKey: string): boolean {
+  if (group.startsOn && dateKey < group.startsOn) return false;
+  if (group.endsOn && dateKey > group.endsOn) return false;
+  return true;
+}
+
+/** Whether the course has finished — for the badge on a group that is over. */
+export function hasEnded(group: Group, now = new Date()): boolean {
+  return !!group.endsOn && toKey(now) > group.endsOn;
+}
+
 /** Every session across all groups on one calendar day, earliest first. */
 export function sessionsOn(groups: Group[], date: Date): Session[] {
   const key = toKey(date);
   const day = date.getDay() as Weekday;
 
   return groups
+    .filter((g) => runsOn(g, key))
     .flatMap((g) =>
       g.slots
         .filter((s) => s.day === day)
@@ -39,8 +63,19 @@ export function uniqueSessionKey(s: Session) {
 
 /** The next session for one group at or after `from`, scanning up to a fortnight. */
 export function nextSessionForGroup(group: Group, from = new Date()): Session | null {
+  /*
+    Start looking on the first day the course actually runs.
+
+    A fortnight's scan from today finds nothing for a group that begins in
+    March, and "no upcoming class" is the wrong answer for a course the teacher
+    has just set up — it reads as the schedule not having saved. Jumping the
+    scan to the start date answers the question they meant.
+  */
+  const begins = group.startsOn ? fromKey(group.startsOn) : from;
+  const scanFrom = begins.getTime() > from.getTime() ? begins : from;
+
   for (let i = 0; i < 14; i++) {
-    const day = addDays(from, i);
+    const day = addDays(scanFrom, i);
     for (const s of sessionsOn([group], day)) {
       if (at(s.date, s.start).getTime() >= from.getTime() || i > 0) return s;
     }

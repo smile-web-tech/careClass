@@ -53,6 +53,10 @@ const toGroup = (row: GroupRow, slots: GroupSlotRow[]): Group => ({
   subject: row.subject,
   room: row.room,
   accent: row.accent,
+  // `undefined` rather than null, so an absent bound reads the same here as it
+  // does on a group the device made itself and never sent.
+  startsOn: row.starts_on ?? undefined,
+  endsOn: row.ends_on ?? undefined,
   slots: slots
     .filter((s) => s.group_id === row.id)
     .map((s) => ({
@@ -395,6 +399,8 @@ export async function createGroup(group: Group): Promise<Group> {
         subject: group.subject,
         room: group.room,
         accent: group.accent,
+        starts_on: group.startsOn ?? null,
+        ends_on: group.endsOn ?? null,
       })
       .select()
       .single(),
@@ -542,6 +548,10 @@ export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>)
   if (patch.subject !== undefined) fields.subject = patch.subject;
   if (patch.room !== undefined) fields.room = patch.room;
   if (patch.accent !== undefined) fields.accent = patch.accent;
+  // Explicitly nullable: clearing an end date is a real edit — "this course no
+  // longer has a finish" — and skipping it would leave the old date in place.
+  if (patch.startsOn !== undefined) fields.starts_on = patch.startsOn ?? null;
+  if (patch.endsOn !== undefined) fields.ends_on = patch.endsOn ?? null;
 
   if (Object.keys(fields).length) {
     // The teacher_id filter is belt-and-braces: RLS already blocks other rows,
