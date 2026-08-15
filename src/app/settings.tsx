@@ -28,6 +28,7 @@ import { updateTeacher } from '@/data/api';
 import { exportBackup } from '@/data/backup';
 import { useGroups, useStore } from '@/data/store';
 import { hydrate } from '@/data/sync';
+import { shareCsvTemplate } from '@/lib/csvFlow';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { SUPPORT_EMAIL } from '@/lib/brand';
@@ -175,6 +176,22 @@ export default function Settings() {
             label={busyBackup === 'import' ? t('backup.importing') : t('backup.import')}
             hint={t('backup.importHint')}
             onPress={() => void doImport()}
+          />
+          <Divider inset={58} />
+          {/*
+            The spreadsheet template, kept beside the backup rows.
+
+            It is also offered from inside a failed import, which is where most
+            teachers will meet it. Here as well because the teacher who has not
+            tried yet — who is looking at an empty student list wondering how to
+            get sixty names in — never sees that failure, and this is the first
+            place they go looking.
+          */}
+          <ActionRow
+            icon="image"
+            label={t('csv.template')}
+            hint={t('csv.templateHint')}
+            onPress={() => void shareCsvTemplate()}
           />
         </Card>
 

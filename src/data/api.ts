@@ -548,10 +548,17 @@ export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>)
   if (patch.subject !== undefined) fields.subject = patch.subject;
   if (patch.room !== undefined) fields.room = patch.room;
   if (patch.accent !== undefined) fields.accent = patch.accent;
-  // Explicitly nullable: clearing an end date is a real edit — "this course no
-  // longer has a finish" — and skipping it would leave the old date in place.
-  if (patch.startsOn !== undefined) fields.starts_on = patch.startsOn ?? null;
-  if (patch.endsOn !== undefined) fields.ends_on = patch.endsOn ?? null;
+  /*
+    Tested with `in`, not against `undefined`.
+
+    Clearing an end date — "this course no longer has a finish" — is expressed
+    as `endsOn: undefined`, which `!== undefined` reads as "not mentioned" and
+    skips. The column kept its old date, and the next sync pulled it back down
+    over the teacher's edit, so switching a course to Ongoing silently did
+    nothing. `in` distinguishes an absent key from a present empty one.
+  */
+  if ('startsOn' in patch) fields.starts_on = patch.startsOn ?? null;
+  if ('endsOn' in patch) fields.ends_on = patch.endsOn ?? null;
 
   if (Object.keys(fields).length) {
     // The teacher_id filter is belt-and-braces: RLS already blocks other rows,

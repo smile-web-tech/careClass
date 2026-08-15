@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { Avatar, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStudents } from '@/data/store';
+import { exportStudentsCsv, importStudentsCsv } from '@/lib/csvFlow';
 import { refreshAll } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
@@ -118,6 +119,24 @@ export default function Students() {
         </View>
       </View>
 
+      {/*
+        Under the search, not in the header.
+
+        The header bar is where "add one student" lives, and a spreadsheet is
+        the opposite gesture — a rare, deliberate, whole-list action. Putting it
+        in the same row would crowd the one button teachers press every day.
+      */}
+      <View style={styles.sheetRow}>
+        <Press onPress={() => void importStudentsCsv()} style={styles.sheetButton}>
+          <Icon name="paperclip" size={15} color={color.primary} />
+          <Text style={styles.sheetLabel}>{t('csv.import')}</Text>
+        </Press>
+        <Press onPress={() => void exportStudentsCsv()} style={styles.sheetButton}>
+          <Icon name="send" size={15} color={color.primary} />
+          <Text style={styles.sheetLabel}>{t('csv.export')}</Text>
+        </Press>
+      </View>
+
       <SectionList
         sections={sections}
         keyExtractor={(s) => s.id}
@@ -223,6 +242,26 @@ function StudentRow({
 
 const makeStyles = ({ color, shadow }: Theme) =>
   StyleSheet.create({
+    sheetRow: {
+      flexDirection: 'row',
+      gap: 10,
+      paddingHorizontal: space.gutter,
+      paddingTop: 12,
+    },
+    sheetButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 40,
+      borderRadius: radius.field,
+      borderWidth: 1,
+      borderColor: color.border,
+      backgroundColor: color.surface,
+    },
+    sheetLabel: { fontFamily: body[700], fontSize: 13, color: color.primaryInk },
+
     /** Default body ink. Text does not inherit colour from a parent View. */
     ink: { color: color.ink },
     header: {

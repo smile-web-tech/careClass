@@ -130,7 +130,16 @@ export default function StudentProfile() {
     const seen = recent.find((r) => r.mark !== 'absent');
 
     const facts = [
-      t('student.markedIn', { marked: stats.marked, total: stats.sessions }),
+      /*
+        Classes attended, not registers filled in.
+
+        This read `marked` — how many times a human had touched a register with
+        this student's name in it — and on an account where the teacher marks
+        only absences that number is nought, so the line said "marked in 0 of 24
+        sessions" about a child with perfect attendance. The question the button
+        is asked is how many classes they were in.
+      */
+      t('student.attendedCount', { present: stats.present, total: stats.sessions }),
       seen ? t('student.lastSeen', { date: shortDate(seen.date) }) : t('student.notSeenYet'),
     ].join('\n');
 

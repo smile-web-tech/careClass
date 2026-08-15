@@ -23,7 +23,7 @@ import type { Language } from '@/i18n';
 import { DEFAULT_LANGUAGE, setActiveLanguage } from '@/i18n';
 import { at, toKey } from '@/lib/date';
 import { runsOn } from '@/lib/schedule';
-import { accentNames } from '@/theme';
+import { accentNames, type AccentName } from '@/theme';
 import type { ReminderLead } from '@/lib/notifications';
 
 /**
@@ -63,14 +63,16 @@ type NewStudent = {
    * is taken under one id and the row saved under another.
    */
   id?: string;
-  name: string;
-  phone: string;
-  email?: string;
-  parentName?: string;
-  parentPhone?: string;
-  parentEmail?: string;
   groupIds: string[];
-};
+  /*
+    Everything else a student can have.
+
+    This used to list five fields, so a caller handing over an address or a
+    second parent had them dropped on the way in — invisible until somebody
+    opened the student and found half the form empty. The form has always sent
+    the full set; only the type disagreed.
+  */
+} & Omit<Student, 'id' | 'groupIds' | 'accent'> & { accent?: AccentName };
 
 type State = {
   signedIn: boolean;
@@ -434,7 +436,7 @@ export const useStore = create<State>()((set, get) => ({
     const student: Student = {
       ...input,
       id,
-      accent: accentNames[get().students.length % accentNames.length],
+      accent: input.accent ?? accentNames[get().students.length % accentNames.length],
     };
     set((s) => ({ students: [...s.students, student] }));
     mirror.createStudent?.(student);
@@ -1075,7 +1077,7 @@ export function useStudentStats(student?: Student, weeks = 8) {
   const assessments = useStore((s) => s.assessments);
 
   return useMemo(() => {
-    if (!student) return { rate: null, sessions: 0, marked: 0, average: null };
+    if (!student) return { rate: null, sessions: 0, present: 0, marked: 0, average: null };
 
     const keys = pastSessionKeys(groups, student.groupIds, weeks);
     let present = 0;
@@ -1094,6 +1096,10 @@ export function useStudentStats(student?: Student, weeks = 8) {
     return {
       rate: keys.length ? Math.round((present / keys.length) * 100) : null,
       sessions: keys.length,
+      // Classes they were actually in, which is the question a teacher asks out
+      // loud. Separate from `marked`, which counts registers somebody filled in
+      // and is a fact about paperwork rather than about the student.
+      present,
       marked,
       average: averagePercent(student.id, grades, assessments),
     };
