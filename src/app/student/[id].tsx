@@ -1,9 +1,19 @@
+import * as Contacts from 'expo-contacts';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AttachmentPreview, type PreviewFile } from '@/components/AttachmentPreview';
+import { showAlert, showDialog, showError } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
 import {
@@ -17,13 +27,13 @@ import {
   StatTile,
   Txt,
 } from '@/components/ui';
-import { useGroups, useRecentSessions, useStudent, useStudentStats } from '@/data/store';
-import { useStudentPhotoUploading } from '@/data/sync';
+import { useGroups, useRecentSessions, useStore, useStudent, useStudentStats } from '@/data/store';
+import { hydrate, useStudentPhotoUploading } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { fromKey, longDate, shortDate } from '@/lib/date';
-import { photoFile, useStudentPhoto } from '@/lib/studentPhoto';
+import { deletePhoto, photoFile, useStudentPhoto } from '@/lib/studentPhoto';
 import { STATUS_KEY } from '@/app/attendance';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
@@ -58,6 +68,28 @@ export default function StudentProfile() {
   /** True while the picture is queued for the server or on its way there. */
   const uploading = useStudentPhotoUploading(id);
 
+  const removeStudent = useStore((s) => s.removeStudent);
+
+  /*
+    Pull down to fetch this student again, picture included.
+
+    The screen where "is my photo actually saved?" gets asked is the screen that
+    should be able to answer it. `hydrate` re-reads the account and downloads
+    any face this device does not have.
+  */
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await hydrate();
+    } catch {
+      // Offline. What is on screen is still the best copy this device has.
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   if (!student) {
     return (
       <Screen>
@@ -78,6 +110,152 @@ export default function StudentProfile() {
     looks like the photo failed to save.
   */
   const face = photo?.uri ?? null;
+
+  /*
+    The overflow menu, which until now was a button that did nothing.
+
+    Three things a teacher actually wants from a student's page and could not
+    do anywhere in the app: put the numbers in their phone so they can ring a
+    parent from the dialler like anyone else, hand a colleague the details
+    without reading them down the phone, and remove a student who has left.
+    Deleting in particular had no route at all — `removeStudent` existed in the
+    store and nothing called it.
+
+    The message above the actions carries the two facts this screen does not
+    show anywhere else: how many of their registers actually got marked, and
+    when they were last in. A 92% attendance rate means something very
+    different across four registers than across forty.
+  */
+  const openMenu = async () => {
+    const seen = recent.find((r) => r.mark !== 'absent');
+
+    const facts = [
+      t('student.markedIn', { marked: stats.marked, total: stats.sessions }),
+      seen ? t('student.lastSeen', { date: shortDate(seen.date) }) : t('student.notSeenYet'),
+    ].join('\n');
+
+    const choice = await showDialog({
+      title: student.name,
+      message: facts,
+      tone: 'info',
+      actions: [
+        { label: t('student.saveContact'), value: 'contact', intent: 'primary' },
+        { label: t('student.shareDetails'), value: 'share', intent: 'primary' },
+        { label: t('student.delete'), value: 'delete', intent: 'danger' },
+        { label: t('common.cancel'), value: 'cancel', intent: 'quiet' },
+      ],
+    });
+
+    if (choice === 'contact') await saveToContacts();
+    else if (choice === 'share') await shareDetails();
+    else if (choice === 'delete') await confirmDelete();
+  };
+
+  /**
+   * Hand the details to the phone's own address book.
+   *
+   * The native form rather than a silent write: this is the teacher's personal
+   * contacts, and an app that quietly fills it with other people's children is
+   * an app that gets uninstalled. They see exactly what is going in and can
+   * change it or back out.
+   *
+   * Both numbers go, labelled, because the one a teacher rings in an emergency
+   * is the parent's and the one they text about homework is the student's.
+   */
+  const saveToContacts = async () => {
+    try {
+      const { granted } = await Contacts.requestPermissionsAsync();
+      if (!granted) {
+        await showAlert(t('students.contactsNeeded'), t('students.contactsNeededMessage'));
+        return;
+      }
+
+      const [givenName, ...rest] = student.name.trim().split(/\s+/);
+      const phones = [{ label: 'mobile', number: student.phone }];
+      if (student.parentPhone) phones.push({ label: 'home', number: student.parentPhone });
+      if (student.parent2Phone) phones.push({ label: 'other', number: student.parent2Phone });
+
+      const emails = [student.email, student.parentEmail, student.parent2Email]
+        .filter((e): e is string => !!e)
+        .map((email) => ({ label: 'other', email }));
+
+      await Contacts.Contact.presentCreateForm({
+        givenName,
+        familyName: rest.join(' '),
+        phones,
+        ...(emails.length ? { emails } : {}),
+        // The groups, so the entry still means something in a phonebook of
+        // three hundred where every second person is somebody's parent.
+        note: memberOf.map((g) => g.name).join(', '),
+      });
+    } catch (e) {
+      showError(e, t('student.contactFailed'));
+    }
+  };
+
+  /** Everything worth passing on, as plain text the share sheet can carry. */
+  const shareDetails = async () => {
+    const lines = [
+      student.name,
+      memberOf.map((g) => g.name).join(', '),
+      `${t('students.phone')}: ${student.phone}`,
+      student.email ? `${t('students.email')}: ${student.email}` : null,
+      student.parentName
+        ? `${t('student.mother')}: ${student.parentName}${
+            student.parentPhone ? ` · ${student.parentPhone}` : ''
+          }`
+        : null,
+      student.parent2Name
+        ? `${t('student.father')}: ${student.parent2Name}${
+            student.parent2Phone ? ` · ${student.parent2Phone}` : ''
+          }`
+        : null,
+      student.school ? `${t('student.school')}: ${student.school}` : null,
+    ].filter(Boolean);
+
+    try {
+      await Share.share({ message: lines.join('\n') });
+    } catch {
+      // The sheet was dismissed, or there is nothing to share to. Neither is
+      // worth an alert on top of a sheet the teacher just closed.
+    }
+  };
+
+  /**
+   * Remove a student, saying plainly what that does and does not lose.
+   *
+   * On the server this archives rather than deletes: their marks and every
+   * register they appear in are part of a group's history, and a hard delete
+   * would rewrite that history for everybody else in the class. The teacher is
+   * told, because "will this wipe the term's attendance?" is the question that
+   * stops somebody using the button.
+   */
+  const confirmDelete = async () => {
+    const go = await showDialog({
+      title: t('student.deleteTitle', { name: student.name }),
+      message: t('student.deleteBody'),
+      tone: 'danger',
+      dismissable: false,
+      actions: [
+        { label: t('student.delete'), value: 'yes', intent: 'danger' },
+        { label: t('common.cancel'), value: 'no', intent: 'quiet' },
+      ],
+    });
+    if (go !== 'yes') return;
+
+    /*
+      The picture goes from this phone, but not from storage.
+
+      Locally there is no screen left that would ever draw it, and these phones
+      are short of space. On the server the row is archived rather than deleted
+      — it still exists and still points at the object — so removing the file
+      there would break a row that is merely hidden, not gone.
+    */
+    deletePhoto(student.id);
+
+    removeStudent(student.id);
+    router.back();
+  };
 
   const openPhoto = () => {
     if (!face) return;
@@ -100,6 +278,15 @@ export default function StudentProfile() {
     <Screen>
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={color.muted}
+            colors={[color.primary]}
+            progressBackgroundColor={color.surface}
+          />
+        }
         showsVerticalScrollIndicator={false}>
         <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
           <View style={styles.headerBar}>
@@ -111,7 +298,12 @@ export default function StudentProfile() {
                 fg={color.inkSoft}
                 onPress={() => router.push(`/student/edit?id=${student.id}`)}
               />
-              <IconButton name="more" iconSize={17} fg={color.inkSoft} />
+              <IconButton
+                name="more"
+                iconSize={17}
+                fg={color.inkSoft}
+                onPress={() => void openMenu()}
+              />
             </View>
           </View>
 
