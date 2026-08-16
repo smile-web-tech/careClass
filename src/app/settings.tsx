@@ -28,7 +28,7 @@ import { updateTeacher } from '@/data/api';
 import { exportBackup } from '@/data/backup';
 import { useGroups, useStore } from '@/data/store';
 import { hydrate } from '@/data/sync';
-import { shareCsvTemplate } from '@/lib/csvFlow';
+import { shareSheetTemplate } from '@/lib/sheetFlow';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { SUPPORT_EMAIL } from '@/lib/brand';
@@ -191,7 +191,7 @@ export default function Settings() {
             icon="image"
             label={t('csv.template')}
             hint={t('csv.templateHint')}
-            onPress={() => void shareCsvTemplate()}
+            onPress={() => void shareSheetTemplate()}
           />
         </Card>
 

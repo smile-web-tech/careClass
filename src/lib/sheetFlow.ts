@@ -1,22 +1,27 @@
 /**
  * The spreadsheet buttons: writing one out, reading one in, and the sample.
  *
- * Kept apart from `data/studentsCsv`, which knows about columns and quoting and
- * nothing about files or dialogs. This is the half that touches the disk and
- * talks to the teacher, so the two can be reasoned about — and the parsing
- * tested — separately.
+ * Kept apart from `data/studentsSheet`, which knows about columns, quoting and
+ * zip parts and nothing about files or dialogs. This is the half that touches
+ * the disk and talks to the teacher, so the two can be reasoned about — and the
+ * parsing tested — separately.
+ *
+ * What goes out is `.xlsx`, always. What comes in may be either that or a
+ * `.csv`, because the list a teacher already has was as likely exported by a
+ * school system as saved out of Excel.
  */
 import { File } from 'expo-file-system';
 
 import { showAlert, showDialog, showError } from '@/components/Dialog';
 import { useStore } from '@/data/store';
 import {
-  applyStudentCsv,
-  CsvError,
-  parseStudentCsv,
-  sampleStudentCsv,
-  studentsToCsv,
-} from '@/data/studentsCsv';
+  applyStudentSheet,
+  rowsFromFile,
+  sampleStudentsXlsx,
+  SheetError,
+  studentsFromRows,
+  studentsToXlsx,
+} from '@/data/studentsSheet';
 import type { TranslationKey } from '@/i18n';
 import { translateNow } from '@/i18n/useT';
 import { backupsDirectory } from '@/lib/appFolder';
@@ -25,9 +30,10 @@ const t = (key: TranslationKey, vars?: Record<string, string | number>) =>
   translateNow(key, vars);
 
 /** Why a chosen spreadsheet could not be read, in words rather than a code. */
-const CSV_ERROR_KEY: Record<CsvError['reason'], TranslationKey> = {
+const SHEET_ERROR_KEY: Record<SheetError['reason'], TranslationKey> = {
   empty: 'csv.errorEmpty',
   noName: 'csv.errorNoName',
+  unreadable: 'csv.errorUnreadable',
 };
 
 /* -------------------------------------------------------------------------- */
@@ -41,7 +47,7 @@ const CSV_ERROR_KEY: Record<CsvError['reason'], TranslationKey> = {
  * ROM, a locked-down handset — still ends up with the spreadsheet and is told
  * where it is, rather than being shown a failure for something that worked.
  */
-async function writeAndShare(name: string, contents: string, doneTitle: TranslationKey) {
+async function writeAndShare(name: string, contents: Uint8Array, doneTitle: TranslationKey) {
   const file = new File(backupsDirectory(), name);
   if (file.exists) file.delete();
   file.create();
@@ -68,29 +74,33 @@ async function writeAndShare(name: string, contents: string, doneTitle: Translat
   }
 
   await Sharing.shareAsync(file.uri, {
-    // `text/csv` is what a spreadsheet app registers for. Without it the share
-    // sheet offers text editors and messaging apps and not much else.
-    mimeType: 'text/csv',
+    // The workbook type, so the share sheet offers Excel, Sheets and Drive
+    // rather than the text editors a generic type attracts.
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     dialogTitle: t(doneTitle),
-    UTI: 'public.comma-separated-values-text',
+    UTI: 'org.openxmlformats.spreadsheetml.sheet',
   });
 }
 
-/** Every student on this device, as a spreadsheet. */
-export async function exportStudentsCsv(): Promise<void> {
+/** Every student on this device, as an Excel workbook. */
+export async function exportStudentsSheet(): Promise<void> {
   try {
     const { students, groups } = useStore.getState();
     const stamp = new Date().toISOString().slice(0, 10);
-    await writeAndShare(`ClassCare-students-${stamp}.csv`, studentsToCsv(students, groups), 'csv.exported');
+    await writeAndShare(
+      `ClassCare-students-${stamp}.xlsx`,
+      studentsToXlsx(students, groups),
+      'csv.exported',
+    );
   } catch (e) {
     showError(e, t('csv.failedTitle'));
   }
 }
 
-/** The empty file with the right columns, for a teacher starting from nothing. */
-export async function shareCsvTemplate(): Promise<void> {
+/** The sample workbook, for a teacher starting from nothing. */
+export async function shareSheetTemplate(): Promise<void> {
   try {
-    await writeAndShare('ClassCare-template.csv', sampleStudentCsv(), 'csv.template');
+    await writeAndShare('ClassCare-template.xlsx', sampleStudentsXlsx(), 'csv.template');
   } catch (e) {
     showError(e, t('csv.failedTitle'));
   }
@@ -110,7 +120,7 @@ let running = false;
  * because they are the same question: add these to what is here, or let them
  * replace it. Replacing is the danger action and says so.
  */
-export async function importStudentsCsv(): Promise<void> {
+export async function importStudentsSheet(): Promise<void> {
   if (!useStore.getState().signedIn) {
     await showAlert(t('csv.import'), t('backup.signInFirst'), 'danger');
     return;
@@ -121,13 +131,21 @@ export async function importStudentsCsv(): Promise<void> {
   try {
     const picked = await File.pickFileAsync({
       // `*/*` alongside the specific types because Android file managers
-      // routinely hand a `.csv` over as `application/octet-stream`, and a
+      // routinely hand a spreadsheet over as `application/octet-stream`, and a
       // filter that excludes it makes the teacher's own file unpickable.
-      mimeTypes: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', '*/*'],
+      mimeTypes: [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv',
+        'text/comma-separated-values',
+        '*/*',
+      ],
     });
     if (picked.canceled) return;
 
-    const parsed = parseStudentCsv(await picked.result.text());
+    // Bytes rather than text: a workbook is a zip, and decoding one as UTF-8
+    // to hand back a string would corrupt it before anything could read it.
+    const parsed = studentsFromRows(rowsFromFile(await picked.result.bytes()));
 
     const choice = await showDialog({
       title: t('csv.importTitle'),
@@ -141,7 +159,7 @@ export async function importStudentsCsv(): Promise<void> {
     });
     if (choice !== 'merge' && choice !== 'replace') return;
 
-    const outcome = applyStudentCsv(parsed, choice);
+    const outcome = applyStudentSheet(parsed, choice);
 
     const lines = [
       choice === 'replace'
@@ -171,7 +189,7 @@ export async function importStudentsCsv(): Promise<void> {
  */
 async function offerTemplate(error: unknown) {
   const reason =
-    error instanceof CsvError ? t(CSV_ERROR_KEY[error.reason]) : t('error.unknownMessage');
+    error instanceof SheetError ? t(SHEET_ERROR_KEY[error.reason]) : t('csv.errorUnreadable');
 
   const choice = await showDialog({
     title: t('csv.failedTitle'),
@@ -183,5 +201,5 @@ async function offerTemplate(error: unknown) {
     ],
   });
 
-  if (choice === 'template') await shareCsvTemplate();
+  if (choice === 'template') await shareSheetTemplate();
 }

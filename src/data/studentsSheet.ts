@@ -7,34 +7,45 @@
  * typed into Excel, a WhatsApp message pasted into Sheets — and asking them to
  * retype sixty children with two parents each is asking them not to bother.
  *
- * ## The format
+ * ## Two formats, one path
  *
- * One header row and one row per student, comma-separated, UTF-8 with a byte
- * order mark. The BOM is not decoration: without it Excel reads a Turkmen or
- * Russian name as mojibake, which is the first thing the teacher sees and the
- * last thing they trust.
+ * ClassCare *writes* `.xlsx`, because that is what a teacher means by "my
+ * students in Excel": a file that opens into a proper sheet with headings and
+ * columns, not one that lands in a single column because their copy of Excel
+ * was installed in a locale that separates with semicolons.
  *
- * Reading is deliberately more forgiving than writing. The delimiter is sniffed
- * from the header — comma, semicolon or tab — because an Excel installed in a
- * Russian locale writes semicolons and its owner has no idea that it does, and
- * a file that opens fine on their screen must not be refused by us. Column
- * order is not assumed either; headers are matched by name, in any of the three
- * languages, so a teacher can hand us the file their school gave them.
+ * ClassCare *reads* both. The file a teacher has to hand is as often a `.csv` —
+ * exported by a school system, saved out of Google Sheets — and refusing it
+ * would be refusing the very list this feature exists to accept.
+ *
+ * Both formats reduce to rows of strings before anything else happens, so the
+ * column matching, the date handling and the import rules are written once and
+ * cannot drift between the two.
+ *
+ * ## Reading is deliberately more forgiving than writing
+ *
+ * The CSV delimiter is sniffed — comma, semicolon or tab — because an Excel
+ * installed in a Russian locale writes semicolons and its owner has no idea
+ * that it does. Column order is not assumed either; headings are matched by
+ * name, in any of the three languages, so a teacher can hand us the file their
+ * school gave them.
  *
  * ## What travels
  *
  * Everything on a student except the photograph, which is a picture and not a
- * cell — they are added by hand afterwards, and a spreadsheet column full of
- * base64 would make the file unreadable in the tool it exists to be read in.
+ * cell — they are added by hand afterwards, and a column of base64 would make
+ * the file unreadable in the tool it exists to be read in.
  *
  * Groups travel as names rather than ids, because a name is the thing a teacher
- * can type. See `applyStudentCsv` for what happens to a name we do not know.
+ * can type. See `applyStudentSheet` for what happens to a name we do not know.
  */
 import { useStore } from '@/data/store';
 import type { Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { accentNames } from '@/theme';
+import { readXlsx, serialToDate, writeXlsx } from '@/lib/xlsx';
+import { strFromU8 } from 'fflate';
 
 /* -------------------------------------------------------------------------- */
 /* Columns                                                                    */
@@ -151,75 +162,57 @@ const GROUP_SEPARATOR = ' | ';
 /* Writing                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Quote everything, always.
- *
- * Selective quoting means deciding whether a value contains the delimiter, a
- * quote or a newline, and being wrong once is a row that silently shifts by a
- * column. Quoting unconditionally is shorter, cannot be wrong, and every
- * spreadsheet strips them on the way in.
- */
-const cell = (value: string) => `"${(value ?? '').replace(/"/g, '""')}"`;
+/** The heading row, in whichever language the teacher is reading the app in. */
+const headingRow = () => COLUMNS.map((c) => translateNow(c.headingKey));
 
-/** The whole roster as a CSV document, header first. */
-export function studentsToCsv(students: Student[], groups: Group[]): string {
+/** One student flattened to the cell order the headings promise. */
+function rowFor(student: Student, nameOf: Map<string, string>): string[] {
+  const row: CsvRow = {
+    id: student.id,
+    name: student.name,
+    phone: student.phone,
+    email: student.email ?? '',
+    birthDate: student.birthDate ?? '',
+    address: student.address ?? '',
+    school: student.school ?? '',
+    documentId: student.documentId ?? '',
+    parentName: student.parentName ?? '',
+    parentPhone: student.parentPhone ?? '',
+    parentEmail: student.parentEmail ?? '',
+    parentWork: student.parentWork ?? '',
+    parent2Name: student.parent2Name ?? '',
+    parent2Phone: student.parent2Phone ?? '',
+    parent2Email: student.parent2Email ?? '',
+    parent2Work: student.parent2Work ?? '',
+    groups: student.groupIds
+      .map((id) => nameOf.get(id))
+      .filter((n): n is string => !!n)
+      .join(GROUP_SEPARATOR),
+    note: student.note ?? '',
+  };
+  return COLUMNS.map((c) => row[c.key]);
+}
+
+/** The whole roster as an Excel workbook. */
+export function studentsToXlsx(students: Student[], groups: Group[]): Uint8Array {
   const nameOf = new Map(groups.map((g) => [g.id, g.name]));
-
-  const header = COLUMNS.map((c) => cell(translateNow(c.headingKey))).join(',');
-
-  const rows = students.map((s) => {
-    const row: CsvRow = {
-      id: s.id,
-      name: s.name,
-      phone: s.phone,
-      email: s.email ?? '',
-      birthDate: s.birthDate ?? '',
-      address: s.address ?? '',
-      school: s.school ?? '',
-      documentId: s.documentId ?? '',
-      parentName: s.parentName ?? '',
-      parentPhone: s.parentPhone ?? '',
-      parentEmail: s.parentEmail ?? '',
-      parentWork: s.parentWork ?? '',
-      parent2Name: s.parent2Name ?? '',
-      parent2Phone: s.parent2Phone ?? '',
-      parent2Email: s.parent2Email ?? '',
-      parent2Work: s.parent2Work ?? '',
-      groups: s.groupIds
-        .map((id) => nameOf.get(id))
-        .filter((n): n is string => !!n)
-        .join(GROUP_SEPARATOR),
-      note: s.note ?? '',
-    };
-    return COLUMNS.map((c) => cell(row[c.key])).join(',');
-  });
-
-  /*
-    A BOM, and CRLF line endings.
-
-    Both are for Excel and neither harms anything else: the BOM is what makes it
-    read the file as UTF-8 rather than as the local code page, and CRLF is what
-    stops older versions running every row together on one line.
-  */
-  return '﻿' + [header, ...rows].join('\r\n') + '\r\n';
+  return writeXlsx([headingRow(), ...students.map((s) => rowFor(s, nameOf))]);
 }
 
 /**
- * A file with the right columns and one row showing what goes in them.
+ * A workbook with the right headings and two rows showing what goes in them.
  *
  * Offered whenever an import fails, because "could not read that file" on its
  * own leaves the teacher guessing at column names — and they will guess wrong,
  * try again, and give up. A sample they can open in Excel and type over turns a
  * dead end into a two-minute job.
  *
- * The example row is deliberately obvious rubbish rather than plausible data,
- * so nobody imports it by accident and finds a student called Aýgül who does
- * not exist. Only the name and phone are filled in for the second row, to show
- * that everything else is optional.
+ * Two example rows, not one. The first is filled in completely, so every column
+ * has something in it to copy the shape of; the second has only a name and a
+ * number, which is the part a teacher cannot otherwise know — that everything
+ * else is optional.
  */
-export function sampleStudentCsv(): string {
-  const header = COLUMNS.map((c) => cell(translateNow(c.headingKey))).join(',');
-
+export function sampleStudentsXlsx(): Uint8Array {
   const example: CsvRow = {
     // Left empty on purpose: an id is how the app recognises a student it
     // already has, and a new one should not claim to be anybody.
@@ -243,10 +236,13 @@ export function sampleStudentCsv(): string {
     note: '',
   };
 
-  const minimal = { ...blankRow(), name: 'Batyr Amanow', phone: '+993 65 777888' };
+  const minimal: CsvRow = { ...blankRow(), name: 'Batyr Amanow', phone: '+993 65 777888' };
 
-  const rows = [example, minimal].map((r) => COLUMNS.map((c) => cell(r[c.key])).join(','));
-  return '\ufeff' + [header, ...rows].join('\r\n') + '\r\n';
+  return writeXlsx([
+    headingRow(),
+    COLUMNS.map((c) => example[c.key]),
+    COLUMNS.map((c) => minimal[c.key]),
+  ]);
 }
 
 const blankRow = (): CsvRow =>
@@ -256,8 +252,8 @@ const blankRow = (): CsvRow =>
 /* Reading                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export class CsvError extends Error {
-  constructor(readonly reason: 'empty' | 'noName') {
+export class SheetError extends Error {
+  constructor(readonly reason: 'empty' | 'noName' | 'unreadable') {
     super(reason);
   }
 }
@@ -343,6 +339,39 @@ function sniffDelimiter(text: string): string {
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
 }
 
+/**
+ * A file the teacher chose, as rows, whichever of the two formats it is.
+ *
+ * Sniffed from the bytes rather than trusted to the extension: Android file
+ * managers hand a `.xlsx` over as `application/octet-stream` often enough, and
+ * a teacher who renamed a file is not wrong about what is in it. `PK` is the
+ * zip signature every Office document starts with.
+ */
+export function rowsFromFile(bytes: Uint8Array): string[][] {
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+
+  if (isZip) {
+    try {
+      return readXlsx(bytes);
+    } catch {
+      // A zip that is not a workbook — a `.zip` of something else, or a file
+      // that did not finish downloading.
+      throw new SheetError('unreadable');
+    }
+  }
+
+  /*
+    `strFromU8` rather than `TextDecoder`.
+
+    Hermes does not ship `TextDecoder`, and React Native does not polyfill it,
+    so the obvious line would work in the simulator and throw on a phone. This
+    comes from the zip library that is already here and decodes UTF-8 properly,
+    which matters for every name in the file.
+  */
+  const text = strFromU8(bytes);
+  return parseRows(text, sniffDelimiter(text));
+}
+
 export type ParsedStudent = {
   /** The id from the file, when it carried one. Never trusted blindly. */
   sourceId?: string;
@@ -352,9 +381,8 @@ export type ParsedStudent = {
 };
 
 /** Read a spreadsheet into students, without touching the store. */
-export function parseStudentCsv(text: string): ParsedStudent[] {
-  const rows = parseRows(text, sniffDelimiter(text));
-  if (rows.length < 2) throw new CsvError('empty');
+export function studentsFromRows(rows: string[][]): ParsedStudent[] {
+  if (rows.length < 2) throw new SheetError('empty');
 
   /*
     Headings decide the columns, not their order.
@@ -376,7 +404,7 @@ export function parseStudentCsv(text: string): ParsedStudent[] {
     if (at >= 0) index[column.key] = at;
   }
 
-  if (index.name === undefined) throw new CsvError('noName');
+  if (index.name === undefined) throw new SheetError('noName');
 
   const value = (row: string[], key: keyof CsvRow) => {
     const at = index[key];
@@ -438,6 +466,18 @@ function normaliseDate(raw: string): string | undefined {
   const value = raw.trim();
   if (!value) return undefined;
 
+  /*
+    A bare number is Excel's own way of writing a date.
+
+    A teacher who formats the birthday column as a date — which Excel does by
+    itself the moment something looks like one — stores `40617`, not a string.
+    Without this the column fills with five-digit numbers and every birthday
+    reminder is wrong. Bounded inside `serialToDate`, so a phone number typed
+    into the wrong column is left alone rather than becoming a date in the year
+    180000.
+  */
+  if (/^\d+(\.\d+)?$/.test(value)) return serialToDate(value) ?? undefined;
+
   const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (iso) return pad(+iso[1], +iso[2], +iso[3]);
 
@@ -483,7 +523,7 @@ export type ImportOutcome = {
  * days simply shows no sessions until they set them, which is a visible,
  * fixable state rather than a silent loss.
  */
-export function applyStudentCsv(parsed: ParsedStudent[], mode: 'merge' | 'replace'): ImportOutcome {
+export function applyStudentSheet(parsed: ParsedStudent[], mode: 'merge' | 'replace'): ImportOutcome {
   const state = useStore.getState();
   const { addStudent, updateStudent, removeStudent, addGroup } = state;
 

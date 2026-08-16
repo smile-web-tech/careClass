@@ -7,7 +7,7 @@ import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import { Avatar, EmptyState, IconButton, Press } from '@/components/ui';
 import { useGroups, useStudents } from '@/data/store';
-import { exportStudentsCsv, importStudentsCsv } from '@/lib/csvFlow';
+import { exportStudentsSheet, importStudentsSheet } from '@/lib/sheetFlow';
 import { refreshAll } from '@/data/sync';
 import type { Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
@@ -127,11 +127,11 @@ export default function Students() {
         in the same row would crowd the one button teachers press every day.
       */}
       <View style={styles.sheetRow}>
-        <Press onPress={() => void importStudentsCsv()} style={styles.sheetButton}>
+        <Press onPress={() => void importStudentsSheet()} style={styles.sheetButton}>
           <Icon name="paperclip" size={15} color={color.primary} />
           <Text style={styles.sheetLabel}>{t('csv.import')}</Text>
         </Press>
-        <Press onPress={() => void exportStudentsCsv()} style={styles.sheetButton}>
+        <Press onPress={() => void exportStudentsSheet()} style={styles.sheetButton}>
           <Icon name="send" size={15} color={color.primary} />
           <Text style={styles.sheetLabel}>{t('csv.export')}</Text>
         </Press>
