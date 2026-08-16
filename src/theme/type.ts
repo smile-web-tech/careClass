@@ -10,6 +10,12 @@ export const display = {
   700: 'SpaceGrotesk_700Bold',
 } as const;
 
+/**
+ * The wordmark face. One weight, one use — the opening title card and the app
+ * icon are drawn in it and nothing else is, which is the point of a mark.
+ */
+export const mark = 'ArchivoBlack_400Regular';
+
 export const body = {
   400: 'PlusJakartaSans_400Regular',
   500: 'PlusJakartaSans_500Medium',

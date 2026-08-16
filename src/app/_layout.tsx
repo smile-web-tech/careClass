@@ -1,3 +1,4 @@
+import { ArchivoBlack_400Regular } from '@expo-google-fonts/archivo-black';
 import {
   PlusJakartaSans_400Regular,
   PlusJakartaSans_500Medium,
@@ -500,6 +501,7 @@ function useLocalStore() {
 export default function RootLayout() {
   const localReady = useLocalStore();
   const [fontsLoaded, fontError] = useFonts({
+    ArchivoBlack_400Regular,
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
     SpaceGrotesk_700Bold,
