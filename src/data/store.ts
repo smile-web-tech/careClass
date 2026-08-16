@@ -166,6 +166,8 @@ type State = {
   continueOffline: () => void;
   /** An offline device has just signed in; the data is now that account's. */
   adoptAccount: (teacherId: string) => void;
+  /** Step out of offline mode back to the sign-in screen, keeping the data. */
+  leaveOffline: () => void;
   signOut: () => void;
   markPermissionsAsked: () => void;
   /**
@@ -385,6 +387,17 @@ export const useStore = create<State>()((set, get) => ({
     sync layer then sends all of it — see `pushEverything`.
   */
   adoptAccount: (teacherId) => set({ signedIn: true, offline: false, teacherId }),
+
+  /*
+    Out of offline mode, and nothing else.
+
+    Deliberately not a sign-out. There is no session to end and — the part that
+    matters — no copy of any of this anywhere else, so clearing the groups and
+    students here would destroy a term of work with nothing to restore from.
+    The data stays, unowned: choosing offline again finds it exactly as it was,
+    and signing into an account adopts it, because `teacherId` is still null.
+  */
+  leaveOffline: () => set({ signedIn: false, offline: false }),
 
   // Signing out clears the account's data as well as the flag. Leaving it
   // in place meant the next teacher to sign in on this phone saw the last

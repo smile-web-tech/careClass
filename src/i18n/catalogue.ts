@@ -703,6 +703,11 @@ const tk = {
   'sync.couldNotSaveMany': '{what} we ýene {count} zat ýatda saklanmady. {reason}',
   'auth.signOutUnsent': 'Ugradylmadyk {count} üýtgeşme ýiter. Ilki Ugrat.',
   'auth.continueOffline': 'Hasapsyz dowam et',
+  'auth.leaveOffline': 'Hasapsyz režimden çyk',
+  'auth.leaveOfflineHint': 'Giriş sahypasyna dolan. Maglumatlaryň telefonda galýar.',
+  'auth.leaveOfflineTitle': 'Hasapsyz režimden çykylsynmy?',
+  'auth.leaveOfflineBody':
+    'Hiç zat pozulmaýar. Toparlaryň we okuwçylaryň şu telefonda galýar — hasapsyz dowam etseň, olar ýene ýerinde bolar; hasaba girseň, hemmesi şol hasaba geçer.',
   'auth.continueOfflineHint':
     'Ähli zat telefonyňda saklanar. Soň hasaba girseň, olaryň hemmesi buluta göçüriler.',
   'auth.signInToBackUp': 'Nusgasyny saklamak üçin gir',
@@ -1547,6 +1552,11 @@ const ru: Record<TranslationKey, string> = {
   'sync.couldNotSaveMany': 'Не удалось сохранить: {what} и ещё {count}. {reason}',
   'auth.signOutUnsent': '{count} неотправленных изменений пропадут. Сначала отправьте.',
   'auth.continueOffline': 'Продолжить без аккаунта',
+  'auth.leaveOffline': 'Выйти из режима без аккаунта',
+  'auth.leaveOfflineHint': 'Вернуться на экран входа. Данные останутся на телефоне.',
+  'auth.leaveOfflineTitle': 'Выйти из режима без аккаунта?',
+  'auth.leaveOfflineBody':
+    'Ничего не удаляется. Группы и ученики останутся на этом телефоне: продолжите без аккаунта — всё будет на месте, войдёте в аккаунт — всё перейдёт туда.',
   'auth.continueOfflineHint':
     'Всё сохранится на телефоне. Если позже войдёте, все данные уйдут в облако.',
   'auth.signInToBackUp': 'Войти, чтобы сохранить копию',
@@ -2387,6 +2397,11 @@ const en: Record<TranslationKey, string> = {
   'sync.couldNotSaveMany': '{what} and {count} more could not be saved. {reason}',
   'auth.signOutUnsent': '{count} unsent changes will be lost. Sync first.',
   'auth.continueOffline': 'Continue without an account',
+  'auth.leaveOffline': 'Leave offline mode',
+  'auth.leaveOfflineHint': 'Back to the sign-in screen. Your data stays on this phone.',
+  'auth.leaveOfflineTitle': 'Leave offline mode?',
+  'auth.leaveOfflineBody':
+    'Nothing is deleted. Your groups and students stay on this phone — continue without an account and they are all still there, or sign in and they move to that account.',
   'auth.continueOfflineHint':
     'Everything stays on this phone. Sign in later and all of it goes to the cloud.',
   'auth.signInToBackUp': 'Sign in to back this up',

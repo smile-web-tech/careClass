@@ -73,17 +73,26 @@ function useSupabaseSession() {
         clear first, the outbox above all — replaying one teacher's unsent writes
         under another's token would file their students into the wrong account.
 
-        An *offline device signing in for the first time*: nothing is wiped. That
-        is the whole point of the offline mode — a teacher works for a term with
-        no account, decides to back it up, and must not be made to retype any of
-        it. There is no previous account to confuse it with, because `teacherId`
-        is null precisely because there never was one. The rows are adopted and
+        A *device with no owner yet* — one that has been used offline, or a
+        fresh install: nothing is wiped. That is the whole point of the offline
+        mode — a teacher works for a term with no account, decides to back it
+        up, and must not be made to retype any of it. The rows are adopted and
         `pushEverything` sends them up.
       */
-      const wasOffline = useStore.getState().offline;
-      const adopting = signedIn && userId && wasOffline;
+      /*
+        Keyed on whether this device already has an owner, not on the mode.
 
-      if (signedIn && userId && !wasOffline && userId !== useStore.getState().teacherId) {
+        `offline` was the wrong question: a teacher can leave offline mode and
+        still have every one of their groups on the phone, and reading the flag
+        alone would then treat the next sign-in as an account switch and wipe
+        them. `teacherId` answers it properly — null means nobody has ever
+        claimed this data, whoever signs in next may have it, and a fresh
+        install simply adopts an empty store, which costs nothing.
+      */
+      const previousOwner = useStore.getState().teacherId;
+      const adopting = signedIn && userId && previousOwner === null;
+
+      if (signedIn && userId && previousOwner !== null && userId !== previousOwner) {
         useStore.getState().resetAccount();
         void clearQueue();
         // The tables as well as the store. Leaving them would put the previous

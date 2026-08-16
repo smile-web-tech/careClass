@@ -60,6 +60,7 @@ export default function Profile() {
 
   /** No account behind this device. Changes what the screen can honestly offer. */
   const localOnly = useStore((s) => s.offline);
+  const leaveOffline = useStore((s) => s.leaveOffline);
 
   const t = useT();
   // An account, not merely a configured project — see `localOnly` above.
@@ -137,6 +138,27 @@ export default function Profile() {
     // The device's copy goes with the session. A shared staffroom phone is
     // exactly how this app gets used.
     await wipeLocal();
+    router.replace('/sign-in');
+  };
+
+  /**
+   * Step out of offline mode, having said what that does and does not do.
+   *
+   * The wording matters more here than anywhere else in the app. A teacher
+   * whose only copy of a term's work is on this handset is entitled to know,
+   * before they press it, that pressing it does not throw any of it away — and
+   * the app has no way to get it back for them if they assume otherwise.
+   */
+  const confirmLeaveOffline = async () => {
+    const yes = await confirm({
+      title: t('auth.leaveOfflineTitle'),
+      message: t('auth.leaveOfflineBody'),
+      confirmLabel: t('auth.leaveOffline'),
+      tone: 'info',
+    });
+    if (!yes) return;
+
+    leaveOffline();
     router.replace('/sign-in');
   };
 
@@ -304,6 +326,22 @@ export default function Profile() {
               tint={accents.amber.tint}
               fg={accents.amber.ink}
               onPress={() => router.push({ pathname: '/register', params: { from: 'offline' } })}
+            />
+            <Divider inset={58} />
+            {/*
+              Drawn like any other row, not like the danger zone, because it is
+              not one: there is no session to end and nothing is deleted. What
+              it does is hand the phone back to the sign-in screen — for a
+              teacher who wants to use their account after all, or is passing
+              the handset to a colleague.
+            */}
+            <ActionRow
+              icon="close"
+              label={t('auth.leaveOffline')}
+              hint={t('auth.leaveOfflineHint')}
+              tint={color.bg}
+              fg={color.inkSoft}
+              onPress={confirmLeaveOffline}
             />
           </Card>
         ) : null}
