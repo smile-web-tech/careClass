@@ -129,7 +129,10 @@ export type Op =
   | { kind: 'event.delete'; id: string }
   | { kind: 'teacher.language'; language: Language }
   | { kind: 'teacher.gradeTemplate'; template: string | null }
-  | { kind: 'teacher.gradeTemplateFail'; template: string | null };
+  | { kind: 'teacher.gradeTemplateFail'; template: string | null }
+  /** The teacher's rewrites of the built-in templates, as one whole map. */
+  | { kind: 'teacher.templateOverrides'; overrides: Record<string, { title: string; body: string }> }
+  | { kind: 'teacher.hiddenTemplates'; ids: string[] };
 
 /**
  * Upload one student's picture, then point their row at it.
@@ -244,6 +247,10 @@ function perform(op: Op): Promise<unknown> {
       return api.updateTeacher({ gradeTemplate: op.template });
     case 'teacher.gradeTemplateFail':
       return api.updateTeacher({ gradeTemplateFail: op.template });
+    case 'teacher.templateOverrides':
+      return api.updateTeacher({ templateOverrides: op.overrides });
+    case 'teacher.hiddenTemplates':
+      return api.updateTeacher({ hiddenTemplates: op.ids });
   }
 }
 
@@ -596,6 +603,10 @@ function supersedes(a: Op, b: Op): boolean {
     case 'teacher.language':
     case 'teacher.gradeTemplate':
     case 'teacher.gradeTemplateFail':
+    // Both carry the whole value, so a later one says everything an earlier one
+    // did. A teacher retyping a template is one write, not one per keystroke.
+    case 'teacher.templateOverrides':
+    case 'teacher.hiddenTemplates':
     case 'replies.read':
       return true;
     case 'reply.read':
@@ -908,6 +919,8 @@ export async function hydrate() {
       teacherProvider: teacher.provider,
       gradeTemplate: teacher.gradeTemplate,
       gradeTemplateFail: teacher.gradeTemplateFail,
+      templateOverrides: teacher.templateOverrides,
+      hiddenTemplates: teacher.hiddenTemplates,
     }),
   });
 
@@ -999,6 +1012,18 @@ export const remote: StoreMirror = {
 
   setGradeTemplateFail: (template: string | null) =>
     enqueue({ kind: 'teacher.gradeTemplateFail', template }),
+
+  /*
+    Sent whole rather than as a delta.
+
+    The map is a handful of entries and the list a handful of ids, so a
+    per-key patch would only buy the server a merge it has no reason to do —
+    and `supersedes` folds repeated edits into one write anyway, which is what
+    matters when a teacher is retyping a template a word at a time.
+  */
+  setTemplateOverrides: (overrides) => enqueue({ kind: 'teacher.templateOverrides', overrides }),
+
+  setHiddenTemplates: (ids: string[]) => enqueue({ kind: 'teacher.hiddenTemplates', ids }),
 
   markRepliesRead: () => enqueue({ kind: 'replies.read' }),
 

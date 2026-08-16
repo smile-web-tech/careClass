@@ -21,7 +21,7 @@ import { Button, Card, Divider, Overline, Press, StatTile } from '@/components/u
 import { deleteAccountData, updateTeacher } from '@/data/api';
 import { useGroups, useStore, useStudents } from '@/data/store';
 import { wipeLocal } from '@/data/persistence';
-import { clearQueue } from '@/data/sync';
+import { clearQueue, flushWrites } from '@/data/sync';
 import { useSyncStatus } from '@/data/syncStatus';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
@@ -90,7 +90,29 @@ export default function Profile() {
       would be the worst bug in the app — so when there is unsent work the
       warning says so plainly instead of the usual one.
     */
-    const unsent = useSyncStatus.getState().pending;
+    let unsent = useSyncStatus.getState().pending;
+
+    /*
+      Try to send it before asking anything.
+
+      The old flow warned that N changes would be lost and then lost them, which
+      put the teacher in the position of choosing between staying signed in and
+      throwing away an afternoon of work — when almost always there is a signal
+      and the queue would drain in a couple of seconds if anybody asked it to.
+      So ask it first, and only raise the warning for what genuinely will not
+      go.
+    */
+    if (unsent > 0 && live) {
+      setBusy(true);
+      try {
+        await flushWrites();
+      } catch {
+        // Offline or refused. The count below is now the honest one either way.
+      } finally {
+        setBusy(false);
+      }
+      unsent = useSyncStatus.getState().pending;
+    }
 
     const yes = await confirm({
       title: t('auth.signOutTitle'),

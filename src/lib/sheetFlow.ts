@@ -159,7 +159,7 @@ export async function importStudentsSheet(): Promise<void> {
     });
     if (choice !== 'merge' && choice !== 'replace') return;
 
-    const outcome = applyStudentSheet(parsed, choice);
+    const outcome = await applyStudentSheet(parsed, choice);
 
     const lines = [
       choice === 'replace'

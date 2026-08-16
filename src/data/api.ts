@@ -255,6 +255,8 @@ export type TeacherProfile = {
   gradeTemplate: string | null;
   /** What a failing result says. Null until the teacher writes their own. */
   gradeTemplateFail: string | null;
+  templateOverrides: Record<string, { title: string; body: string }>;
+  hiddenTemplates: string[];
 };
 
 export async function fetchTeacher(): Promise<TeacherProfile | null> {
@@ -287,6 +289,8 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
       language: null,
       gradeTemplate: null,
       gradeTemplateFail: null,
+      templateOverrides: {},
+      hiddenTemplates: [],
     };
 
     // Create it rather than returning a convincing-looking profile that exists
@@ -324,6 +328,8 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
     language: row.language ?? null,
     gradeTemplate: row.grade_template ?? null,
     gradeTemplateFail: row.grade_template_fail ?? null,
+    templateOverrides: row.template_overrides ?? {},
+    hiddenTemplates: row.hidden_templates ?? [],
   };
 }
 
@@ -335,6 +341,8 @@ export async function updateTeacher(patch: {
   /** Null clears it, which puts the teacher back on the translated default. */
   gradeTemplate?: string | null;
   gradeTemplateFail?: string | null;
+  templateOverrides?: Record<string, { title: string; body: string }>;
+  hiddenTemplates?: string[];
 }) {
   const teacherId = await requireUser();
   unwrap(
@@ -346,6 +354,12 @@ export async function updateTeacher(patch: {
         ...(patch.pushToken !== undefined && { push_token: patch.pushToken }),
         ...(patch.language !== undefined && { language: patch.language }),
         ...(patch.gradeTemplate !== undefined && { grade_template: patch.gradeTemplate }),
+        ...(patch.templateOverrides !== undefined && {
+          template_overrides: patch.templateOverrides,
+        }),
+        ...(patch.hiddenTemplates !== undefined && {
+          hidden_templates: patch.hiddenTemplates,
+        }),
         ...(patch.gradeTemplateFail !== undefined && {
           grade_template_fail: patch.gradeTemplateFail,
         }),

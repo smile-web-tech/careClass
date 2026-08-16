@@ -45,6 +45,10 @@ export type TeacherRow = {
   grade_template: string | null;
   /** The wording for a mark below the pass mark. Null means the app default. */
   grade_template_fail: string | null;
+  /** Rewrites of the built-in templates, keyed by the app's template id. */
+  template_overrides: Record<string, { title: string; body: string }>;
+  /** Built-in templates the teacher took off their list. */
+  hidden_templates: string[];
   created_at: string;
 };
 

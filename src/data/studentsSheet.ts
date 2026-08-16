@@ -39,6 +39,7 @@
  * Groups travel as names rather than ids, because a name is the thing a teacher
  * can type. See `applyStudentSheet` for what happens to a name we do not know.
  */
+import { flushAll } from '@/data/persistence';
 import { useStore } from '@/data/store';
 import type { Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
@@ -411,6 +412,27 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
     return at === undefined ? '' : (row[at] ?? '').trim();
   };
 
+  /**
+   * A phone number, with the `+` a spreadsheet ate put back.
+   *
+   * Excel reads a leading `+` as the start of a formula: type `+99365000000`
+   * and it evaluates it, stores the number 99365000000, and the plus is gone
+   * from the file before it is ever saved. Our own template now formats those
+   * columns as text so it cannot happen again — but the file a teacher already
+   * has was written before that, or by a school system, or by Excel on someone
+   * else's laptop.
+   *
+   * Ten digits is the line. Numbers here are eight digits locally and eleven or
+   * twelve with the country code, so a bare run of ten or more digits is an
+   * international number missing its plus, and a shorter one is a local number
+   * that never had one. Anything already carrying a `+`, a space or a bracket
+   * is left exactly as the teacher wrote it.
+   */
+  const phone = (raw: string) => {
+    const v = raw.trim();
+    return /^\d{10,}$/.test(v) ? `+${v}` : v;
+  };
+
   /** Empty strings become absent, so a blank cell does not overwrite with "". */
   const maybe = (v: string) => (v.length ? v : undefined);
 
@@ -428,18 +450,18 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
         .filter(Boolean),
       student: {
         name,
-        phone: value(row, 'phone'),
+        phone: phone(value(row, 'phone')),
         email: maybe(value(row, 'email')),
         birthDate: normaliseDate(value(row, 'birthDate')),
         address: maybe(value(row, 'address')),
         school: maybe(value(row, 'school')),
         documentId: maybe(value(row, 'documentId')),
         parentName: maybe(value(row, 'parentName')),
-        parentPhone: maybe(value(row, 'parentPhone')),
+        parentPhone: maybe(phone(value(row, 'parentPhone'))),
         parentEmail: maybe(value(row, 'parentEmail')),
         parentWork: maybe(value(row, 'parentWork')),
         parent2Name: maybe(value(row, 'parent2Name')),
-        parent2Phone: maybe(value(row, 'parent2Phone')),
+        parent2Phone: maybe(phone(value(row, 'parent2Phone'))),
         parent2Email: maybe(value(row, 'parent2Email')),
         parent2Work: maybe(value(row, 'parent2Work')),
         note: maybe(value(row, 'note')),
@@ -523,7 +545,10 @@ export type ImportOutcome = {
  * days simply shows no sessions until they set them, which is a visible,
  * fixable state rather than a silent loss.
  */
-export function applyStudentSheet(parsed: ParsedStudent[], mode: 'merge' | 'replace'): ImportOutcome {
+export async function applyStudentSheet(
+  parsed: ParsedStudent[],
+  mode: 'merge' | 'replace',
+): Promise<ImportOutcome> {
   const state = useStore.getState();
   const { addStudent, updateStudent, removeStudent, addGroup } = state;
 
@@ -573,6 +598,19 @@ export function applyStudentSheet(parsed: ParsedStudent[], mode: 'merge' | 'repl
       outcome.added += 1;
     }
   }
+
+  /*
+    Straight to disk, rather than waiting for the debounce.
+
+    Every other write in the app can afford to be coalesced for a few hundred
+    milliseconds. An import cannot: sixty students arrive in one go and the
+    teacher's very next act is often to close the app, sign out, or hand the
+    phone to somebody — and Android kills a backgrounded app freely on the
+    hardware these teachers carry. The backup import has always done this; this
+    one did not, which is the difference between a class list that survives the
+    walk to the next room and one that does not.
+  */
+  await flushAll();
 
   return outcome;
 }

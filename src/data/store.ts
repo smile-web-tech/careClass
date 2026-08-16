@@ -276,6 +276,8 @@ export type StoreMirror = {
   setLanguage: (language: Language) => void;
   setGradeTemplate: (template: string | null) => void;
   setGradeTemplateFail: (template: string | null) => void;
+  setTemplateOverrides: (overrides: Record<string, { title: string; body: string }>) => void;
+  setHiddenTemplates: (ids: string[]) => void;
   markRepliesRead: () => void;
   markReplyRead: (id: string) => void;
   deleteReply: (id: string) => void;
@@ -687,6 +689,14 @@ export const useStore = create<State>()((set, get) => ({
     mirror.updateTemplate?.(id, patch);
   },
 
+  /*
+    Mirrored, like everything else.
+
+    These three were local-only, so a teacher's rewording of the starter
+    templates lived on one device and died with it: signing out wipes the local
+    database, and a reinstall or a second phone never saw the edit at all. The
+    English default came back with nothing to say why.
+  */
   setBuiltInTemplate: (id, value) => {
     set((s) => {
       const next = { ...s.templateOverrides };
@@ -694,6 +704,7 @@ export const useStore = create<State>()((set, get) => ({
       else delete next[id];
       return { templateOverrides: next };
     });
+    mirror.setTemplateOverrides?.(get().templateOverrides);
   },
 
   hideBuiltInTemplate: (id) => {
@@ -702,9 +713,14 @@ export const useStore = create<State>()((set, get) => ({
         ? s.hiddenTemplates
         : [...s.hiddenTemplates, id],
     }));
+    mirror.setHiddenTemplates?.(get().hiddenTemplates);
   },
 
-  restoreBuiltInTemplates: () => set({ hiddenTemplates: [], templateOverrides: {} }),
+  restoreBuiltInTemplates: () => {
+    set({ hiddenTemplates: [], templateOverrides: {} });
+    mirror.setTemplateOverrides?.({});
+    mirror.setHiddenTemplates?.([]);
+  },
 
   removeTemplate: (id) => {
     set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
