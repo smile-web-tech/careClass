@@ -34,6 +34,7 @@ import {
   hydrate,
   installSync,
   refreshInbox,
+  pushEverything,
   restoreQueue,
   restoreRejectedFlag,
   watchInbox,
@@ -65,18 +66,24 @@ function useSupabaseSession() {
       const userId = session?.user.id ?? null;
 
       /*
-        A different account than the one this device holds data for.
+        Two ways to arrive here, and they are opposites.
 
-        Everything persisted — groups, students, registers, the outbox — belongs
-        to one teacher, and `hydrate()` only overwrites the collections the
-        server has rows for. So signing in as somebody else used to show the
-        previous teacher's classes until the pull finished, and anything the new
-        account had none of stayed on screen indefinitely. Clearing first makes
-        the switch clean, and clearing the outbox as well is the important half:
-        replaying one teacher's unsent writes under another's token would file
-        their students into the wrong account.
+        A *different account* than the one this device holds data for: everything
+        persisted belongs to one teacher, so signing in as somebody else has to
+        clear first, the outbox above all — replaying one teacher's unsent writes
+        under another's token would file their students into the wrong account.
+
+        An *offline device signing in for the first time*: nothing is wiped. That
+        is the whole point of the offline mode — a teacher works for a term with
+        no account, decides to back it up, and must not be made to retype any of
+        it. There is no previous account to confuse it with, because `teacherId`
+        is null precisely because there never was one. The rows are adopted and
+        `pushEverything` sends them up.
       */
-      if (signedIn && userId && userId !== useStore.getState().teacherId) {
+      const wasOffline = useStore.getState().offline;
+      const adopting = signedIn && userId && wasOffline;
+
+      if (signedIn && userId && !wasOffline && userId !== useStore.getState().teacherId) {
         useStore.getState().resetAccount();
         void clearQueue();
         // The tables as well as the store. Leaving them would put the previous
@@ -84,8 +91,11 @@ function useSupabaseSession() {
         void wipeLocal();
       }
 
+      if (adopting) useStore.getState().adoptAccount(userId);
+
       useStore.setState({
         signedIn,
+        offline: signedIn ? false : useStore.getState().offline,
         ...(userId ? { teacherId: userId } : {}),
         teacherName:
           (session?.user.user_metadata?.full_name as string | undefined) ??
@@ -102,6 +112,18 @@ function useSupabaseSession() {
         // to delete an import overnight.
         restoreRejectedFlag()
           .then(() => restoreQueue(userId))
+          /*
+            Queued before the pull, never after.
+
+            `hydrate` replaces the local collections with the server's, and the
+            server has none of this yet — so pulling first would wipe the very
+            term of work the teacher signed in to protect. Queueing first means
+            `hydrate` drains it before it reads, and what comes back already
+            contains everything.
+          */
+          .then(() => {
+            if (adopting) pushEverything();
+          })
           .then(() => hydrate())
           .catch((e) => console.warn('[classcare] hydrate failed:', e));
         // Store this device's push token against the account, so the server can

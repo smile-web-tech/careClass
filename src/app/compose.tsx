@@ -122,6 +122,7 @@ export default function Compose() {
     hidden: hiddenTemplates,
   });
   const sendMessage = useStore((s) => s.sendMessage);
+  const logSentMessage = useStore((s) => s.logSentMessage);
 
   /** When arriving from attendance, the message targets specific students. */
   const focusIds = useMemo(
@@ -209,7 +210,11 @@ export default function Compose() {
     than sitting there quietly routing somewhere else. Email still works, and
     still says so.
   */
-  const channelsHere = deviceSms ? CHANNELS : CHANNELS.filter((c) => c.key !== 'sms');
+  const channelsHere = (deviceSms ? CHANNELS : CHANNELS.filter((c) => c.key !== 'sms')).filter(
+    // Email leaves through the server, so it is not on offer without an
+    // account. Shown-and-broken is worse than absent.
+    (c) => c.key !== 'email' || !localOnly,
+  );
 
   /** Live state of a device send, or null when none is in flight or finished. */
   const [run, setRun] = useState<{
@@ -274,17 +279,28 @@ export default function Compose() {
     [],
   );
 
-  /** Real gateways are involved only when signed in against a real project. */
-  const liveSend = hasSupabase;
+  /**
+   * Whether a server is involved at all.
+   *
+   * Two separate questions, and they used to be one. `hasSupabase` says the
+   * build has a project; `offline` says this teacher has no account behind it.
+   * Email needs both, because it goes out through an Edge Function. Texting
+   * needs neither: it leaves from the teacher's own SIM, which is precisely why
+   * a teacher with no account and no internet can still tell a parent their
+   * child was absent this morning.
+   */
+  const localOnly = useStore((s) => s.offline);
+  const liveSend = hasSupabase && !localOnly;
 
   /**
-   * Gated on `liveSend` as well as on capability.
+   * Gated on having real students, not on having an account.
    *
-   * Without a project the store is holding seed students, whose phone numbers
-   * are invented. Texting them would cost the teacher money and land real
-   * messages on whatever real numbers those invented ones happen to be.
+   * Without a project the store holds seed students whose numbers are invented,
+   * and texting them would cost the teacher money and land real messages on
+   * whatever real numbers those happen to be. An offline teacher's students are
+   * ones they typed in themselves, so there is nothing to protect them from.
    */
-  const viaPhone = deviceSms && channels.sms && liveSend;
+  const viaPhone = deviceSms && channels.sms && hasSupabase;
 
   const selectedGroups = groups.filter((g) => selection[g.id]);
   // From what this phone actually offers, so the server can never be handed an
@@ -474,6 +490,35 @@ export default function Compose() {
         // reading.
         console.warn('[classcare] could not record device SMS:', e);
       }
+    }
+
+    /*
+      With no account, write the record here instead.
+
+      The texts still went — they left the teacher's own SIM and never needed a
+      server — but `recordDeviceSms` does, so without this an offline teacher
+      messages a whole class and Messages stays empty. `logSentMessage` keeps it
+      on the device now and, because it goes through the store, it is one of the
+      things that travels up the day they sign in.
+    */
+    if (!liveSend && results.length) {
+      logSentMessage({
+        id: newSmsBatchId(),
+        groupIds: selectedGroups.map((g) => g.id),
+        audience,
+        channels: ['sms'],
+        body,
+        sentAt: Date.now(),
+        deliveries: results.map((r) => ({
+          studentId: r.studentId,
+          recipient: r.kind,
+          channel: 'sms' as const,
+          destination: r.phone,
+          rendered: r.body,
+          state: r.state === 'unknown' ? ('queued' as const) : r.state,
+          error: r.reason,
+        })),
+      });
     }
   };
 

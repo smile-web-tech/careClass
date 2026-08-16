@@ -57,7 +57,15 @@ export default function Settings() {
   /** Which backup job is running, so the row can say so and refuse a second. */
   const [busyBackup, setBusyBackup] = useState<'export' | 'import' | null>(null);
   const signedIn = useStore((s) => s.signedIn);
-  const live = hasSupabase;
+  /*
+    A project in the build, and an account behind it.
+
+    `hasSupabase` says the first; it said nothing about the second, so on a
+    device with no account the server rows offered to pull from a server that
+    would refuse them.
+  */
+  const localOnly = useStore((s) => s.offline);
+  const live = hasSupabase && !localOnly;
 
   /**
    * Write the whole account to a file and hand it to whatever the teacher

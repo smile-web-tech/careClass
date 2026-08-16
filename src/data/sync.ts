@@ -646,6 +646,16 @@ function enqueue(op: Op) {
   if (!hasSupabase) return;
 
   /*
+    Nothing to send when there is nobody to send it to.
+
+    An offline teacher has no session, so every one of these would fail on
+    "Not signed in", be dropped as unrecoverable, and raise a banner about work
+    that was never in danger. The data is safe on the device either way, and
+    the moment they sign in `pushEverything` sends the lot.
+  */
+  if (useStore.getState().offline) return;
+
+  /*
     The head of the queue is in flight while draining, so it is not ours to
     rewrite — the request may already be on the wire. Everything behind it is
     still just an intention.
@@ -1119,6 +1129,26 @@ export async function refreshGrades() {
  */
 export function pushImported(imported: ReadonlySet<string>): void {
   if (!hasSupabase || !imported.size) return;
+  queueAll(imported);
+}
+
+/**
+ * Send an offline device's whole account up, the first time it has one.
+ *
+ * The teacher has been working with no account — a term of groups, students,
+ * registers and marks living only on the handset — and has just signed in. All
+ * of it is theirs and none of it is on the server, so all of it goes.
+ *
+ * Every id was minted locally as a UUID, so nothing here can collide with rows
+ * the account may already have from another device; they are simply added.
+ */
+export function pushEverything(): void {
+  if (!hasSupabase) return;
+  queueAll(null);
+}
+
+/** `null` means everything; a set means only what the import brought. */
+function queueAll(imported: ReadonlySet<string> | null): void {
 
   const state = useStore.getState();
 
@@ -1143,7 +1173,7 @@ export function pushImported(imported: ReadonlySet<string>): void {
     each one is a real wait. Rows already here are already on the server, or
     already in this queue.
   */
-  const fromFile = (id: string) => imported.has(id);
+  const fromFile = (id: string) => imported === null || imported.has(id);
 
   for (const group of state.groups) {
     if (fromFile(group.id)) enqueue({ kind: 'group.create', group });

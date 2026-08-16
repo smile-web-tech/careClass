@@ -77,6 +77,19 @@ type NewStudent = {
 type State = {
   signedIn: boolean;
   /**
+   * Using the app with no account at all.
+   *
+   * A real mode, not a failure to sign in. Plenty of these teachers have a
+   * phone, a class list and no reliable way to reach the internet, and the app
+   * is worth having on those terms alone — everything works, it is simply kept
+   * on the handset. `signedIn` is true because the app is in use; `teacherId`
+   * is null because there is no account behind it.
+   *
+   * Signing in later does not start again: the local data is adopted into the
+   * new account and pushed up. See `adoptOfflineData`.
+   */
+  offline: boolean;
+  /**
    * The Supabase user id the persisted data belongs to.
    *
    * Load-bearing, not bookkeeping. Everything below is one account's data held
@@ -149,6 +162,10 @@ type State = {
   reminderLead: ReminderLead;
 
   signIn: (name?: string) => void;
+  /** Start using the app with no account. */
+  continueOffline: () => void;
+  /** An offline device has just signed in; the data is now that account's. */
+  adoptAccount: (teacherId: string) => void;
   signOut: () => void;
   markPermissionsAsked: () => void;
   /**
@@ -312,6 +329,7 @@ export const setStoreMirror = (m: Partial<StoreMirror>) => {
  */
 export const useStore = create<State>()((set, get) => ({
   signedIn: false,
+  offline: false,
   teacherId: null,
   // Empty, not seeded. A public build must never show a new teacher a class
   // of invented students — they look real, they are indistinguishable from
@@ -354,7 +372,19 @@ export const useStore = create<State>()((set, get) => ({
   remindersOn: true,
   reminderLead: 15,
 
-  signIn: (name) => set((s) => ({ signedIn: true, teacherName: name ?? s.teacherName })),
+  signIn: (name) => set((s) => ({ signedIn: true, offline: false, teacherName: name ?? s.teacherName })),
+
+  continueOffline: () => set({ signedIn: true, offline: true, teacherId: null }),
+
+  /*
+    Keep everything, and give it an owner.
+
+    Deliberately not a reset. The whole promise of the offline mode is that a
+    term of work does not have to be retyped the day the teacher decides to
+    back it up, so this changes who the data belongs to and nothing else. The
+    sync layer then sends all of it — see `pushEverything`.
+  */
+  adoptAccount: (teacherId) => set({ signedIn: true, offline: false, teacherId }),
 
   // Signing out clears the account's data as well as the flag. Leaving it
   // in place meant the next teacher to sign in on this phone saw the last

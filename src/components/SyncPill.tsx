@@ -23,9 +23,12 @@
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
+import { useRouter } from 'expo-router';
+
 import { showAlert } from '@/components/Dialog';
 import { Icon, type IconName } from '@/components/Icon';
 import { Press } from '@/components/ui';
+import { useStore } from '@/data/store';
 import { syncNow } from '@/data/sync';
 import { useSyncStatus } from '@/data/syncStatus';
 import { useT } from '@/i18n/useT';
@@ -36,13 +39,40 @@ export function SyncPill({ style }: { style?: object }) {
   const t = useT();
   const { color, accents } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const router = useRouter();
 
+  const localOnly = useStore((s) => s.offline);
   const pending = useSyncStatus((s) => s.pending);
   const offline = useSyncStatus((s) => s.offline);
   const syncing = useSyncStatus((s) => s.syncing);
 
   const [pressed, setPressed] = useState(false);
   const busy = syncing || pressed;
+
+  /*
+    With no account there is nothing to sync, and saying "Synced" would be a
+    lie: the work is on this handset and nowhere else, and the teacher should
+    be able to change that from the place they look to check.
+  */
+  if (localOnly) {
+    return (
+      <Press
+        onPress={() => router.push('/sign-in')}
+        accessibilityRole="button"
+        accessibilityLabel={t('auth.signInToBackUp')}
+        style={[styles.pill, { backgroundColor: accents.amber.tint }, style]}>
+        <View style={styles.glyph}>
+          <Icon name="cloudUp" size={14} color={accents.amber.ink} />
+        </View>
+        <Text style={[styles.label, { color: accents.amber.ink }]} numberOfLines={1}>
+          {t('sync.onThisPhone')}
+        </Text>
+        <View style={[styles.action, { borderColor: accents.amber.ink + '40' }]}>
+          <Text style={[styles.actionLabel, { color: accents.amber.ink }]}>{t('auth.signIn')}</Text>
+        </View>
+      </Press>
+    );
+  }
 
   const run = async () => {
     if (busy) return;

@@ -702,6 +702,14 @@ const tk = {
   'sync.couldNotSave': '{what} ýatda saklanmady. {reason}',
   'sync.couldNotSaveMany': '{what} we ýene {count} zat ýatda saklanmady. {reason}',
   'auth.signOutUnsent': 'Ugradylmadyk {count} üýtgeşme ýiter. Ilki Ugrat.',
+  'auth.continueOffline': 'Hasapsyz dowam et',
+  'auth.continueOfflineHint':
+    'Ähli zat telefonyňda saklanar. Soň hasaba girseň, olaryň hemmesi buluta göçüriler.',
+  'auth.signInToBackUp': 'Nusgasyny saklamak üçin gir',
+  'auth.backUpTitle': 'Maglumatlaryň diňe şu telefonda',
+  'auth.backUpBody':
+    'Hasaba gir-de, toparlaryňy, okuwçylaryňy we bahalaryňy buluta göçür. Hiç zat ýitmez.',
+  'sync.onThisPhone': 'Diňe şu telefonda',
   'error.storageFullTitle': 'Telefonda ýer ýok',
   'error.storageFullMessage': 'Birnäçe surat ýa-da faýl poz-da, gaýtadan synanyş.',
   'error.tooLargeTitle': 'Faýl uly',
@@ -1538,6 +1546,14 @@ const ru: Record<TranslationKey, string> = {
   'sync.couldNotSave': 'Не удалось сохранить: {what}. {reason}',
   'sync.couldNotSaveMany': 'Не удалось сохранить: {what} и ещё {count}. {reason}',
   'auth.signOutUnsent': '{count} неотправленных изменений пропадут. Сначала отправьте.',
+  'auth.continueOffline': 'Продолжить без аккаунта',
+  'auth.continueOfflineHint':
+    'Всё сохранится на телефоне. Если позже войдёте, все данные уйдут в облако.',
+  'auth.signInToBackUp': 'Войти, чтобы сохранить копию',
+  'auth.backUpTitle': 'Данные только на этом телефоне',
+  'auth.backUpBody':
+    'Войдите, и ваши группы, ученики и оценки уйдут в облако. Ничего не пропадёт.',
+  'sync.onThisPhone': 'Только на телефоне',
   'error.storageFullTitle': 'На телефоне нет места',
   'error.storageFullMessage': 'Удалите несколько фото или файлов и попробуйте снова.',
   'error.tooLargeTitle': 'Файл слишком большой',
@@ -2370,6 +2386,14 @@ const en: Record<TranslationKey, string> = {
   'sync.couldNotSave': '{what} could not be saved. {reason}',
   'sync.couldNotSaveMany': '{what} and {count} more could not be saved. {reason}',
   'auth.signOutUnsent': '{count} unsent changes will be lost. Sync first.',
+  'auth.continueOffline': 'Continue without an account',
+  'auth.continueOfflineHint':
+    'Everything stays on this phone. Sign in later and all of it goes to the cloud.',
+  'auth.signInToBackUp': 'Sign in to back this up',
+  'auth.backUpTitle': 'Your data is only on this phone',
+  'auth.backUpBody':
+    'Sign in and your groups, students and marks go to the cloud. Nothing is lost.',
+  'sync.onThisPhone': 'On this phone only',
   'error.storageFullTitle': 'The phone is full',
   'error.storageFullMessage': 'Delete a few photos or files and try again.',
   'error.tooLargeTitle': 'That file is too big',

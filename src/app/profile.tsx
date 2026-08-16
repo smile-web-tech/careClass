@@ -40,7 +40,7 @@ const PROVIDER_KEY: Record<string, TranslationKey> = {
 };
 
 export default function Profile() {
-  const { color, scheme, status } = useTheme();
+  const { accents, color, scheme, status } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -58,8 +58,12 @@ export default function Profile() {
   const [draftName, setDraftName] = useState(name);
   const [busy, setBusy] = useState(false);
 
+  /** No account behind this device. Changes what the screen can honestly offer. */
+  const localOnly = useStore((s) => s.offline);
+
   const t = useT();
-  const live = hasSupabase;
+  // An account, not merely a configured project — see `localOnly` above.
+  const live = hasSupabase && !localOnly;
   const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC', []);
 
   const sessionsThisWeek = useMemo(() => {
@@ -282,7 +286,29 @@ export default function Profile() {
           />
         </Card>
 
-        {live ? (
+        {/*
+          With no account, the one thing worth offering is getting one.
+
+          The danger zone below is hidden in that state and not merely disabled:
+          signing out of nothing would wipe the only copy of the teacher's work,
+          and deleting an account they do not have is meaningless. What replaces
+          it says where the data currently lives, because that is the fact they
+          need in order to decide.
+        */}
+        {localOnly ? (
+          <Card style={styles.group}>
+            <ActionRow
+              icon="cloudUp"
+              label={t('auth.signInToBackUp')}
+              hint={t('auth.backUpBody')}
+              tint={accents.amber.tint}
+              fg={accents.amber.ink}
+              onPress={() => router.push('/sign-in')}
+            />
+          </Card>
+        ) : null}
+
+        {live && !localOnly ? (
           <>
             <Overline style={styles.label}>{t('groups.dangerZone')}</Overline>
             <Card style={styles.group}>

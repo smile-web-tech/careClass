@@ -38,6 +38,7 @@ export default function SignIn() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const signIn = useStore((s) => s.signIn);
+  const continueOffline = useStore((s) => s.continueOffline);
 
   const [busy, setBusy] = useState<Provider | null>(null);
   const [appleReady, setAppleReady] = useState(false);
@@ -70,6 +71,18 @@ export default function SignIn() {
     } finally {
       setBusy(null);
     }
+  };
+
+  /**
+   * Into the app with no account at all.
+   *
+   * Nothing is created and nothing is asked for. The data lives on the handset
+   * until the teacher decides otherwise, and signing in later keeps every bit
+   * of it — see the session listener in the root layout.
+   */
+  const startOffline = () => {
+    continueOffline();
+    router.replace('/(tabs)');
   };
 
   /** Email is two screens, and which one depends on whether they have an account. */
@@ -169,6 +182,26 @@ export default function SignIn() {
           </Press>
         </View>
 
+        {/*
+          Below the account routes, and quieter than them.
+
+          Not hidden, though. A teacher with no email address, or on a phone that
+          has not reached the internet in a week, is a real user here and this is
+          the only door they can open — an app that refuses to start until it can
+          talk to a server is an app they close. It is placed last and drawn as
+          plain text because signing in is still the better choice when it is
+          available: it is what backs the work up.
+        */}
+        <Press
+          onPress={startOffline}
+          disabled={busy !== null}
+          accessibilityRole="button"
+          hitSlop={8}
+          style={styles.offlineButton}>
+          <Text style={styles.offlineLabel}>{t('auth.continueOffline')}</Text>
+        </Press>
+        <Text style={styles.offlineHint}>{t('auth.continueOfflineHint')}</Text>
+
         <Text style={styles.terms}>{t('auth.terms')}</Text>
       </View>
     </View>
@@ -186,6 +219,22 @@ function Chip({ label }: { label: string }) {
 
 const makeStyles = ({ color }: Theme) =>
   StyleSheet.create({
+    offlineButton: { alignSelf: 'center', marginTop: 18, paddingVertical: 6 },
+    offlineLabel: {
+      fontFamily: body[700],
+      fontSize: 14,
+      color: color.primary,
+      textAlign: 'center',
+    },
+    offlineHint: {
+      fontFamily: body[400],
+      fontSize: 12,
+      color: color.mutedLight,
+      textAlign: 'center',
+      marginTop: 5,
+      paddingHorizontal: 12,
+    },
+
     /** Default body ink. Text does not inherit colour from a parent View. */
     ink: { color: color.ink },
     root: { flex: 1, backgroundColor: color.navy },

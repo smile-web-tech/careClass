@@ -99,6 +99,7 @@ const TABLES: {
 /** Everything that is a setting rather than a collection. */
 const SETTINGS = [
   'signedIn',
+  'offline',
   'teacherId',
   'teacherName',
   'teacherEmail',
