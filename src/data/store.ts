@@ -394,7 +394,9 @@ export const useStore = create<State>()((set, get) => ({
 
   signOut: () => {
     get().resetAccount();
-    set({ signedIn: false });
+    // `offline` cleared explicitly: leaving it set would have the session
+    // listener read this device as still in use and put them straight back in.
+    set({ signedIn: false, offline: false });
   },
 
   resetAccount: () =>

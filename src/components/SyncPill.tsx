@@ -57,7 +57,16 @@ export function SyncPill({ style }: { style?: object }) {
   if (localOnly) {
     return (
       <Press
-        onPress={() => router.push('/sign-in')}
+        /*
+          Registration, not the sign-in chooser.
+
+          A teacher who chose to work without an account has, by definition, not
+          got one — so the door that matters is the one that makes one. `push`
+          rather than `replace` so backing out returns to the home screen they
+          came from, and `from=offline` tells that screen how to behave if they
+          abandon it half-way.
+        */
+        onPress={() => router.push({ pathname: '/register', params: { from: 'offline' } })}
         accessibilityRole="button"
         accessibilityLabel={t('auth.signInToBackUp')}
         style={[styles.pill, { backgroundColor: accents.amber.tint }, style]}>

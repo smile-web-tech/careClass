@@ -27,6 +27,7 @@ import {
   registerWithPassword,
   resendSignupCode,
 } from '@/lib/auth';
+import { useStore } from '@/data/store';
 import { MAIL_SENDER } from '@/lib/brand';
 import { enterApp } from '@/lib/nav';
 import { MIN_LENGTH, passwordAcceptable, scorePassword } from '@/lib/password';
@@ -43,7 +44,20 @@ type Step = 1 | 2 | 3;
 export default function Register() {
   const t = useT();
   const router = useRouter();
-  const { email: prefill } = useLocalSearchParams<{ email?: string }>();
+  const { email: prefill, from } = useLocalSearchParams<{ email?: string; from?: string }>();
+
+  /*
+    Opened from inside the app by a teacher with no account.
+
+    That is a different journey from the one off the sign-in screen: they are
+    already using ClassCare, they have work on the phone, and backing out has to
+    put them back where they were rather than at a door they have already
+    walked through. `continueOffline` restores the mode, because reaching step 3
+    creates a session and abandoning it signs that session away — which would
+    otherwise leave them signed out of an account they never finished making.
+  */
+  const fromOffline = from === 'offline';
+  const continueOffline = useStore((s) => s.continueOffline);
   const styles = useThemedStyles(makeStyles);
   const { color } = useTheme();
 
@@ -90,6 +104,12 @@ export default function Register() {
    */
   const leave = () => {
     if (step === 3) void abandonRegistration();
+
+    if (fromOffline) {
+      continueOffline();
+      router.replace('/(tabs)');
+      return;
+    }
     router.back();
   };
 
@@ -143,7 +163,9 @@ export default function Register() {
         // in, carrying the email so they do not type it twice.
         router.replace({
           pathname: '/login',
-          params: { email: email.trim().toLowerCase(), reason: 'exists' },
+          // `from` travels with them: an offline teacher who turns out to have
+          // an account already still needs a way back to their own home screen.
+          params: { email: email.trim().toLowerCase(), reason: 'exists', ...(from ? { from } : {}) },
         });
         return;
       }

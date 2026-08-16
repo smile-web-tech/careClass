@@ -93,8 +93,23 @@ function useSupabaseSession() {
 
       if (adopting) useStore.getState().adoptAccount(userId);
 
+      /*
+        A missing Supabase session does not mean nobody is using the app.
+
+        An offline teacher has no session by definition, and this listener fires
+        with a null one on every single launch — `INITIAL_SESSION` — and again
+        whenever a half-finished registration is abandoned. Writing `signedIn:
+        false` straight from that would throw them out to the sign-in screen
+        every time they opened the app, with a phone full of their own work
+        behind the door.
+
+        So the flag means "is somebody using this app", and the session only
+        decides it for teachers who have an account.
+      */
+      const stillOffline = !signedIn && useStore.getState().offline;
+
       useStore.setState({
-        signedIn,
+        signedIn: signedIn || stillOffline,
         offline: signedIn ? false : useStore.getState().offline,
         ...(userId ? { teacherId: userId } : {}),
         teacherName:

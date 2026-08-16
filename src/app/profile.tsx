@@ -303,7 +303,7 @@ export default function Profile() {
               hint={t('auth.backUpBody')}
               tint={accents.amber.tint}
               fg={accents.amber.ink}
-              onPress={() => router.push('/sign-in')}
+              onPress={() => router.push({ pathname: '/register', params: { from: 'offline' } })}
             />
           </Card>
         ) : null}

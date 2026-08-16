@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AuthButton, AuthField, AuthLink, AuthNotice, AuthScreen } from '@/components/AuthForm';
+import { useStore } from '@/data/store';
 import { useT } from '@/i18n/useT';
 import { PasswordField } from '@/components/PasswordField';
 import { Press } from '@/components/ui';
@@ -35,7 +36,15 @@ const FREE_ATTEMPTS = 3;
 export default function Login() {
   const t = useT();
   const router = useRouter();
-  const { email: prefill, reason } = useLocalSearchParams<{ email?: string; reason?: string }>();
+  const { email: prefill, reason, from } = useLocalSearchParams<{
+    email?: string;
+    reason?: string;
+    from?: string;
+  }>();
+
+  /** Opened from inside the app by a teacher who has no account yet. */
+  const fromOffline = from === 'offline';
+  const continueOffline = useStore((s) => s.continueOffline);
   const styles = useThemedStyles(makeStyles);
 
   const [email, setEmail] = useState(prefill ?? '');
@@ -135,7 +144,12 @@ export default function Login() {
         <AuthLink
           prompt={t('auth.newHere')}
           label={t('auth.createAccount')}
-          onPress={() => router.replace({ pathname: '/register', params: { email: email.trim() } })}
+          onPress={() =>
+            router.replace({
+              pathname: '/register',
+              params: { email: email.trim(), ...(from ? { from } : {}) },
+            })
+          }
         />
       }>
       {reason === 'exists' ? (
