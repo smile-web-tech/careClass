@@ -17,10 +17,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import Svg, { Circle, G, Path } from 'react-native-svg';
-
 import { Icon, type IconName } from '@/components/Icon';
 import { PHOTO_CACHE_POLICY, useStudentPhoto } from '@/lib/studentPhoto';
+import { brand } from '@/theme/brand';
 import {
   PRESS_OPACITY,
   radius,
@@ -29,7 +28,7 @@ import {
   type AccentName,
   type Theme,
 } from '@/theme';
-import { body, text } from '@/theme/type';
+import { body, mark, text } from '@/theme/type';
 
 /* -------------------------------------------------------------------------- */
 /* Text                                                                       */
@@ -558,57 +557,44 @@ export function Segmented<T extends string>({
 /* Misc                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** The three-bar ClassCare mark. Scales from the 38px header to the 46px hero. */
 /**
- * The Held mark on a rounded tile — three heads over one cradling stroke.
+ * The ClassCare mark on a rounded tile: a blue capital C with a green lowercase
+ * c set over it.
  *
- * Drawn from the vector master in `icons/svg/held-mark-onblue.svg` rather than
- * bundling a PNG, so it stays sharp at every size and can follow the theme.
- * Geometry is the 96-unit master grid described in `icons/README.md`, scaled to
- * whatever `size` is asked for.
+ * Set in type rather than drawn as a path, because it *is* type — the same
+ * Archivo Black, the same colours and the same green-over-blue overlap as the
+ * launcher icon and the opening title card. Three places, one mark, and the
+ * only way to keep them from drifting is to give them one recipe.
  *
- * The README's small-size rule is applied below 44px: the cradle thickens, the
- * heads grow, and the two-tone treatment drops to one colour, because at that
- * scale the teal heads read as noise against the blue.
+ * Two numbers carry it. The pair measures 1.345em wide at -.10em tracking, so
+ * fitting the artwork to .66 of the tile makes the type .49 of it — the old
+ * mark sat at .74, but that was a squarish glyph and this one is twice as wide
+ * as it is tall, which at .74 leaves it pressed against the corners. And the
+ * lowercase c stays lowercase: scaling it to the capital's height spells CC.
+ *
+ * `tint` replaces the tile colour for a caller that needs the mark to sit on
+ * something other than black.
  */
-export function Logo({ size = 46, tint: tintProp }: { size?: number; tint?: string }) {
-  const { color } = useTheme();
+export function Logo({ size = 46, tint }: { size?: number; tint?: string }) {
   const styles = useThemedStyles(makeStyles);
-  const tint = tintProp ?? color.primary;
-
-  const small = size < 44;
-  const artwork = size * 0.74;
-  const stroke = small ? 15.5 : 13;
-  const head = small ? 7.5 : 6.5;
+  const fontSize = size * 0.49;
+  const letter = { fontFamily: mark, fontSize, includeFontPadding: false } as const;
 
   return (
     <View
       style={[
         styles.center,
         {
+          flexDirection: 'row',
           width: size,
           height: size,
           borderRadius: size * 0.224,
-          backgroundColor: tint,
+          backgroundColor: tint ?? brand.ground,
         },
       ]}>
-      <Svg width={artwork} height={artwork} viewBox="0 0 96 96">
-        {/* The master shifts the mark +6.5 on Y so it sits optically centred. */}
-        <G translateY={6.5}>
-          <Path
-            d="M16 36C16 74 80 74 80 36"
-            fill="none"
-            stroke="#fff"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-          />
-          <G fill={small ? '#fff' : '#6FE3DE'}>
-            <Circle cx={31} cy={24} r={head} />
-            <Circle cx={48} cy={17} r={head} />
-            <Circle cx={65} cy={24} r={head} />
-          </G>
-        </G>
-      </Svg>
+      {/* Sibling order is the stacking order: the c paints over the C. */}
+      <Text style={[letter, { color: brand.blue }]}>C</Text>
+      <Text style={[letter, { color: brand.green, marginLeft: fontSize * -0.1 }]}>c</Text>
     </View>
   );
 }

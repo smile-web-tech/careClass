@@ -37,14 +37,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { brand } from '@/theme/brand';
 import { mark } from '@/theme/type';
-
-/** Matches `expo-splash-screen`'s `backgroundColor` in app.json. */
-const BACKDROP = '#000000';
-
-const SAGE = '#C9D7AE';
-const BLUE = '#2457E8';
-const GREEN = '#00A551';
 
 /*
  * Measured from the reference, in pixels at its 1080-wide frame, then divided
@@ -247,7 +241,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
                 styles.word,
                 {
                   fontSize: CLASS_SIZE * size,
-                  color: BLUE,
+                  color: brand.blue,
                   letterSpacing: -0.0123 * CLASS_SIZE * size,
                   transform: [{ scaleX: CLASS_SQUEEZE }],
                 },
@@ -263,7 +257,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
                 styles.word,
                 {
                   fontSize: NAME_SIZE * size,
-                  color: SAGE,
+                  color: brand.sage,
                   letterSpacing: 0.0179 * NAME_SIZE * size,
                   transform: [{ scaleX: NAME_SQUEEZE }],
                 },
@@ -281,7 +275,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
                 styles.word,
                 {
                   fontSize: size,
-                  color: GREEN,
+                  color: brand.green,
                   letterSpacing: -0.01 * size,
                   transform: [{ scaleX: CARE_SQUEEZE }],
                 },
@@ -297,7 +291,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: BACKDROP, zIndex: 100 },
+  backdrop: { backgroundColor: brand.ground, zIndex: 100 },
   centre: {
     position: 'absolute',
     top: 0,
