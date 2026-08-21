@@ -117,8 +117,11 @@ let running = false;
  * Pick a spreadsheet and put its students into the account.
  *
  * The two ways in are the same two the backup import offers, in the same words,
- * because they are the same question: add these to what is here, or let them
- * replace it. Replacing is the danger action and says so.
+ * because they are the same question: add these to what is here, or let this
+ * file become the roster. Replacing is still the danger action and still says
+ * so — it removes students the file leaves out — but a student the file *does*
+ * carry is edited rather than rebuilt, so they keep their photograph and their
+ * colour. A picture is not in a spreadsheet and cannot come back from one.
  */
 export async function importStudentsSheet(): Promise<void> {
   if (!useStore.getState().signedIn) {
@@ -163,7 +166,11 @@ export async function importStudentsSheet(): Promise<void> {
 
     const lines = [
       choice === 'replace'
-        ? t('csv.replacedBody', { added: outcome.added, removed: outcome.removed })
+        ? t('csv.replacedBody', {
+            added: outcome.added,
+            updated: outcome.updated,
+            removed: outcome.removed,
+          })
         : t('csv.importedBody', { added: outcome.added, updated: outcome.updated }),
       // Named rather than counted: a teacher needs to know *which* groups have
       // no timetable yet, because that is the thing they have to go and fix.

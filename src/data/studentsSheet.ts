@@ -589,6 +589,88 @@ export type ImportOutcome = {
  * days simply shows no sessions until they set them, which is a visible,
  * fixable state rather than a silent loss.
  */
+/**
+ * Which parsed rows are students the teacher already has.
+ *
+ * Returns row index to existing student id. A match is only ever claimed once:
+ * two rows naming the same person cannot both take them, or the second would
+ * overwrite the first and the teacher would end up with one student where the
+ * file had two.
+ *
+ * Three tiers, in descending confidence:
+ *
+ * 1. The `id` column, which is what this app writes when it exports. Exact.
+ * 2. Name *and* phone. Two different children can share a name; sharing a name
+ *    and a number as well means it is one child.
+ * 3. Name alone, but only where neither side has a phone to contradict the
+ *    other. A list from a school routinely has no numbers in it, and refusing
+ *    to match those would make re-importing a corrected list duplicate the
+ *    entire roster — while a name matching against a *different* phone is
+ *    exactly the case where two children really do share a name.
+ *
+ * Deliberately not fuzzy. A near-match here silently merges two people's
+ * records, which is far worse than the duplicate it saves.
+ */
+function matchExisting(parsed: ParsedStudent[], students: Student[]) {
+  const key = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  const digits = (s: string) => s.replace(/\D/g, '');
+
+  const taken = new Set<string>();
+  const out = new Map<number, string>();
+
+  const byId = new Map(students.map((s) => [s.id, s]));
+  const byNamePhone = new Map<string, Student[]>();
+  const byName = new Map<string, Student[]>();
+  for (const s of students) {
+    push(byName, key(s.name), s);
+    if (digits(s.phone)) push(byNamePhone, `${key(s.name)}|${digits(s.phone)}`, s);
+  }
+
+  const claim = (index: number, s: Student | undefined) => {
+    if (!s || taken.has(s.id)) return false;
+    taken.add(s.id);
+    out.set(index, s.id);
+    return true;
+  };
+
+  const free = (list: Student[] | undefined) => list?.find((s) => !taken.has(s.id));
+
+  /*
+    A pass per tier, across every row, rather than all three tiers per row.
+
+    Per-row, a weak match claims a student a stronger one was going to want: two
+    children called Batyr, one of them with no number, and a row carrying no
+    phone reaches the one whose phone matches the *next* row exactly. Running
+    the confident matches first means a tier can only ever take what no better
+    tier wanted.
+  */
+  parsed.forEach((row, i) => {
+    if (row.sourceId) claim(i, byId.get(row.sourceId));
+  });
+
+  parsed.forEach((row, i) => {
+    if (out.has(i)) return;
+    const phone = digits(row.student.phone ?? '');
+    if (!phone) return;
+    claim(i, free(byNamePhone.get(`${key(row.student.name)}|${phone}`)));
+  });
+
+  parsed.forEach((row, i) => {
+    if (out.has(i)) return;
+    const phone = digits(row.student.phone ?? '');
+    const sameName = byName.get(key(row.student.name)) ?? [];
+    claim(i, free(sameName.filter((s) => !phone || !digits(s.phone))));
+  });
+
+  return out;
+}
+
+const push = <T,>(map: Map<string, T[]>, k: string, value: T) => {
+  const list = map.get(k);
+  if (list) list.push(value);
+  else map.set(k, [value]);
+};
+
 export async function applyStudentSheet(
   parsed: ParsedStudent[],
   mode: 'merge' | 'replace',
@@ -598,8 +680,27 @@ export async function applyStudentSheet(
 
   const outcome: ImportOutcome = { added: 0, updated: 0, removed: 0, groupsCreated: [] };
 
+  /*
+    Who in the file is already here.
+
+    Worked out *before* anything is written, and for both modes, because the
+    answer decides whether a student is edited or replaced — and replacing one
+    costs them their photograph. A picture is not in the spreadsheet and cannot
+    come back from it: the file on the device is keyed by student id, so a
+    student deleted and re-added under a fresh id has an orphaned photo and a
+    blank avatar, even though the teacher's file said nothing about pictures at
+    all.
+
+    So `replace` no longer means "delete everyone, then read the file". It means
+    "the file is the roster now": students in it keep their identity and
+    everything the file does not carry, and only students absent from it go.
+  */
+  const matches = matchExisting(parsed, state.students);
+
   if (mode === 'replace') {
+    const kept = new Set(matches.values());
     for (const s of state.students) {
+      if (kept.has(s.id)) continue;
       removeStudent(s.id);
       outcome.removed += 1;
     }
@@ -627,15 +728,18 @@ export async function applyStudentSheet(
     return [...new Set(ids)];
   };
 
-  for (const row of parsed) {
+  for (const [i, row] of parsed.entries()) {
     const groupIds = groupIdsFor(row.groupNames);
-    const existing =
-      mode === 'merge' && row.sourceId
-        ? useStore.getState().students.find((s) => s.id === row.sourceId)
-        : undefined;
+    const existingId = matches.get(i);
 
-    if (existing) {
-      updateStudent(existing.id, { ...row.student, groupIds });
+    if (existingId) {
+      // `accent` is stripped on purpose. The parser hands out colours round
+      // robin, so leaving it in would reshuffle the whole roster's colours on
+      // every import — and the colour on an existing student is one the teacher
+      // has been recognising them by. `photoPath` is absent from a parsed row
+      // rather than empty, so it is not in this patch and is not cleared.
+      const { accent: _ignored, ...fields } = row.student;
+      updateStudent(existingId, { ...fields, groupIds });
       outcome.updated += 1;
     } else {
       addStudent({ ...row.student, groupIds });
