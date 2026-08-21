@@ -21,7 +21,7 @@ import type { Gender, Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { callNumber, smsNumber } from '@/lib/contact';
-import { ageFrom } from '@/lib/date';
+import { ageFrom, toKey } from '@/lib/date';
 import { exportStudentsSheet, importStudentsSheet } from '@/lib/sheetFlow';
 import { compareTerms, termLabel, termOf } from '@/lib/term';
 import { radius, space, useTheme, useThemedStyles, type AccentName, type Theme } from '@/theme';
@@ -140,9 +140,17 @@ export default function Students() {
     answer and a derived one is a guess, and quietly turning the second into the
     first would overwrite a deliberate choice on the next sync.
   */
+  const thisTerm = useMemo(() => termOf(toKey(new Date())), []);
+
   const termFor = useCallback(
-    (g: { term?: string; startsOn?: string }) => g.term ?? (g.startsOn ? termOf(g.startsOn) : undefined),
-    [],
+    (g: { term?: string; startsOn?: string }) =>
+      // A group with neither is one that predates dates entirely, and a group
+      // with no first and no last day is by definition still running — so the
+      // term it belongs to is this one. Without this last step a teacher whose
+      // groups all predate migration 0016 opens the filter to an empty row,
+      // which is the bug this whole fallback exists to prevent.
+      g.term ?? (g.startsOn ? termOf(g.startsOn) : thisTerm),
+    [thisTerm],
   );
 
   /** Terms the teacher actually has, newest first. No term, no chip. */
