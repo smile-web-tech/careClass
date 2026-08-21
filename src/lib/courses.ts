@@ -48,18 +48,17 @@ export function studentCourses(
 }
 
 /**
- * The level: which course they are on.
+ * The level: courses this student has completed.
  *
- * Finished courses plus one. The plus one is the course in front of them, which
- * is why a student sitting in their first is a level 1 and not a level 0, and
- * why finishing a course moves them up on the day it finishes rather than on
- * the day they happen to be enrolled in the next thing.
+ * Starts at zero and goes up the day a course finishes, whether it was archived
+ * by hand or its end date simply passed. A student part-way through their first
+ * course has completed nothing, so they are a level 0 until they finish it.
  *
- * Running courses are deliberately *not* counted separately. Adding them would
- * make a student taking two classes at once a level higher than one taking a
- * single class, which is not what the word means to a teacher — and it would
- * make the level fall back down when a course ended and they had nothing else
- * on, which is worse than being wrong: it looks like the app forgot.
+ * Running courses are deliberately not counted. Counting them would make a
+ * student taking two classes at once a level above one taking a single class,
+ * and it would make the level fall back down when a course ended with nothing
+ * else arranged — which does not read as a definition, it reads as the app
+ * forgetting.
  *
  * `levelBase` carries what counting cannot see — courses done before this app,
  * or a teacher's correction. Absent is zero, which is the right reading of
@@ -70,7 +69,7 @@ export function levelOf(
   groups: Group[],
   today = toKey(new Date()),
 ): number {
-  return (student.levelBase ?? 0) + studentCourses(student, groups, today).finished.length + 1;
+  return (student.levelBase ?? 0) + studentCourses(student, groups, today).finished.length;
 }
 
 /**
@@ -89,5 +88,5 @@ export function baseForLevel(
   today = toKey(new Date()),
 ): number {
   const finished = studentCourses(student, groups, today).finished.length;
-  return Math.max(0, Math.round(level) - finished - 1);
+  return Math.max(0, Math.round(level) - finished);
 }

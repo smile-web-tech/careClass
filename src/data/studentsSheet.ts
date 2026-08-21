@@ -274,7 +274,7 @@ export function sampleStudentsXlsx(): Uint8Array {
     birthDate: '2011-03-15',
     // The level as the teacher reads it. Blank means "count it from the
     // courses in this app", which is right for anyone who started here.
-    level: '3',
+    level: '2',
     address: 'Görogly köçesi 12',
     school: '№ 20',
     // Written the way the export writes it, so the template teaches the
