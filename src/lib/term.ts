@@ -104,3 +104,33 @@ export function termChoices(startsOn: string) {
   }
   return out;
 }
+
+/**
+ * The term a group belongs to, falling back where it does not carry one.
+ *
+ * Only groups created or edited since terms existed store one. A teacher who
+ * has used the app for a year would otherwise find every course they have ever
+ * run belonging to no term at all — invisible to the term filter, unarchivable
+ * as a term, and stuck at the bottom of the group list.
+ *
+ * So: the stored term, else the one the start date implies, else the current
+ * one. That last step is not a guess so much as a reading of what a group with
+ * no first day and no last day is: still running, therefore this term.
+ *
+ * Derived on read and never written back. A stored term is the teacher's
+ * answer and a derived one is ours, and quietly promoting the second to the
+ * first would overwrite a deliberate choice on the next sync.
+ */
+export function termOfGroup(
+  group: { term?: string; startsOn?: string },
+  today = new Date(),
+): string {
+  if (group.term) return group.term;
+  if (group.startsOn) return termOf(group.startsOn);
+  const local = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return termOf(
+    `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(
+      local.getDate(),
+    ).padStart(2, '0')}`,
+  );
+}

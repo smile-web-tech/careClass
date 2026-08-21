@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { useMemo } from 'react';
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 
 import type {
   Assessment,
@@ -12,6 +13,7 @@ import type {
   Channel,
   Grade,
   Group,
+  GroupPatch,
   Message,
   MessageTemplate,
   Reply,
@@ -23,6 +25,7 @@ import type { Language } from '@/i18n';
 import { DEFAULT_LANGUAGE, setActiveLanguage } from '@/i18n';
 import { at, toKey } from '@/lib/date';
 import { runsOn } from '@/lib/schedule';
+import { termOfGroup } from '@/lib/term';
 import { accentNames, type AccentName } from '@/theme';
 import type { ReminderLead } from '@/lib/notifications';
 
@@ -179,6 +182,14 @@ type State = {
   addGroup: (g: Omit<Group, 'id' | 'accent'> & { accent?: Group['accent'] }) => string;
   updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
   removeGroup: (id: string) => void;
+  /** File a finished course away. Keeps everything; hides it from teaching. */
+  archiveGroup: (id: string) => void;
+  /** Bring one back into the active list. */
+  restoreGroup: (id: string) => void;
+  /** Archive every active group in a term at once. Returns how many moved. */
+  archiveTerm: (term: string) => number;
+  /** Bring a whole term back. Returns how many moved. */
+  restoreTerm: (term: string) => number;
   addStudent: (s: NewStudent) => string;
   updateStudent: (id: string, patch: Partial<Student>) => void;
   removeStudent: (id: string) => void;
@@ -267,6 +278,32 @@ type State = {
  */
 const uid = () => Crypto.randomUUID();
 
+/** The fields on a group that can be cleared, and so need `null` on the wire. */
+const CLEARABLE = ['startsOn', 'endsOn', 'term', 'archivedAt'] as const;
+
+/*
+  Turn "clear this" into something that survives being written down.
+
+  In the store, clearing a group's end date, its term or its archive stamp is a
+  key present with the value `undefined`, and every read of a patch here tests
+  with `in` for exactly that reason. But a queued write is persisted with
+  `JSON.stringify`, which deletes keys whose value is `undefined` — so after a
+  relaunch the patch arrived as `{}` and the column kept its old value. The
+  teacher saw the change locally, and the next sync pulled the old value back
+  over it.
+
+  Only the clearable keys are touched, and only when they are present. A patch
+  that never mentioned a field still must not mention it, or every edit would
+  blank everything it did not set.
+*/
+function forWire(patch: Partial<Omit<Group, 'id'>>): GroupPatch {
+  const out: GroupPatch = { ...patch };
+  for (const key of CLEARABLE) {
+    if (key in patch && patch[key] === undefined) out[key] = null;
+  }
+  return out;
+}
+
 /**
  * Optional write-through to the backend.
  *
@@ -277,7 +314,7 @@ const uid = () => Crypto.randomUUID();
  */
 export type StoreMirror = {
   createGroup: (group: Group) => void;
-  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) => void;
+  updateGroup: (id: string, patch: GroupPatch) => void;
   deleteGroup: (id: string) => void;
   createStudent: (student: Student) => void;
   updateStudent: (id: string, patch: Partial<Student>) => void;
@@ -458,7 +495,7 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({
       groups: s.groups.map((g) => (g.id === id ? { ...g, ...patch } : g)),
     }));
-    mirror.updateGroup?.(id, patch);
+    mirror.updateGroup?.(id, forWire(patch));
   },
 
   /**
@@ -474,6 +511,34 @@ export const useStore = create<State>()((set, get) => ({
       ),
     }));
     mirror.deleteGroup?.(id);
+  },
+
+  /*
+    Archive and restore are one `updateGroup` each, deliberately.
+
+    A separate op would need its own queue entry, its own server call and its
+    own conflict story, and it would say exactly what setting one column says.
+    Going through `updateGroup` means archiving syncs, retries and replays after
+    a relaunch on the same machinery as renaming a group, which is machinery
+    that already works.
+  */
+  archiveGroup: (id) => get().updateGroup(id, { archivedAt: new Date().toISOString() }),
+
+  restoreGroup: (id) => get().updateGroup(id, { archivedAt: undefined }),
+
+  archiveTerm: (term) => {
+    const doomed = get().groups.filter((g) => !g.archivedAt && termOfGroup(g) === term);
+    const at = new Date().toISOString();
+    // One timestamp for the whole term, not one per group: they were filed in a
+    // single act and the archive groups them by when that happened.
+    for (const g of doomed) get().updateGroup(g.id, { archivedAt: at });
+    return doomed.length;
+  },
+
+  restoreTerm: (term) => {
+    const back = get().groups.filter((g) => g.archivedAt && termOfGroup(g) === term);
+    for (const g of back) get().updateGroup(g.id, { archivedAt: undefined });
+    return back.length;
   },
 
   addStudent: (input) => {
@@ -801,7 +866,26 @@ export const useStore = create<State>()((set, get) => ({
 /* Derived reads                                                              */
 /* -------------------------------------------------------------------------- */
 
-export const useGroups = () => useStore((s) => s.groups);
+/*
+  The teaching list, which is every group that has not been filed away.
+
+  Archived groups stay in `state.groups` — the archive has to be able to read
+  them offline, and their registers and marks hang off them. This selector is
+  the single place they are excluded, which is why almost every screen in the
+  app went on working when archiving arrived without being touched.
+*/
+export const useGroups = () =>
+  useStore(useShallow((s) => s.groups.filter((g) => !g.archivedAt)));
+
+/** Filed-away groups, most recently archived first. */
+export const useArchivedGroups = () =>
+  useStore(
+    useShallow((s) =>
+      s.groups
+        .filter((g) => g.archivedAt)
+        .sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '')),
+    ),
+  );
 export const useStudents = () => useStore((s) => s.students);
 export const useEvents = () => useStore((s) => s.events);
 

@@ -12,6 +12,7 @@ import type {
   CalendarEvent,
   Channel,
   Group,
+  GroupPatch,
   Message,
   MessageTemplate,
   Reply,
@@ -61,7 +62,7 @@ import { hasSupabase, supabaseUrl } from '@/lib/supabase';
  */
 export type Op =
   | { kind: 'group.create'; group: Group }
-  | { kind: 'group.update'; id: string; patch: Partial<Omit<Group, 'id'>> }
+  | { kind: 'group.update'; id: string; patch: GroupPatch }
   | { kind: 'group.delete'; id: string }
   | { kind: 'student.create'; student: Student }
   | { kind: 'student.update'; id: string; patch: Partial<Student> }
@@ -994,7 +995,7 @@ export const remote: StoreMirror = {
   // inserted under it, so the id the UI already holds is the real one.
   createGroup: (group: Group) => enqueue({ kind: 'group.create', group }),
 
-  updateGroup: (id: string, patch: Partial<Omit<Group, 'id'>>) =>
+  updateGroup: (id: string, patch: GroupPatch) =>
     enqueue({ kind: 'group.update', id, patch }),
 
   deleteGroup: (id: string) => enqueue({ kind: 'group.delete', id }),

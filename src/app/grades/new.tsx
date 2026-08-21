@@ -35,7 +35,7 @@ import {
   Press,
   SelectChip,
 } from '@/components/ui';
-import { useStore, useStudents } from '@/data/store';
+import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Assessment } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { assessmentKindLabel, starterTypeNames } from '@/lib/assessmentKind';
@@ -54,7 +54,7 @@ export default function RecordGrades() {
   const params = useLocalSearchParams<{ group?: string; id?: string }>();
 
   const students = useStudents();
-  const groups = useStore((s) => s.groups);
+  const groups = useGroups();
   const assessments = useStore((s) => s.assessments);
   const grades = useStore((s) => s.grades);
   const saveAssessment = useStore((s) => s.saveAssessment);

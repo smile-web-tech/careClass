@@ -11,10 +11,12 @@ import { Avatar, Card, EmptyState, IconButton, initialsOf, Press, Txt } from '@/
 import { useGroups, useStore, useStudents } from '@/data/store';
 import type { Group, Student } from '@/data/types';
 import type { TranslationKey } from '@/i18n';
+import { confirm } from '@/components/Dialog';
 import { useT } from '@/i18n/useT';
 import { smsNumber } from '@/lib/contact';
 import { at, countdownTo, longDate, relativeSlot } from '@/lib/date';
 import { nextSessionForGroup, nextSessionOverall, roomLabel } from '@/lib/schedule';
+import { compareTerms, termLabel, termOfGroup } from '@/lib/term';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -56,6 +58,64 @@ export default function Home() {
       (g) => `${g.name} ${g.subject}`.toLowerCase().includes(q) || viaStudent.has(g.id),
     );
   }, [groups, matchedStudents, q]);
+
+  /*
+    The list, in terms.
+
+    A tutor who has been running this app for a while has thirty groups, and a
+    flat list of thirty is a list nobody reads to the bottom of. They do not
+    think of them as thirty either: they think "the autumn lot" and "the spring
+    lot", which is what a term is. So the terms are the list, and the groups
+    live inside them.
+
+    Newest term first, and only the newest is open to begin with — the courses
+    running now are the ones the teacher came here for, and the older terms are
+    a tap away rather than a scroll away.
+  */
+  const termed = useMemo(() => {
+    const buckets = new Map<string, Group[]>();
+    for (const g of shown) {
+      const key = termOfGroup(g);
+      const list = buckets.get(key);
+      if (list) list.push(g);
+      else buckets.set(key, [g]);
+    }
+    return [...buckets.entries()]
+      .sort((a, b) => compareTerms(b[0], a[0]))
+      .map(([term, list]) => ({ term, groups: list }));
+  }, [shown]);
+
+  const [openTerms, setOpenTerms] = useState<Record<string, boolean>>({});
+
+  const archiveTerm = useStore((s) => s.archiveTerm);
+
+  /*
+    Archiving a whole term, from the term's own header.
+
+    This is the action the request was really about: a term ends and every
+    course in it is finished at once, and doing that group by group through
+    twelve confirmations is how a teacher decides to just delete them instead.
+  */
+  const askArchiveTerm = async (term: string, count: number) => {
+    const ok = await confirm({
+      title: t('archive.termTitle', { term: termLabel(term, t) }),
+      message: t('archive.termBody', { count }),
+      confirmLabel: t('archive.archiveTerm'),
+      tone: 'info',
+    });
+    if (ok) archiveTerm(term);
+  };
+
+  /*
+    Open by default, and only the first.
+
+    Held as overrides rather than as the state itself, so a term that appears
+    later — a group moved into it, a search that surfaces an older one — does
+    not need seeding, and a teacher's tap is remembered for exactly as long as
+    the screen is.
+  */
+  const isOpen = (term: string, index: number) =>
+    openTerms[term] ?? (index === 0 || Boolean(q));
 
   const upNext = useMemo(() => nextSessionOverall(groups, now), [groups, now]);
   const upNextGroup = groups.find((g) => g.id === upNext?.groupId);
@@ -144,15 +204,57 @@ export default function Home() {
         </View>
 
         <View style={styles.list}>
-          {shown.map((g) => (
-            <GroupRow
-              key={g.id}
-              group={g}
-              count={students.filter((s) => s.groupIds.includes(g.id)).length}
-              now={now}
-              onPress={() => router.push(`/group/${g.id}`)}
-            />
-          ))}
+          {termed.map(({ term, groups: inTerm }, i) => {
+            const open = isOpen(term, i);
+            return (
+              <View key={term} style={styles.termBlock}>
+                <Press
+                  onPress={() => setOpenTerms((o) => ({ ...o, [term]: !open }))}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
+                  style={styles.termHead}>
+                  <Icon
+                    name="disclosure"
+                    size={15}
+                    color={color.chevron}
+                    // The chevron points along the direction the tap goes: right
+                    // for "there is more in here", down for "it is open".
+                    style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}
+                  />
+                  <Text style={[styles.termName, open && { color: color.ink }]}>
+                    {termLabel(term, t)}
+                  </Text>
+                  <Text style={styles.termCount}>{inTerm.length}</Text>
+                </Press>
+
+                {/*
+                  Only on the open term, and only below the fold of the header.
+                  A row of archive buttons down a closed list is an invitation
+                  to file away the term you are teaching.
+                */}
+                {open ? (
+                  <Press
+                    onPress={() => void askArchiveTerm(term, inTerm.length)}
+                    style={styles.termArchive}>
+                    <Icon name="archive" size={13} color={color.mutedLight} />
+                    <Text style={styles.termArchiveLabel}>{t('archive.archiveTerm')}</Text>
+                  </Press>
+                ) : null}
+
+                {open
+                  ? inTerm.map((g) => (
+                      <GroupRow
+                        key={g.id}
+                        group={g}
+                        count={students.filter((s) => s.groupIds.includes(g.id)).length}
+                        now={now}
+                        onPress={() => router.push(`/group/${g.id}`)}
+                      />
+                    ))
+                  : null}
+              </View>
+            );
+          })}
 
           {shown.length === 0 ? (
             <EmptyState title={t('home.noMatches')} hint={t('home.tryAnother')} />
@@ -501,6 +603,53 @@ const makeStyles = ({ color, shadow }: Theme) =>
     },
 
     list: { gap: 10, paddingHorizontal: space.gutter },
+
+    /*
+      A header, not a button.
+
+      It is the whole width and it is tappable, but it is drawn flat: chips and
+      borders here would compete with the group cards underneath, which are the
+      thing being looked for. The count on the right is what makes a closed term
+      worth reading at all.
+    */
+    termHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 9,
+    },
+    // The outer list's gap falls between terms; this one falls between the
+    // header and its groups, which are now siblings inside a term rather than
+    // children of the list.
+    termBlock: { gap: 10 },
+    termArchive: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      paddingVertical: 5,
+      paddingHorizontal: 9,
+      borderRadius: radius.xs + 2,
+      backgroundColor: color.bg,
+      borderWidth: 1,
+      borderColor: color.border,
+      marginTop: -2,
+    },
+    termArchiveLabel: { fontFamily: body[600], fontSize: 11.5, color: color.muted },
+    termName: {
+      flex: 1,
+      fontFamily: body[700],
+      fontSize: 13.5,
+      color: color.inkSoft,
+    },
+    termCount: {
+      fontFamily: body[600],
+      fontSize: 12,
+      color: color.mutedLight,
+      // Sits over the card edge below it, so the number lines up with the
+      // group rows rather than floating past them.
+      marginRight: 2,
+    },
     groupRow: {
       flexDirection: 'row',
       alignItems: 'center',

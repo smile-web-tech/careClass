@@ -7,6 +7,7 @@ import { AngledGradient, Ring } from '@/components/decor';
 import { Icon } from '@/components/Icon';
 import { Screen } from '@/components/layout';
 import { Avatar, Badge, Button, IconButton, Press, StatTile, Txt } from '@/components/ui';
+import { confirm } from '@/components/Dialog';
 import { useT } from '@/i18n/useT';
 import {
   absenceCount,
@@ -51,6 +52,34 @@ export default function GroupDetail() {
   // graded.
   const grades = useStore((s) => s.grades);
   const attendance = useStore((s) => s.attendance);
+  const archiveGroup = useStore((s) => s.archiveGroup);
+  const restoreGroup = useStore((s) => s.restoreGroup);
+
+  /*
+    Archiving asks; restoring does not.
+
+    Filing a course away removes it from every screen the teacher works in, so
+    it deserves a sentence saying what it does and does not take with it.
+    Bringing one back is the reverse of that and costs nothing, so it just
+    happens.
+  */
+  const toggleArchive = async () => {
+    if (!group) return;
+    if (group.archivedAt) {
+      restoreGroup(group.id);
+      return;
+    }
+    const ok = await confirm({
+      title: t('archive.groupTitle', { name: group.name }),
+      message: t('archive.groupBody'),
+      confirmLabel: t('archive.group'),
+      tone: 'info',
+    });
+    if (ok) {
+      archiveGroup(group.id);
+      router.back();
+    }
+  };
 
   const stats = useMemo(() => {
     if (!group) return null;
@@ -117,6 +146,22 @@ export default function GroupDetail() {
               tint="rgba(255,255,255,0.14)"
               fg="#fff"
               onPress={() => router.back()}
+            />
+            {/*
+              Archive sits beside edit rather than inside the edit form.
+
+              Filing a finished course away is not editing it — the teacher is
+              not changing what the course was, they are saying it is over. It
+              is also the thing they will reach for instead of deleting, so it
+              has to be as easy to find as the pencil is.
+            */}
+            <IconButton
+              name="archive"
+              iconSize={18}
+              tint="rgba(255,255,255,0.14)"
+              fg="#fff"
+              onPress={() => void toggleArchive()}
+              accessibilityLabel={group.archivedAt ? t('archive.restore') : t('archive.group')}
             />
             <IconButton
               name="pencil"

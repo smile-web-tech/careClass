@@ -706,8 +706,20 @@ export async function applyStudentSheet(
     }
   }
 
-  /** Group ids by lower-cased name, so "IELTS" and "ielts" are one class. */
-  const byName = new Map(useStore.getState().groups.map((g) => [g.name.trim().toLowerCase(), g.id]));
+  /*
+    Group ids by lower-cased name, so "IELTS" and "ielts" are one class.
+
+    Archived groups are left out on purpose. A teacher importing a class list
+    for a course whose name matches one they filed away last term is starting
+    that course again, not reopening the finished one — matching it would put
+    this year's children into last year's register.
+  */
+  const byName = new Map(
+    useStore
+      .getState()
+      .groups.filter((g) => !g.archivedAt)
+      .map((g) => [g.name.trim().toLowerCase(), g.id]),
+  );
 
   const groupIdsFor = (names: string[]) => {
     const ids: string[] = [];

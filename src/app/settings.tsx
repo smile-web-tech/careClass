@@ -170,6 +170,23 @@ export default function Settings() {
           a new phone in a place where the connection is a sometimes thing
           should not depend on anybody's infrastructure.
         */}
+        {/*
+          The archive sits above backup, not inside it.
+
+          A backup is a file you take away; the archive is part of the account
+          you are still using. Teachers looking for last term's marks were never
+          going to find them under "export a backup".
+        */}
+        <Overline style={styles.label}>{t('archive.section')}</Overline>
+        <Card style={styles.group}>
+          <ActionRow
+            icon="archive"
+            label={t('archive.open')}
+            hint={t('archive.openHint')}
+            onPress={() => router.push('/archive')}
+          />
+        </Card>
+
         <Overline style={styles.label}>{t('backup.section')}</Overline>
         <Card style={styles.group}>
           <ActionRow

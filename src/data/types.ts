@@ -51,6 +51,21 @@ export type Group = {
    * predate terms.
    */
   term?: string;
+
+  /**
+   * When the teacher filed this course away, as an ISO timestamp.
+   *
+   * Archiving is not deleting. The group, its roster, its registers and its
+   * marks all stay exactly where they are; the group simply stops appearing in
+   * the places that are about teaching *now* — the home list, the calendar, the
+   * message picker, the reminders — and moves to the archive in Settings, where
+   * it can be read or brought back.
+   *
+   * A term of finished courses is the normal reason to reach for it. The thing
+   * teachers do otherwise is delete the group, which takes a year of attendance
+   * and marks with it.
+   */
+  archivedAt?: string;
 };
 
 /**
@@ -59,6 +74,23 @@ export type Group = {
  * teacher imported may simply not have carried it.
  */
 export type Gender = 'male' | 'female';
+
+/**
+ * A group patch as it travels to the server.
+ *
+ * The optional dates and the archive stamp are *clearable*, and clearing has to
+ * survive the outbox. A queued write is stored with `JSON.stringify`, which
+ * drops keys whose value is `undefined` — so `{ endsOn: undefined }`, the way
+ * "this course no longer has a finish" is expressed in the store, came back
+ * from a relaunch as `{}` and quietly did nothing. `null` survives, and the API
+ * layer already reads `null` and `undefined` as the same instruction.
+ */
+export type GroupPatch = Partial<Omit<Group, 'id' | 'startsOn' | 'endsOn' | 'term' | 'archivedAt'>> & {
+  startsOn?: string | null;
+  endsOn?: string | null;
+  term?: string | null;
+  archivedAt?: string | null;
+};
 
 export type Student = {
   id: string;

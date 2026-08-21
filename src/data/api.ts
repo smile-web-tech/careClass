@@ -9,6 +9,7 @@ import type {
   Channel,
   Grade,
   Group,
+  GroupPatch,
   Message,
   Reply,
   SentMessageLog,
@@ -58,6 +59,7 @@ const toGroup = (row: GroupRow, slots: GroupSlotRow[]): Group => ({
   startsOn: row.starts_on ?? undefined,
   endsOn: row.ends_on ?? undefined,
   term: row.term ?? undefined,
+  archivedAt: row.archived_at ?? undefined,
   slots: slots
     .filter((s) => s.group_id === row.id)
     .map((s) => ({
@@ -153,7 +155,17 @@ const requireUser = async () => {
 
 export async function fetchGroups(): Promise<Group[]> {
   const [groups, slots] = await Promise.all([
-    supabase.from('groups').select('*').is('archived_at', null).order('created_at'),
+    /*
+      Archived groups come down too.
+
+      They used to be filtered out here, which made archiving and deleting the
+      same thing as far as the device was concerned: the group vanished on the
+      next sync and its marks and registers had nothing left to hang off. The
+      archive is a place a teacher goes to *read* a finished course, so the rows
+      have to be here to read. `useGroups` is what keeps them out of the
+      teaching screens.
+    */
+    supabase.from('groups').select('*').order('created_at'),
     supabase.from('group_slots').select('*'),
   ]);
   const groupRows = unwrap(groups);
@@ -557,7 +569,7 @@ export async function deleteEvent(id: string) {
  * orphans that slot's history. That is the honest outcome: those records belong
  * to sessions that, as far as the schedule is now concerned, never happened.
  */
-export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>) {
+export async function updateGroup(id: string, patch: GroupPatch) {
   const teacherId = await requireUser();
 
   const fields: Partial<GroupRow> = {};
@@ -577,6 +589,7 @@ export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>)
   if ('startsOn' in patch) fields.starts_on = patch.startsOn ?? null;
   if ('endsOn' in patch) fields.ends_on = patch.endsOn ?? null;
   if ('term' in patch) fields.term = patch.term ?? null;
+  if ('archivedAt' in patch) fields.archived_at = patch.archivedAt ?? null;
 
   if (Object.keys(fields).length) {
     // The teacher_id filter is belt-and-braces: RLS already blocks other rows,

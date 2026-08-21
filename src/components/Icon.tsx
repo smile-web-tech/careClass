@@ -34,6 +34,23 @@ const GLYPHS = {
   plus: { box: 16, sw: 1.9, d: ['M8 3v10M3 8h10'] },
   plusLarge: { box: 22, sw: 2.1, d: ['M11 5v12M5 11h12'] },
   check: { box: 16, sw: 2, d: ['M2.5 8.4 6 11.9l7.5-8'] },
+  /*
+    A lidded box, for the archive.
+
+    The lid is a separate wider bar rather than part of the body outline, which
+    is what makes it read as a box with something in it instead of a rectangle
+    with a line through it. The short notch on the front is the handhold; drawn
+    flat rather than as a curve because at 15px a curve there turns to mush.
+  */
+  archive: {
+    box: 18,
+    sw: 1.7,
+    d: [
+      'M2.6 4.4h12.8v3H2.6z',
+      'M3.9 7.4v6.2h10.2V7.4',
+      'M7.2 10h3.6',
+    ],
+  },
   search: { box: 20, sw: 1.8, circles: [[9, 9, 6]], d: ['m13.5 13.5 3.5 3.5'] },
   // Three tracks with a knob on each, the standard "narrow this list" mark.
   // The knobs sit at different points along their tracks on purpose: evenly
