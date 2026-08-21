@@ -66,6 +66,19 @@ type Column = {
   key: keyof CsvRow;
   headingKey: TranslationKey;
   aliases: string[];
+  /**
+   * Read but never written.
+   *
+   * The `id` column is the only one. Ids are the app's business — a teacher
+   * cannot invent one, and a column of them in a file they are meant to type
+   * into is a column of noise they have to scroll past, or worse, edit. So
+   * exports and the template leave it out.
+   *
+   * Reading it stays, and has to. A file exported by an older version has the
+   * column, and it is the strongest match there is: an id says "this is the
+   * same student" outright, where a name and a number only imply it.
+   */
+  readOnly?: boolean;
 };
 
 type CsvRow = {
@@ -92,7 +105,7 @@ type CsvRow = {
 };
 
 const COLUMNS: Column[] = [
-  { key: 'id', headingKey: 'csv.id', aliases: ['id', 'studentid'] },
+  { key: 'id', headingKey: 'csv.id', aliases: ['id', 'studentid'], readOnly: true },
   { key: 'name', headingKey: 'csv.name', aliases: ['name', 'fullname', 'student', 'ady', 'имя', 'фио'] },
   { key: 'phone', headingKey: 'csv.phone', aliases: ['phone', 'mobile', 'telefon', 'телефон'] },
   { key: 'email', headingKey: 'csv.email', aliases: ['email', 'mail', 'эл почта', 'почта'] },
@@ -209,12 +222,18 @@ function parseGender(raw: string): Gender | undefined {
 /* Writing                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/** The columns this app writes, which is every column a teacher can fill in. */
+const WRITTEN = COLUMNS.filter((c) => !c.readOnly);
+
 /** The heading row, in whichever language the teacher is reading the app in. */
-const headingRow = () => COLUMNS.map((c) => translateNow(c.headingKey));
+const headingRow = () => WRITTEN.map((c) => translateNow(c.headingKey));
 
 /** One student flattened to the cell order the headings promise. */
 function rowFor(student: Student, nameOf: Map<string, string>, groups: Group[]): string[] {
   const row: CsvRow = {
+    // Present in the shape, absent from the file: `WRITTEN` drops it on the way
+    // out. Keeping it here means the row type stays one thing for reading and
+    // writing both.
     id: student.id,
     name: student.name,
     phone: student.phone,
@@ -241,7 +260,7 @@ function rowFor(student: Student, nameOf: Map<string, string>, groups: Group[]):
       .join(GROUP_SEPARATOR),
     note: student.note ?? '',
   };
-  return COLUMNS.map((c) => row[c.key]);
+  return WRITTEN.map((c) => row[c.key]);
 }
 
 /** The whole roster as an Excel workbook. */
@@ -265,8 +284,8 @@ export function studentsToXlsx(students: Student[], groups: Group[]): Uint8Array
  */
 export function sampleStudentsXlsx(): Uint8Array {
   const example: CsvRow = {
-    // Left empty on purpose: an id is how the app recognises a student it
-    // already has, and a new one should not claim to be anybody.
+    // Never reaches the file — see `readOnly` on the column. Present only
+    // because the row shape is shared with reading.
     id: '',
     name: 'Aýgül Berdiýewa',
     phone: '+993 65 123456',
@@ -297,8 +316,8 @@ export function sampleStudentsXlsx(): Uint8Array {
 
   return writeXlsx([
     headingRow(),
-    COLUMNS.map((c) => example[c.key]),
-    COLUMNS.map((c) => minimal[c.key]),
+    WRITTEN.map((c) => example[c.key]),
+    WRITTEN.map((c) => minimal[c.key]),
   ]);
 }
 
