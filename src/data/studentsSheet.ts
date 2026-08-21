@@ -44,7 +44,7 @@ import { useStore } from '@/data/store';
 import type { Gender, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
-import { baseForLevel, levelOf } from '@/lib/courses';
+import { baseForLevel, levelOf, studentCourses } from '@/lib/courses';
 import { accentNames } from '@/theme';
 import { readXlsx, serialToDate, writeXlsx } from '@/lib/xlsx';
 import { strFromU8 } from 'fflate';
@@ -622,6 +622,11 @@ export type ImportOutcome = {
   added: number;
   updated: number;
   removed: number;
+  /**
+   * Students a replace left out of the file but did not delete, because they
+   * have a finished course behind them.
+   */
+  keptForHistory: number;
   /** Groups named in the file that did not exist and were created. */
   groupsCreated: string[];
 };
@@ -749,7 +754,13 @@ export async function applyStudentSheet(
   const state = useStore.getState();
   const { addStudent, updateStudent, removeStudent, addGroup } = state;
 
-  const outcome: ImportOutcome = { added: 0, updated: 0, removed: 0, groupsCreated: [] };
+  const outcome: ImportOutcome = {
+    added: 0,
+    updated: 0,
+    removed: 0,
+    keptForHistory: 0,
+    groupsCreated: [],
+  };
 
   /*
     Who in the file is already here.
@@ -769,9 +780,29 @@ export async function applyStudentSheet(
   const matches = matchExisting(parsed, state.students);
 
   if (mode === 'replace') {
-    const kept = new Set(matches.values());
+    const inFile = new Set(matches.values());
+    /*
+      A student with a finished course behind them is not deleted by a file that
+      leaves them out.
+
+      Replace means "this file is my roster", and for a student who simply left,
+      removing them is right. But a student who completed a course last term is
+      the only thing holding that course's register and marks together — delete
+      them and the archived group is a course that nobody attended. A teacher
+      importing this year's class list is not saying last year did not happen,
+      and they would have no way of knowing that is what it did.
+
+      They are counted separately and reported, so a replace that keeps somebody
+      says so rather than quietly disagreeing with the number of rows in the
+      file.
+    */
+    const all = state.groups;
     for (const s of state.students) {
-      if (kept.has(s.id)) continue;
+      if (inFile.has(s.id)) continue;
+      if (studentCourses(s, all).finished.length) {
+        outcome.keptForHistory += 1;
+        continue;
+      }
       removeStudent(s.id);
       outcome.removed += 1;
     }
@@ -811,9 +842,38 @@ export async function applyStudentSheet(
     return [...new Set(ids)];
   };
 
+  /*
+    Membership in an archived course cannot be expressed in a spreadsheet, so it
+    is never taken away by one.
+
+    The Groups column resolves against active groups only, which is right: a
+    teacher naming "IELTS" is enrolling this year's children in this year's
+    class, not reopening last year's. But the update below sets a student's
+    whole membership from that column, so a student who was in an archived
+    course and is now in a running one had the archived one stripped — the
+    finished course vanished from their page, their level dropped, and the
+    archived group showed a roster of nobody.
+
+    The file said nothing about that course. It had no way to. So it does not
+    get a say in it.
+  */
+  const archivedIds = new Set(
+    useStore
+      .getState()
+      .groups.filter((g) => g.archivedAt)
+      .map((g) => g.id),
+  );
+
+  const keepArchived = (studentId: string, fromFile: string[]) => {
+    const existing = useStore.getState().students.find((s) => s.id === studentId);
+    const held = existing?.groupIds.filter((id) => archivedIds.has(id)) ?? [];
+    return [...new Set([...held, ...fromFile])];
+  };
+
   for (const [i, row] of parsed.entries()) {
-    const groupIds = groupIdsFor(row.groupNames);
+    const fromFile = groupIdsFor(row.groupNames);
     const existingId = matches.get(i);
+    const groupIds = existingId ? keepArchived(existingId, fromFile) : fromFile;
 
     if (existingId) {
       // `accent` is stripped on purpose. The parser hands out colours round

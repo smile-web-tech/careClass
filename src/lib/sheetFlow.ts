@@ -172,6 +172,12 @@ export async function importStudentsSheet(): Promise<void> {
             removed: outcome.removed,
           })
         : t('csv.importedBody', { added: outcome.added, updated: outcome.updated }),
+      // Said out loud, because it is the one number that disagrees with the
+      // file: a replace that kept somebody the file left out has to explain
+      // itself, or it looks like the import half worked.
+      outcome.keptForHistory
+        ? t('csv.keptHistory', { count: outcome.keptForHistory })
+        : '',
       // Named rather than counted: a teacher needs to know *which* groups have
       // no timetable yet, because that is the thing they have to go and fix.
       outcome.groupsCreated.length
