@@ -48,17 +48,18 @@ export function studentCourses(
 }
 
 /**
- * The level: how many courses this student has been through, current included.
+ * The level: which course they are on.
  *
- * A student sitting in their first course is a level 1, not a level 0. The word
- * means "which course they are on", which is how a teacher says it out loud —
- * "she is on her third" — and counting only finished courses made everybody
- * mid-course read as one lower than the teacher would say.
+ * Finished courses plus one. The plus one is the course in front of them, which
+ * is why a student sitting in their first is a level 1 and not a level 0, and
+ * why finishing a course moves them up on the day it finishes rather than on
+ * the day they happen to be enrolled in the next thing.
  *
- * Finished plus running, so it goes up when they *start* their next course, and
- * the student who has just finished their first stays a level 1 until they do.
- * Upcoming courses are left out: one that has not begun is not one they have
- * studied, and counting it would promote a student for being enrolled.
+ * Running courses are deliberately *not* counted separately. Adding them would
+ * make a student taking two classes at once a level higher than one taking a
+ * single class, which is not what the word means to a teacher — and it would
+ * make the level fall back down when a course ended and they had nothing else
+ * on, which is worse than being wrong: it looks like the app forgot.
  *
  * `levelBase` carries what counting cannot see — courses done before this app,
  * or a teacher's correction. Absent is zero, which is the right reading of
@@ -69,18 +70,17 @@ export function levelOf(
   groups: Group[],
   today = toKey(new Date()),
 ): number {
-  const { finished, running } = studentCourses(student, groups, today);
-  return (student.levelBase ?? 0) + finished.length + running.length;
+  return (student.levelBase ?? 0) + studentCourses(student, groups, today).finished.length + 1;
 }
 
 /**
  * The base needed to make a student read as `level`.
  *
  * The teacher types the number they mean; this works out what has to be stored
- * behind it so that the number is true today *and* still climbs when they start
- * their next course. Clamped at zero, because a teacher typing a level lower
- * than the courses already counted here would otherwise store a negative and
- * make every later reading wrong by the difference.
+ * behind it so that the number is true today *and* still climbs when they
+ * finish their next course. Clamped at zero, because a teacher typing a level
+ * lower than the courses already counted here would otherwise store a negative
+ * and make every later reading wrong by the difference.
  */
 export function baseForLevel(
   level: number,
@@ -88,6 +88,6 @@ export function baseForLevel(
   groups: Group[],
   today = toKey(new Date()),
 ): number {
-  const { finished, running } = studentCourses(student, groups, today);
-  return Math.max(0, Math.round(level) - finished.length - running.length);
+  const finished = studentCourses(student, groups, today).finished.length;
+  return Math.max(0, Math.round(level) - finished - 1);
 }

@@ -15,17 +15,16 @@
 -- shown, and this column holds only what counting cannot know: courses done
 -- before this app, or a number the teacher has corrected by hand.
 --
---   level = level_base + (their courses that have finished or are running)
+--   level = level_base + (their courses that have finished) + 1
 --
--- The current course counts. A student sitting in their first is a level 1, not
--- a level 0: the word means "which course they are on", which is how a teacher
--- says it out loud. Courses that have not started yet are left out, so nobody
--- is promoted for being enrolled.
+-- The plus one is the course in front of them. A student sitting in their first
+-- is a level 1, not a level 0 — the word means "which course they are on" —
+-- and finishing a course moves them up on the day it finishes rather than on
+-- the day they are enrolled in the next thing.
 --
 -- A student who arrives having already done two courses elsewhere gets a base
--- of 2, reads as level 3 once they start here, and level 4 when they start the
--- one after. That is what a teacher means by the word, and it keeps working
--- with nobody touching it again.
+-- of 2 and reads as a level 3. That is what a teacher means by the word, and it
+-- keeps working with nobody touching it again.
 --
 -- `0` is the honest default: a new student has done nothing elsewhere, and
 -- every student that existed before this column is one whose history the app
@@ -37,14 +36,14 @@ alter table students add column if not exists level_base integer not null defaul
 
 comment on column students.level_base is
   'Courses completed before this app, or a manual correction. The level shown '
-  'is this plus the number of the student''s courses that have finished or are '
-  'running; it is never stored, because a course ends when a date passes and '
-  'nothing is running to notice that.';
+  'is this plus the number of their courses that have finished, plus one for '
+  'the course in front of them. Never stored, because a course ends when a '
+  'date passes and nothing is running to notice that.';
 
 -- A level cannot be negative, and the arithmetic that sets this column
 -- subtracts a count from a typed number. Without the check, a teacher typing 1
--- for a student already counted at three writes -2, and every later reading is
--- wrong by two.
+-- for a student already counted at four writes -3, and every later reading is
+-- wrong by three.
 do $$
 begin
   alter table students

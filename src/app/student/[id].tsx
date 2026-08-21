@@ -38,6 +38,7 @@ import { hydrate, useStudentPhotoUploading } from '@/data/sync';
 import type { Group, Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
 import { levelOf, studentCourses } from '@/lib/courses';
+import { termLabel, termOfGroup } from '@/lib/term';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { fromKey, longDate, shortDate } from '@/lib/date';
 import { deletePhoto, photoFile, useStudentPhoto } from '@/lib/studentPhoto';
@@ -428,17 +429,20 @@ export default function StudentProfile() {
         </View>
 
         {/*
-          Courses, split by whether they are over.
+          Two sections, not one list with labels on the rows.
 
-          Two lists rather than one, because they answer different questions. A
-          teacher scanning "continuing" is planning this week; one scanning
-          "finished" is looking at a history, and that history is what the level
-          counts. Finished courses are archived, which is why this screen reads
-          every group rather than the active ones.
+          They answer different questions. A teacher reading "continuing" is
+          planning this week; one reading "finished" is looking at a history,
+          and that history is what the level counts. Giving each a heading is
+          what makes the second one findable — which is the whole point of it,
+          since a course a student has completed is otherwise invisible the
+          moment it is archived.
         */}
-        {courses.finished.length || courses.running.length || courses.upcoming.length ? (
+        {courses.running.length || courses.upcoming.length ? (
           <View style={styles.block}>
-            <Overline style={{ marginBottom: 10 }}>{t('students.courses')}</Overline>
+            <Overline style={{ marginBottom: 10 }}>
+              {t('students.courseGoing')} · {courses.running.length + courses.upcoming.length}
+            </Overline>
             <Card style={{ overflow: 'hidden' }}>
               {[...courses.running, ...courses.upcoming].map((g, i) => (
                 <CourseRow
@@ -449,22 +453,26 @@ export default function StudentProfile() {
                   onPress={() => router.push(`/group/${g.id}`)}
                 />
               ))}
+            </Card>
+          </View>
+        ) : null}
+
+        {courses.finished.length ? (
+          <View style={styles.block}>
+            <Overline style={{ marginBottom: 10 }}>
+              {t('students.courseDone')} · {courses.finished.length}
+            </Overline>
+            <Card style={{ overflow: 'hidden' }}>
               {courses.finished.map((g, i) => (
                 <CourseRow
                   key={g.id}
                   group={g}
-                  first={i === 0 && !courses.running.length && !courses.upcoming.length}
+                  first={i === 0}
                   done
                   onPress={() => router.push(`/group/${g.id}`)}
                 />
               ))}
             </Card>
-            <Text style={styles.coursesNote}>
-              {t('students.coursesSummary', {
-                done: courses.finished.length,
-                going: courses.running.length + courses.upcoming.length,
-              })}
-            </Text>
           </View>
         ) : null}
 
@@ -724,8 +732,11 @@ function CourseRow({
           {[group.subject, when].filter(Boolean).join(' · ')}
         </Text>
       </View>
+      {/* The term, not the state — the heading above already said the state,
+          and "which intake was that" is the thing a finished course is looked
+          up by. */}
       <Text style={[styles.courseState, done && { color: color.mutedLight }]}>
-        {done ? t('students.courseDone') : t('students.courseGoing')}
+        {termLabel(termOfGroup(group), t)}
       </Text>
     </Press>
   );
