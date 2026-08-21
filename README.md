@@ -1,186 +1,168 @@
+<img src="assets/images/icon.png" alt="ClassCare" width="96" align="left" hspace="16" vspace="4">
+
 # ClassCare
 
-Teacher-side class management for independent tutors. One teacher, their own
-students, their own data — not a school LMS.
+Class management for independent tutors, built for phones on unreliable networks.
 
-Groups · students · attendance in under 30 seconds · bulk SMS/email/push with
-per-recipient placeholders · announcements · a week calendar · one search field
-that matches groups, subjects and student names.
+<br clear="left">
 
-Built with **Expo SDK 57** (React Native 0.86, React 19.2) + **expo-router**,
-targeting iOS, Android and web from one codebase.
+## What it is
 
----
+ClassCare is an Android and iOS app for a private tutor who teaches their own
+students. It is not a school system. There is no admin, no head teacher, no
+student login. One teacher owns one account, and that account holds their
+groups, their students, their registers and their message history.
+
+The app was written for tutors in Turkmenistan, and most of its unusual
+decisions come from that. The network there is filtered and slow, data bundles
+are small, and the phone in the teacher's hand is often the only copy of a
+term's work. So the app is built to be useful with no connection at all, and to
+never lose anything when the connection comes back.
+
+## Why it looks the way it does
+
+Three constraints shaped almost everything.
+
+**The backend is not directly reachable.** `*.supabase.co` is blocked on Turkmen
+networks. Supabase sits behind Cloudflare and Cloudflare itself is reachable, so
+the block is on the hostname rather than the address. The app talks to a small
+PHP reverse proxy on ordinary shared hosting, which re-serves the same backend
+under a hostname that resolves normally. See `docs/reverse-proxy.md`.
+
+**Data has to survive without the server.** Every change is written to the
+device first and queued for the server second. The queue is persisted, so a
+change made on a train survives the app being killed and is sent on the next
+launch. A teacher can use the whole app without ever creating an account, and
+if they sign up later, everything they already have is adopted into the new
+account rather than replaced.
+
+**Reminders cannot depend on connectivity.** The weekly timetable already lives
+on the device, so class reminders are scheduled locally by the phone. No server,
+no push service, nothing to fail on the morning the wifi is down.
+
+## What it does
+
+**Groups.** Weekly slots (which days, what time), a start date and an end date,
+a term such as Autumn 2026, a room, and a colour. The term and the dates are
+what stop a course that finished in June from filling next January's calendar.
+
+**Students.** Contact details, both parents with their own numbers and
+workplaces, school, address, identity document number, gender, birthday and a
+photo. Numbers can be pulled from the phone's contacts one field at a time.
+
+**Attendance.** Open a class, mark present, late or absent, done. Rates are
+calculated against the sessions the course actually contains rather than every
+date on the calendar.
+
+**Grades.** Assessment types, reusable templates, pass or fail marking, and
+per-student scores that roll up into an average on the student's page.
+
+**Messaging.** Write once and send to groups or individuals, addressed to
+students, parents or both, with placeholders filled in per recipient. Texts go
+out from the teacher's own SIM, which costs nothing extra and needs no gateway.
+Email and push are also available. Parents can reply, and replies land in an
+inbox in the app.
+
+**Calendar.** A week view and a month view. Class sessions are derived from each
+group's weekly slots rather than stored, so the schedule stays correct no matter
+what date the app is opened on. One-off events such as exams and parent meetings
+sit alongside them.
+
+**Assignments.** Homework with file attachments, sent to a group.
+
+**Import and export.** Students go in and out as a real Excel workbook. Import
+also accepts CSV, since that is what school systems hand out, and it sniffs the
+delimiter because an Excel installed in a Russian locale writes semicolons.
+Column headings are matched by name in all three languages and in any order.
+Re-importing a list you already have updates those students in place, so nobody
+loses their photo.
+
+**Backup.** The whole account writes to a single `.classcare` file that can be
+sent over any channel and restored on another phone.
+
+**Languages.** Turkmen, Russian and English, switchable in the app.
+
+## How it is built
+
+| Layer | What is used |
+| --- | --- |
+| App | Expo SDK 57, React Native 0.86, React 19.2, expo-router |
+| State | Zustand, with a write-through mirror to the sync layer |
+| On device | expo-sqlite, whole collections written on a short debounce |
+| Sync | A serial write queue persisted to an outbox table and replayed on launch |
+| Server | Supabase with row level security keyed on `teacher_id` |
+| Server logic | Deno edge functions for sending messages, sending grades, receiving replies |
+| Reaching it | A PHP reverse proxy on shared hosting |
+
+A write that the server refuses permanently, such as one that violates a
+constraint, is dropped from the queue so it cannot block the writes behind it. A
+flag records that it happened, and while that flag is set the app adds to local
+data on sync instead of replacing it, so nothing on the device is deleted by a
+row the server has never heard of.
 
 ## Running it
 
 ```bash
 npm install
-npm start          # then press i / a, or scan the QR code
-npm run web        # browser
+npm start        # then press a for Android, i for iOS
+npm run web      # browser
 ```
 
-The app runs with no backend at all — `src/data/seed.ts` provides a full demo
-roster, and the schedule is derived live from each group's weekly slots, so the
-calendar is correct whatever day you open it.
+Copy `.env.example` to `.env` and fill in three values:
 
-## Connecting Supabase
-
-```bash
-cp .env.example .env      # fill in URL + publishable key
+```
+EXPO_PUBLIC_SUPABASE_URL
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
 ```
 
-Once `EXPO_PUBLIC_SUPABASE_URL` points at a real project the app switches from
-seed data to the backend automatically (`hasSupabase` in `src/lib/supabase.ts`).
-
-**1. Apply the schema**
-
-```bash
-npx supabase link --project-ref <ref>
-npx supabase db push
-```
-
-`supabase/migrations/0001_init.sql` creates every table plus row level security.
-The policy is the same on all of them — `teacher_id = auth.uid()` — so a teacher
-can only ever read or write their own rows.
-
-**2. Enable auth providers**
-
-Dashboard → Authentication → Providers → Google and Apple. Add the redirect URL
-`classcare://auth/callback` for native, plus your web origin.
-
-**3. Push the auth settings and email templates**
-
-```bash
-SUPABASE_ACCESS_TOKEN=sbp_… node scripts/apply-auth-config.mjs
-```
-
-Not optional. Registration and password reset both ask for a six-digit code,
-and Supabase's stock emails contain a link and no code at all — so without this
-step the teacher gets mail they cannot use. The script installs a code-bearing
-template for confirmation, recovery and magic link, sets the code to six digits
-over ten minutes, and raises the server's minimum password length to match
-`MIN_LENGTH` in `src/lib/password.ts`. It prints `has code ✓` per template.
-
-Generate the token at <https://supabase.com/dashboard/account/tokens> and revoke
-it afterwards; it is read from the environment and never written to disk.
-
-**4. Deploy the message fan-out**
-
-```bash
-npx supabase functions deploy send-message
-npx supabase secrets set \
-  ESKIZ_EMAIL=... ESKIZ_PASSWORD=... ESKIZ_SENDER=... \
-  RESEND_API_KEY=re_... RESEND_FROM="ClassCare <no-reply@yourdomain>"
-```
-
-`RESEND_FROM` is required, not optional. Without it the function refuses to send
-email rather than falling back to Resend's `onboarding@resend.dev` sender, which
-only ever delivers to the Resend account owner — every student and parent is
-rejected while the send still looks healthy from the app.
-
-The function reads `SUPABASE_SERVICE_ROLE_KEY`, which Supabase injects into every
-function at runtime — do not try to set it yourself, as the `SUPABASE_` prefix is
-reserved and `secrets set` will reject it. That key bypasses row level security,
-so it belongs in the function's environment and nowhere else: never in `.env`,
-never under `src/`.
-
-## Why bulk sending is server-side
-
-Neither iOS nor Android lets an app dispatch an SMS without the user tapping
-send in the native composer. "Message all 11 students, each with their own name
-filled in" is therefore impossible on-device — it would open the composer eleven
-times.
-
-So the app posts the draft to `supabase/functions/send-message`, which renders
-`{name}` / `{group}` / `{time}` per recipient and calls the gateways:
-
-- **SMS** — [Eskiz.uz](https://eskiz.uz), a local Uzbek gateway. The roster is
-  `+998`, and Uzbek traffic through Eskiz costs a fraction of Twilio's rate for
-  the same route. Swap the two functions in `index.ts` for another market.
-- **Email** — Resend.
-- **Push** — Expo push. Currently a no-op: push needs a device token, and a
-  student-facing app is explicitly out of scope.
-
-Every recipient gets a `message_deliveries` row before anything is dispatched,
-so a gateway outage leaves an accurate record instead of silence. One bad number
-fails its own row and nothing else.
-
-Tap-to-call and tap-to-message from a student's profile are a different thing —
-those are `tel:` / `sms:` handoffs to the OS (`src/lib/contact.ts`) and stay
-on-device.
+`.env` is gitignored and is the only place secrets belong. The Supabase
+publishable key is safe to ship in the app. Service role keys and access tokens
+are not, and nothing in the app needs them.
 
 ## Layout
 
 ```
 src/
-  app/                    expo-router routes
-    sign-in.tsx           1 · Sign in
-    (tabs)/index.tsx      2 · Home
-    group/[id].tsx        3 · Group detail
-    attendance.tsx        4 · Attendance
-    compose.tsx           5 · Bulk message
-    student/[id].tsx      6 · Student profile
-    student/new.tsx       7 · Add student
-    (tabs)/calendar.tsx   8 · Calendar
-    (tabs)/messages.tsx   9 · Messages
-    (tabs)/students.tsx   address book
-    group/new.tsx         create a group
-  components/
-    Icon.tsx              the icon set, path data lifted from the design
-    ui.tsx                buttons, cards, chips, avatars, inputs
-    layout.tsx            Screen / TopBar / StickyFooter / tab insets
-    decor.tsx             gradients, glows, rings
-  theme/
-    tokens.ts             colours, radii, spacing, shadows, status palette
-    type.ts               named text styles
-  data/
-    types.ts              domain model
-    seed.ts               demo roster
-    store.ts              zustand store — what the UI reads
-    api.ts                Supabase repository
-    sync.ts               write-through bridge between the two
-  lib/
-    date.ts schedule.ts contact.ts auth.ts supabase.ts
+  app/          Screens and routes (expo-router)
+  components/   Shared UI, forms, pickers
+  data/         Store, local database, sync queue, Supabase client, backup
+  i18n/         Three dictionaries with identical keys
+  lib/          Dates, scheduling, spreadsheets, photos, notifications
+  theme/        Colours, typography, the brand palette
 supabase/
-  migrations/0001_init.sql
-  functions/send-message/
+  migrations/   Numbered and additive, safe to re-run
+  functions/    Edge functions
+deploy/
+  php-proxy/    The reverse proxy
+docs/           Proxy, SMS, push and reply setup
+scripts/
+  make-icons.py Generates every app icon from one recipe
 ```
 
-### Design system
+## Database
 
-Every value in `src/theme/tokens.ts` is lifted verbatim from the Claude Design
-source. Screens reference tokens, never raw hex.
+Migrations are numbered and additive. Each one is safe to run against a database
+that already has the earlier ones applied, and none of them drop or rewrite
+existing data. Apply a new migration before shipping a build that depends on it,
+because a write naming a column that does not exist yet is refused permanently
+rather than retried.
 
-Space Grotesk carries headings and numerals, Plus Jakarta Sans the body. React
-Native cannot synthesise weights for custom fonts, so `src/theme/type.ts` maps a
-weight to the right family name — use `body[700]`, not `fontWeight: '700'`.
+## Builds
 
-### Sessions are derived, not stored
+EAS handles the builds. The production profile produces an APK.
 
-A group owns weekly `slots`; `src/lib/schedule.ts` turns those into concrete
-sessions for any date. Only attendance the teacher actually marked is persisted.
-Sessions from before install are filled by `historicMark()` in `store.ts`, a
-deterministic hash of (student, session) — so attendance percentages and
-recent-session lists come from real records and stay put across reloads instead
-of reshuffling on every render.
+```bash
+eas build --platform android --profile production
+```
 
-### Writes are local-first
+## The mark
 
-Screens never await the network. `store.ts` applies a change immediately and
-hands it to an optional mirror; `sync.ts` registers that mirror and queues the
-Supabase write in the background. Taking attendance works on classroom wifi that
-drops.
+The icon is the letters Cc set in Archivo Black, a blue capital with a green
+lowercase over it, on black. The same letters, colours and overlap appear in the
+opening title card. Every icon file is generated by `scripts/make-icons.py`
+rather than drawn by hand, so they cannot drift apart from each other.
 
-## Known gaps
+## Licence
 
-- **Import from contacts** fills the form from one contact via the native
-  picker. The design's "add several at once" needs a custom multi-select list —
-  not built, and the row copy says what it actually does.
-- **Group schedule chips** show the group's real days (`Mon · Wed · Fri`), which
-  is why they can differ from the static mockup.
-- Edit buttons on the group and student headers are placed but inert.
-- Delivery receipts need gateway webhooks pointed at a `message_deliveries`
-  updater; the Edge Function only writes `sent` / `failed`.
-- The remote write queue logs failures rather than retrying them; an offline
-  banner and retry are the next step.
+MIT. See `LICENSE`.
