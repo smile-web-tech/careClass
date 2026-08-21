@@ -30,14 +30,24 @@
  * name, in any of the three languages, so a teacher can hand us the file their
  * school gave them.
  *
- * ## What travels
+ * ## What travels, and what deliberately does not
  *
- * Everything on a student except the photograph, which is a picture and not a
- * cell — they are added by hand afterwards, and a column of base64 would make
- * the file unreadable in the tool it exists to be read in.
+ * Everything on a student except two things.
  *
- * Groups travel as names rather than ids, because a name is the thing a teacher
- * can type. See `applyStudentSheet` for what happens to a name we do not know.
+ * The photograph, because it is a picture and not a cell — they are added by
+ * hand afterwards, and a column of base64 would make the file unreadable in the
+ * tool it exists to be read in.
+ *
+ * And which classes they are in. That column existed and was removed: it could
+ * only name active groups, so re-importing a class list took students out of
+ * the courses they had finished, emptied archived groups and dropped
+ * everybody's level. Every attempt to fix it was another rule about which
+ * memberships a spreadsheet may overrule, and the honest answer turned out to
+ * be none of them. A file carries who a student *is*; the app carries which
+ * classes they are in.
+ *
+ * The id column is read but never written, for a similar reason from the other
+ * direction — see `readOnly` on `Column`.
  */
 import { flushAll } from '@/data/persistence';
 import { useStore } from '@/data/store';
@@ -100,7 +110,6 @@ type CsvRow = {
   parent2Phone: string;
   parent2Email: string;
   parent2Work: string;
-  groups: string;
   note: string;
 };
 
@@ -167,11 +176,6 @@ const COLUMNS: Column[] = [
     headingKey: 'csv.fatherWork',
     aliases: ['fatherwork', 'parent2work', 'работа папы'],
   },
-  {
-    key: 'groups',
-    headingKey: 'csv.groups',
-    aliases: ['group', 'groups', 'class', 'classes', 'topar', 'группа', 'группы'],
-  },
   { key: 'note', headingKey: 'csv.note', aliases: ['note', 'notes', 'bellik', 'заметка'] },
 ];
 
@@ -183,7 +187,6 @@ const normalise = (s: string) =>
     .trim();
 
 /** More than one group in one cell, since a student can be in several. */
-const GROUP_SEPARATOR = ' | ';
 
 /** What we write into the gender cell, in the language being read. */
 const GENDER_KEY = {
@@ -229,7 +232,7 @@ const WRITTEN = COLUMNS.filter((c) => !c.readOnly);
 const headingRow = () => WRITTEN.map((c) => translateNow(c.headingKey));
 
 /** One student flattened to the cell order the headings promise. */
-function rowFor(student: Student, nameOf: Map<string, string>, groups: Group[]): string[] {
+function rowFor(student: Student, groups: Group[]): string[] {
   const row: CsvRow = {
     // Present in the shape, absent from the file: `WRITTEN` drops it on the way
     // out. Keeping it here means the row type stays one thing for reading and
@@ -254,10 +257,6 @@ function rowFor(student: Student, nameOf: Map<string, string>, groups: Group[]):
     parent2Phone: student.parent2Phone ?? '',
     parent2Email: student.parent2Email ?? '',
     parent2Work: student.parent2Work ?? '',
-    groups: student.groupIds
-      .map((id) => nameOf.get(id))
-      .filter((n): n is string => !!n)
-      .join(GROUP_SEPARATOR),
     note: student.note ?? '',
   };
   return WRITTEN.map((c) => row[c.key]);
@@ -265,8 +264,7 @@ function rowFor(student: Student, nameOf: Map<string, string>, groups: Group[]):
 
 /** The whole roster as an Excel workbook. */
 export function studentsToXlsx(students: Student[], groups: Group[]): Uint8Array {
-  const nameOf = new Map(groups.map((g) => [g.id, g.name]));
-  return writeXlsx([headingRow(), ...students.map((s) => rowFor(s, nameOf, groups))]);
+  return writeXlsx([headingRow(), ...students.map((s) => rowFor(s, groups))]);
 }
 
 /**
@@ -308,7 +306,6 @@ export function sampleStudentsXlsx(): Uint8Array {
     parent2Phone: '+993 65 111222',
     parent2Email: '',
     parent2Work: 'Mugallym',
-    groups: `IELTS${GROUP_SEPARATOR}Algebra`,
     note: '',
   };
 
@@ -452,8 +449,6 @@ export type ParsedStudent = {
   /** The id from the file, when it carried one. Never trusted blindly. */
   sourceId?: string;
   student: Omit<Student, 'id' | 'groupIds'>;
-  /** Group names exactly as written in the cell. */
-  groupNames: string[];
   /**
    * The level as the file states it, before it is turned into a stored base.
    *
@@ -543,10 +538,6 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
     out.push({
       sourceId: maybe(value(row, 'id')),
       level: levelFrom(value(row, 'level')),
-      groupNames: value(row, 'groups')
-        .split(/[|;,]/)
-        .map((g) => g.trim())
-        .filter(Boolean),
       student: {
         name,
         phone: phone(value(row, 'phone')),
@@ -627,8 +618,6 @@ export type ImportOutcome = {
    * have a finished course behind them.
    */
   keptForHistory: number;
-  /** Groups named in the file that did not exist and were created. */
-  groupsCreated: string[];
 };
 
 /**
@@ -752,14 +741,13 @@ export async function applyStudentSheet(
   mode: 'merge' | 'replace',
 ): Promise<ImportOutcome> {
   const state = useStore.getState();
-  const { addStudent, updateStudent, removeStudent, addGroup } = state;
+  const { addStudent, updateStudent, removeStudent } = state;
 
   const outcome: ImportOutcome = {
     added: 0,
     updated: 0,
     removed: 0,
     keptForHistory: 0,
-    groupsCreated: [],
   };
 
   /*
@@ -809,83 +797,39 @@ export async function applyStudentSheet(
   }
 
   /*
-    Group ids by lower-cased name, so "IELTS" and "ielts" are one class.
+    Nothing here touches a single membership, and that is the point.
 
-    Archived groups are left out on purpose. A teacher importing a class list
-    for a course whose name matches one they filed away last term is starting
-    that course again, not reopening the finished one — matching it would put
-    this year's children into last year's register.
+    The file used to carry a Groups column, and it caused more trouble than it
+    saved: it could name only active groups, so re-importing a class list took
+    students out of the courses they had finished, emptied archived groups and
+    dropped everybody's level. Every workaround for that was a rule about which
+    memberships a spreadsheet is allowed to overrule, and the honest answer
+    turned out to be none of them.
+
+    So a spreadsheet now carries who a student *is*, and the app carries which
+    classes they are in. Imported students arrive in no group and are added to
+    one from the group's roster screen, which takes a tap each and cannot
+    quietly rewrite a term of history.
   */
-  const byName = new Map(
-    useStore
-      .getState()
-      .groups.filter((g) => !g.archivedAt)
-      .map((g) => [g.name.trim().toLowerCase(), g.id]),
-  );
-
-  const groupIdsFor = (names: string[]) => {
-    const ids: string[] = [];
-    for (const name of names) {
-      const key = name.toLowerCase();
-      let id = byName.get(key);
-      if (!id) {
-        // No days and no times: a group the teacher has to finish rather than
-        // one the app invented a timetable for. `subject` mirrors the name
-        // because the file has nothing better and a blank subject reads as a
-        // bug.
-        id = addGroup({ name, subject: name, room: '', slots: [] });
-        byName.set(key, id);
-        outcome.groupsCreated.push(name);
-      }
-      ids.push(id);
-    }
-    return [...new Set(ids)];
-  };
-
-  /*
-    Membership in an archived course cannot be expressed in a spreadsheet, so it
-    is never taken away by one.
-
-    The Groups column resolves against active groups only, which is right: a
-    teacher naming "IELTS" is enrolling this year's children in this year's
-    class, not reopening last year's. But the update below sets a student's
-    whole membership from that column, so a student who was in an archived
-    course and is now in a running one had the archived one stripped — the
-    finished course vanished from their page, their level dropped, and the
-    archived group showed a roster of nobody.
-
-    The file said nothing about that course. It had no way to. So it does not
-    get a say in it.
-  */
-  const archivedIds = new Set(
-    useStore
-      .getState()
-      .groups.filter((g) => g.archivedAt)
-      .map((g) => g.id),
-  );
-
-  const keepArchived = (studentId: string, fromFile: string[]) => {
-    const existing = useStore.getState().students.find((s) => s.id === studentId);
-    const held = existing?.groupIds.filter((id) => archivedIds.has(id)) ?? [];
-    return [...new Set([...held, ...fromFile])];
-  };
-
   for (const [i, row] of parsed.entries()) {
-    const fromFile = groupIdsFor(row.groupNames);
     const existingId = matches.get(i);
-    const groupIds = existingId ? keepArchived(existingId, fromFile) : fromFile;
 
     if (existingId) {
-      // `accent` is stripped on purpose. The parser hands out colours round
-      // robin, so leaving it in would reshuffle the whole roster's colours on
-      // every import — and the colour on an existing student is one the teacher
-      // has been recognising them by. `photoPath` is absent from a parsed row
-      // rather than empty, so it is not in this patch and is not cleared.
+      /*
+        `groupIds` is not in this patch at all.
+
+        `accent` is left out for a related reason: the parser hands colours out
+        round robin, so including it reshuffled the whole roster's colours on
+        every import, and the colour on an existing student is one the teacher
+        has been recognising them by. `photoPath` is absent from a parsed row
+        rather than empty, so it is not in the patch and is not cleared either.
+      */
       const { accent: _ignored, ...fields } = row.student;
-      updateStudent(existingId, { ...fields, groupIds, ...levelPatch(row, groupIds) });
+      const held = useStore.getState().students.find((s) => s.id === existingId);
+      updateStudent(existingId, { ...fields, ...levelPatch(row, held?.groupIds ?? []) });
       outcome.updated += 1;
     } else {
-      addStudent({ ...row.student, groupIds, ...levelPatch(row, groupIds) });
+      addStudent({ ...row.student, groupIds: [], ...levelPatch(row, []) });
       outcome.added += 1;
     }
   }

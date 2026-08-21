@@ -178,11 +178,9 @@ export async function importStudentsSheet(): Promise<void> {
       outcome.keptForHistory
         ? t('csv.keptHistory', { count: outcome.keptForHistory })
         : '',
-      // Named rather than counted: a teacher needs to know *which* groups have
-      // no timetable yet, because that is the thing they have to go and fix.
-      outcome.groupsCreated.length
-        ? t('csv.groupsCreated', { names: outcome.groupsCreated.join(', ') })
-        : '',
+      // Imported students arrive in no class, and a teacher who is not told
+      // that reads a students list full of "no group" as a broken import.
+      outcome.added ? t('csv.assignGroups') : '',
     ].filter(Boolean);
 
     await showAlert(t('csv.imported'), lines.join('\n\n'), 'success');
