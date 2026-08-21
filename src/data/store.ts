@@ -877,6 +877,15 @@ export const useStore = create<State>()((set, get) => ({
 export const useGroups = () =>
   useStore(useShallow((s) => s.groups.filter((g) => !g.archivedAt)));
 
+/**
+ * Every group, archived or not.
+ *
+ * For the screens that are about a student's history rather than this week's
+ * teaching. A student's finished courses are archived ones, so a page built on
+ * `useGroups` shows them as having been in nothing at all.
+ */
+export const useAllGroups = () => useStore((s) => s.groups);
+
 /** Filed-away groups, most recently archived first. */
 export const useArchivedGroups = () =>
   useStore(

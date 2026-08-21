@@ -44,6 +44,7 @@ import { useStore } from '@/data/store';
 import type { Gender, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
+import { baseForLevel, levelOf } from '@/lib/courses';
 import { accentNames } from '@/theme';
 import { readXlsx, serialToDate, writeXlsx } from '@/lib/xlsx';
 import { strFromU8 } from 'fflate';
@@ -76,6 +77,7 @@ type CsvRow = {
   address: string;
   school: string;
   gender: string;
+  level: string;
   documentId: string;
   parentName: string;
   parentPhone: string;
@@ -105,6 +107,11 @@ const COLUMNS: Column[] = [
     key: 'gender',
     headingKey: 'csv.gender',
     aliases: ['gender', 'sex', 'jyns', 'пол'],
+  },
+  {
+    key: 'level',
+    headingKey: 'students.level',
+    aliases: ['level', 'dereje', 'derejesi', 'уровень'],
   },
   {
     key: 'documentId',
@@ -206,7 +213,7 @@ function parseGender(raw: string): Gender | undefined {
 const headingRow = () => COLUMNS.map((c) => translateNow(c.headingKey));
 
 /** One student flattened to the cell order the headings promise. */
-function rowFor(student: Student, nameOf: Map<string, string>): string[] {
+function rowFor(student: Student, nameOf: Map<string, string>, groups: Group[]): string[] {
   const row: CsvRow = {
     id: student.id,
     name: student.name,
@@ -216,6 +223,9 @@ function rowFor(student: Student, nameOf: Map<string, string>): string[] {
     address: student.address ?? '',
     school: student.school ?? '',
     gender: student.gender ? translateNow(GENDER_KEY[student.gender]) : '',
+    // The level as a teacher reads it, not the base stored behind it. A column
+    // of bases would be a column of numbers that do not match the app.
+    level: String(levelOf(student, groups)),
     documentId: student.documentId ?? '',
     parentName: student.parentName ?? '',
     parentPhone: student.parentPhone ?? '',
@@ -237,7 +247,7 @@ function rowFor(student: Student, nameOf: Map<string, string>): string[] {
 /** The whole roster as an Excel workbook. */
 export function studentsToXlsx(students: Student[], groups: Group[]): Uint8Array {
   const nameOf = new Map(groups.map((g) => [g.id, g.name]));
-  return writeXlsx([headingRow(), ...students.map((s) => rowFor(s, nameOf))]);
+  return writeXlsx([headingRow(), ...students.map((s) => rowFor(s, nameOf, groups))]);
 }
 
 /**
@@ -262,6 +272,9 @@ export function sampleStudentsXlsx(): Uint8Array {
     phone: '+993 65 123456',
     email: 'aygul@example.com',
     birthDate: '2011-03-15',
+    // Courses done before this app. Blank means "count it from what is here",
+    // which is right for anyone who started with this teacher.
+    level: '2',
     address: 'Görogly köçesi 12',
     school: '№ 20',
     // Written the way the export writes it, so the template teaches the
@@ -422,7 +435,30 @@ export type ParsedStudent = {
   student: Omit<Student, 'id' | 'groupIds'>;
   /** Group names exactly as written in the cell. */
   groupNames: string[];
+  /**
+   * The level as the file states it, before it is turned into a stored base.
+   *
+   * Converted only once the student's groups are known — the base is the level
+   * minus the courses of theirs that have finished, and until the group names
+   * in the row have been resolved to ids there is nothing to count.
+   */
+  level?: number;
 };
+
+/**
+ * A level cell, or nothing.
+ *
+ * Blank means "count it", not zero, so the column can be left out entirely by
+ * the many teachers who will never think about it. Anything that is not a
+ * plain non-negative number is ignored rather than guessed at: a file saying
+ * "beginner" in this column should leave the counting alone, not reset it.
+ */
+function levelFrom(raw: string): number | undefined {
+  const v = raw.trim();
+  if (!v) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
+}
 
 /** Read a spreadsheet into students, without touching the store. */
 export function studentsFromRows(rows: string[][]): ParsedStudent[] {
@@ -487,6 +523,7 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
 
     out.push({
       sourceId: maybe(value(row, 'id')),
+      level: levelFrom(value(row, 'level')),
       groupNames: value(row, 'groups')
         .split(/[|;,]/)
         .map((g) => g.trim())
@@ -589,6 +626,21 @@ export type ImportOutcome = {
  * days simply shows no sessions until they set them, which is a visible,
  * fixable state rather than a silent loss.
  */
+/**
+ * The level column, turned into the base that is actually stored.
+ *
+ * Done here rather than in the parser because the base is the level minus the
+ * courses of theirs that have already finished, and the row's group names only
+ * became group ids a few lines ago. A row with no level in it contributes
+ * nothing at all — an absent key, not a zero, so importing a file without the
+ * column leaves everybody's level exactly as it was.
+ */
+function levelPatch(row: ParsedStudent, groupIds: string[]) {
+  if (row.level === undefined) return {};
+  const groups = useStore.getState().groups.filter((g) => groupIds.includes(g.id));
+  return { levelBase: baseForLevel(row.level, { groupIds }, groups) };
+}
+
 /**
  * Which parsed rows are students the teacher already has.
  *
@@ -751,10 +803,10 @@ export async function applyStudentSheet(
       // has been recognising them by. `photoPath` is absent from a parsed row
       // rather than empty, so it is not in this patch and is not cleared.
       const { accent: _ignored, ...fields } = row.student;
-      updateStudent(existingId, { ...fields, groupIds });
+      updateStudent(existingId, { ...fields, groupIds, ...levelPatch(row, groupIds) });
       outcome.updated += 1;
     } else {
-      addStudent({ ...row.student, groupIds });
+      addStudent({ ...row.student, groupIds, ...levelPatch(row, groupIds) });
       outcome.added += 1;
     }
   }

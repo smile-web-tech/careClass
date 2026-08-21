@@ -85,6 +85,8 @@ export type StudentRow = {
   email: string | null;
   birth_date: string | null;
   address: string | null;
+  /** See migration 0019: courses before this app, not the level itself. */
+  level_base: number | null;
   school: string | null;
   /** `male` | `female` | null, where null means not recorded. */
   gender: string | null;

@@ -130,6 +130,18 @@ export type Student = {
   note?: string;
   /** Out of 10, as shown on the group and student stat strips. */
   avgScore?: number;
+
+  /**
+   * Courses finished before this app, or a teacher's correction.
+   *
+   * Not the level. The level is `levelBase` plus however many of the student's
+   * courses have finished, counted fresh every time it is shown — see
+   * `lib/courses.ts` and migration 0019 for why storing the total instead would
+   * drift. A student who arrives having done two courses elsewhere gets a base
+   * of 2, reads as level 2 today, and reads as level 3 when their first course
+   * here ends, with nobody touching it again.
+   */
+  levelBase?: number;
 };
 
 /**

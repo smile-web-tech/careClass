@@ -20,8 +20,9 @@ import { pickContact, pickPhoneNumber } from '@/lib/contactPicker';
 import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { Button, Card, Divider, FieldRow, Overline, Press, SelectChip } from '@/components/ui';
-import { useGroups } from '@/data/store';
-import type { Gender, Student } from '@/data/types';
+import { useAllGroups, useGroups } from '@/data/store';
+import type { Gender, Group, Student } from '@/data/types';
+import { baseForLevel, levelOf } from '@/lib/courses';
 import { ageFrom, fromKey, longDate } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
@@ -41,6 +42,8 @@ export type StudentDraft = {
   birthDate?: string;
   address?: string;
   school?: string;
+  /** The stored base, not the level. See `lib/courses.ts`. */
+  levelBase?: number;
   gender?: Gender;
   documentId?: string;
   parentName?: string;
@@ -60,6 +63,7 @@ const blank = {
   email: '',
   address: '',
   school: '',
+  level: '',
   documentId: '',
   parentName: '',
   parentPhone: '',
@@ -71,12 +75,15 @@ const blank = {
   parent2Work: '',
 };
 
-const fieldsOf = (initial?: Student) => ({
+const fieldsOf = (initial: Student | undefined, allGroups: Group[]) => ({
   name: initial?.name ?? '',
   phone: initial?.phone ?? '',
   email: initial?.email ?? '',
   address: initial?.address ?? '',
   school: initial?.school ?? '',
+  // The number a teacher means by "level", not what is stored behind it. Blank
+  // for a new student, who has no history for it to be counted from.
+  level: initial ? String(levelOf(initial, allGroups)) : '',
   documentId: initial?.documentId ?? '',
   parentName: initial?.parentName ?? '',
   parentPhone: initial?.parentPhone ?? '',
@@ -120,8 +127,12 @@ export function StudentForm({
   const insets = useSafeAreaInsets();
 
   const groups = useGroups();
+  // Every group for the level, active ones for the picker: a finished course
+  // still counts towards how many they have done, but you do not enrol anyone
+  // into it.
+  const allGroups = useAllGroups();
 
-  const [form, setForm] = useState(() => fieldsOf(initial));
+  const [form, setForm] = useState(() => fieldsOf(initial, allGroups));
   const [draftId] = useState(() => initial?.id ?? Crypto.randomUUID());
   /** Held apart from `form`: it is a date, not typed text. */
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? '');
@@ -162,6 +173,15 @@ export function StudentForm({
     school: trimmed(form.school),
     gender,
     documentId: trimmed(form.documentId),
+    /*
+      Stored as the base, not as the number typed.
+
+      `baseForLevel` subtracts the courses this app can already count, so the
+      level reads as typed today and still climbs when their next course ends.
+      A blank field means "do not correct anything", which is a base of zero and
+      a level that is purely counted.
+    */
+    levelBase: form.level.trim() ? baseForLevel(Number(form.level), { groupIds }, allGroups) : 0,
     parentName: trimmed(form.parentName),
     parentPhone: trimmed(form.parentPhone),
     parentEmail: trimmed(form.parentEmail),
@@ -351,6 +371,21 @@ export function StudentForm({
               value={form.address}
               onChangeText={set('address')}
               autoCapitalize="sentences"
+            />
+            <Divider inset={15} />
+            {/*
+              Editable, because a student who did two courses at another tutor's
+              is a level 2 on the day they arrive and nothing in this app can
+              know that. What is typed here is the level itself; the app works
+              out what to store so the number keeps climbing on its own.
+            */}
+            <FieldRow
+              label={t('student.level')}
+              placeholder={t('student.levelPlaceholder')}
+              value={form.level}
+              onChangeText={(v) => set('level')(v.replace(/[^0-9]/g, '').slice(0, 2))}
+              keyboardType="number-pad"
+              autoCorrect={false}
             />
             <Divider inset={15} />
             <FieldRow

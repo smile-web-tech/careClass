@@ -27,10 +27,17 @@ import {
   StatTile,
   Txt,
 } from '@/components/ui';
-import { useGroups, useRecentSessions, useStore, useStudent, useStudentStats } from '@/data/store';
+import {
+  useAllGroups,
+  useRecentSessions,
+  useStore,
+  useStudent,
+  useStudentStats,
+} from '@/data/store';
 import { hydrate, useStudentPhotoUploading } from '@/data/sync';
-import type { Student } from '@/data/types';
+import type { Group, Student } from '@/data/types';
 import { useT } from '@/i18n/useT';
+import { levelOf, studentCourses } from '@/lib/courses';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { fromKey, longDate, shortDate } from '@/lib/date';
 import { deletePhoto, photoFile, useStudentPhoto } from '@/lib/studentPhoto';
@@ -47,7 +54,9 @@ export default function StudentProfile() {
   const router = useRouter();
 
   const student = useStudent(id);
-  const groups = useGroups();
+  // Every group, not just the active ones: a student's finished courses are
+  // archived, and this page is the place they are supposed to be visible.
+  const groups = useAllGroups();
 
   const stats = useStudentStats(student);
   const recent = useRecentSessions(student, 3);
@@ -102,6 +111,8 @@ export default function StudentProfile() {
   }
 
   const memberOf = groups.filter((g) => student.groupIds.includes(g.id));
+  const courses = studentCourses(student, groups);
+  const level = levelOf(student, groups);
 
   /*
     The picture is read off the disk here, not passed down from the list. This
@@ -349,7 +360,7 @@ export default function StudentProfile() {
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name}>{student.name}</Text>
               <View style={styles.tagRow}>
-                {memberOf.map((g) => {
+                {[...courses.running, ...courses.upcoming].map((g) => {
                   const ga = accents[g.accent];
                   return (
                     <Press
@@ -402,8 +413,60 @@ export default function StudentProfile() {
             tone={stats.average != null ? color.primary : color.mutedLight}
             fontSize={21}
           />
-          <StatTile value={String(stats.sessions)} label={t('students.sessions')} fontSize={21} />
+          {/*
+            Level replaces the session count here rather than joining it. Four
+            tiles do not fit across a phone, and a teacher asked for this one by
+            name: "she is on her third course" is how they describe a student,
+            and how many registers exist is not.
+          */}
+          <StatTile
+            value={String(level)}
+            label={t('students.level')}
+            tone={level > 0 ? color.primary : color.mutedLight}
+            fontSize={21}
+          />
         </View>
+
+        {/*
+          Courses, split by whether they are over.
+
+          Two lists rather than one, because they answer different questions. A
+          teacher scanning "continuing" is planning this week; one scanning
+          "finished" is looking at a history, and that history is what the level
+          counts. Finished courses are archived, which is why this screen reads
+          every group rather than the active ones.
+        */}
+        {courses.finished.length || courses.running.length || courses.upcoming.length ? (
+          <View style={styles.block}>
+            <Overline style={{ marginBottom: 10 }}>{t('students.courses')}</Overline>
+            <Card style={{ overflow: 'hidden' }}>
+              {[...courses.running, ...courses.upcoming].map((g, i) => (
+                <CourseRow
+                  key={g.id}
+                  group={g}
+                  first={i === 0}
+                  done={false}
+                  onPress={() => router.push(`/group/${g.id}`)}
+                />
+              ))}
+              {courses.finished.map((g, i) => (
+                <CourseRow
+                  key={g.id}
+                  group={g}
+                  first={i === 0 && !courses.running.length && !courses.upcoming.length}
+                  done
+                  onPress={() => router.push(`/group/${g.id}`)}
+                />
+              ))}
+            </Card>
+            <Text style={styles.coursesNote}>
+              {t('students.coursesSummary', {
+                done: courses.finished.length,
+                going: courses.running.length + courses.upcoming.length,
+              })}
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.block}>
           <Overline style={{ marginBottom: 10 }}>{t('students.contact')}</Overline>
@@ -612,6 +675,62 @@ function yearsSince(born: Date): number {
   return Math.max(0, age);
 }
 
+/**
+ * One course on a student's page.
+ *
+ * A finished course is drawn quieter than a running one — muted name, no
+ * accent fill on the dot — because the list is read top to bottom and the
+ * courses that still need teaching should be the ones that catch the eye. It
+ * stays tappable: a finished course is where last term's register and marks
+ * are, and that is the reason it is on this page at all.
+ */
+function CourseRow({
+  group,
+  first,
+  done,
+  onPress,
+}: {
+  group: Group;
+  first: boolean;
+  done: boolean;
+  onPress: () => void;
+}) {
+  const t = useT();
+  const { accents, color } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const a = accents[group.accent];
+
+  const when = group.endsOn
+    ? shortDate(fromKey(group.endsOn))
+    : group.startsOn
+      ? shortDate(fromKey(group.startsOn))
+      : '';
+
+  return (
+    <Press onPress={onPress} style={[styles.courseRow, !first && styles.courseDivided]}>
+      <View
+        style={[
+          styles.courseDot,
+          { backgroundColor: done ? color.mutedLight : a.dot },
+        ]}
+      />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          style={[styles.courseName, { color: done ? color.muted : color.ink }]}
+          numberOfLines={1}>
+          {group.name}
+        </Text>
+        <Text style={styles.courseMeta} numberOfLines={1}>
+          {[group.subject, when].filter(Boolean).join(' · ')}
+        </Text>
+      </View>
+      <Text style={[styles.courseState, done && { color: color.mutedLight }]}>
+        {done ? t('students.courseDone') : t('students.courseGoing')}
+      </Text>
+    </Press>
+  );
+}
+
 function ContactRow({
   icon,
   tint,
@@ -649,6 +768,25 @@ function ContactRow({
 
 const makeStyles = ({ color }: Theme) =>
   StyleSheet.create({
+    courseRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 11,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    courseDivided: { borderTopWidth: 1, borderTopColor: color.border },
+    courseDot: { width: 9, height: 9, borderRadius: 4.5 },
+    courseName: { fontFamily: body[700], fontSize: 14.5 },
+    courseMeta: { fontFamily: body[400], fontSize: 12, color: color.mutedLight, marginTop: 3 },
+    courseState: { fontFamily: body[600], fontSize: 11.5, color: color.muted },
+    coursesNote: {
+      fontFamily: body[400],
+      fontSize: 12,
+      color: color.mutedLight,
+      marginTop: 8,
+      marginLeft: 2,
+    },
     missing: {
       flex: 1,
       alignItems: 'center',
