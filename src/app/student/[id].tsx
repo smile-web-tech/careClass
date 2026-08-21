@@ -555,6 +555,12 @@ function StudentDetails({ student }: { student: Student }) {
       value: `${longDate(born)} · ${t('student.age', { age: yearsSince(born) })}`,
     });
   }
+  if (student.gender) {
+    rows.push({
+      label: t('student.gender'),
+      value: t(student.gender === 'male' ? 'students.male' : 'students.female'),
+    });
+  }
   if (student.school) rows.push({ label: t('student.school'), value: student.school });
   if (student.address) rows.push({ label: t('student.address'), value: student.address });
   if (student.documentId) {

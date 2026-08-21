@@ -1,0 +1,106 @@
+/**
+ * Terms — the season a course belongs to.
+ *
+ * A tutor runs the same course again every intake and thinks of each one by its
+ * season: the autumn lot, last spring's group. `Group.startsOn` cannot answer
+ * that, because a date is a point and a term is a bucket.
+ *
+ * Stored on the group as a canonical `YYYY-season` key and rendered here, so
+ * one database row reads correctly in all three languages.
+ */
+import type { Group } from '@/data/types';
+import type { TranslationKey } from '@/i18n';
+
+export type Season = 'winter' | 'spring' | 'summer' | 'autumn';
+
+/**
+ * Calendar order within a year, which is also the sort order. Winter is first
+ * because of how December is handled below.
+ */
+export const SEASONS: Season[] = ['winter', 'spring', 'summer', 'autumn'];
+
+const SEASON_KEY: Record<Season, TranslationKey> = {
+  winter: 'term.winter',
+  spring: 'term.spring',
+  summer: 'term.summer',
+  autumn: 'term.autumn',
+};
+
+/** `2026-spring` and nothing else. Matches the check constraint in 0018. */
+const TERM_RE = /^(\d{4})-(winter|spring|summer|autumn)$/;
+
+export type ParsedTerm = { year: number; season: Season };
+
+export function parseTerm(term: string | undefined): ParsedTerm | null {
+  const m = term ? TERM_RE.exec(term) : null;
+  return m ? { year: Number(m[1]), season: m[2] as Season } : null;
+}
+
+export const formatTerm = ({ year, season }: ParsedTerm) => `${year}-${season}`;
+
+/**
+ * Which term a date falls in.
+ *
+ * December belongs to the *following* year's winter — a course starting on the
+ * 3rd of December 2025 is winter 2026, not winter 2025. That is both how people
+ * name a winter that straddles New Year and the only way the four seasons sort
+ * into calendar order inside one year: winter, spring, summer, autumn. Keying
+ * December to its own year would file it before that year's spring, which is
+ * nine months wrong.
+ */
+export function termOf(dateKey: string): string {
+  const [y, m] = dateKey.split('-').map(Number);
+  if (!y || !m) return '';
+  if (m === 12) return `${y + 1}-winter`;
+  const season: Season = m <= 2 ? 'winter' : m <= 5 ? 'spring' : m <= 8 ? 'summer' : 'autumn';
+  return `${y}-${season}`;
+}
+
+/** Chronological. Sorts unparseable terms last rather than throwing them away. */
+export function compareTerms(a: string, b: string) {
+  const pa = parseTerm(a);
+  const pb = parseTerm(b);
+  if (!pa || !pb) return pa ? -1 : pb ? 1 : a.localeCompare(b);
+  return pa.year - pb.year || SEASONS.indexOf(pa.season) - SEASONS.indexOf(pb.season);
+}
+
+/**
+ * "Spring 2026", in the reader's language.
+ *
+ * Takes the `t` function rather than calling a hook, so this stays usable from
+ * the spreadsheet writer and anywhere else outside a component.
+ */
+export function termLabel(term: string, t: (k: TranslationKey) => string) {
+  const parsed = parseTerm(term);
+  if (!parsed) return term;
+  return `${t(SEASON_KEY[parsed.season])} ${parsed.year}`;
+}
+
+/** Every term the teacher actually has, newest first — the filter's options. */
+export function termsInUse(groups: Group[]) {
+  const seen = new Set<string>();
+  for (const g of groups) if (g.term) seen.add(g.term);
+  return [...seen].sort((a, b) => compareTerms(b, a));
+}
+
+/**
+ * The terms to offer when creating a group: the one the start date implies,
+ * plus its neighbours either side.
+ *
+ * A teacher entering a course in late August is as likely to mean the autumn
+ * intake as the summer one they are finishing, so the choice has to be there
+ * without making them scroll a year of seasons to find it.
+ */
+export function termChoices(startsOn: string) {
+  const here = parseTerm(termOf(startsOn));
+  if (!here) return [];
+  const out: string[] = [];
+  const i = SEASONS.indexOf(here.season);
+  for (let d = -1; d <= 2; d += 1) {
+    const n = i + d;
+    const year = here.year + Math.floor(n / SEASONS.length);
+    const season = SEASONS[((n % SEASONS.length) + SEASONS.length) % SEASONS.length];
+    out.push(formatTerm({ year, season }));
+  }
+  return out;
+}

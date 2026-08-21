@@ -36,7 +36,29 @@ export type Group = {
   startsOn?: string;
   /** `YYYY-MM-DD`, inclusive — the last day it can meet. Absent means ongoing. */
   endsOn?: string;
+
+  /**
+   * Which intake this is, as `YYYY-season` — `2026-spring`, `2025-autumn`.
+   *
+   * Dates answer "is this class on next Tuesday". This answers the question a
+   * tutor asks out loud: "how did the autumn lot do?" The same course runs
+   * again every term and the teacher thinks of each intake by its season.
+   *
+   * Canonical key, never a label: the app renders it in whichever of the three
+   * languages is being read, and storing "2026-ýaz" would freeze the group in
+   * Turkmen for a teacher who switches to Russian next week. Derived from
+   * `startsOn` when a group is created, so it is empty only on groups that
+   * predate terms.
+   */
+  term?: string;
 };
+
+/**
+ * Recorded, not inferred. Guessing from a name is unreliable in Turkmen,
+ * Russian and English alike, and absent is a real state — a spreadsheet a
+ * teacher imported may simply not have carried it.
+ */
+export type Gender = 'male' | 'female';
 
 export type Student = {
   id: string;
@@ -47,6 +69,8 @@ export type Student = {
   birthDate?: string;
   address?: string;
   school?: string;
+  /** Absent means not recorded, which the filters treat as its own bucket. */
+  gender?: Gender;
   /** Passport or birth certificate. Free text — the formats differ. */
   documentId?: string;
 

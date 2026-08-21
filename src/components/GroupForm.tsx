@@ -14,6 +14,7 @@ import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { fromKey, longDate, toKey, weekdayInitials } from '@/lib/date';
+import { termChoices, termLabel, termOf } from '@/lib/term';
 import { TimeField, TimePicker } from '@/components/TimePicker';
 import { Button, Card, Divider, FieldRow, Overline, Press } from '@/components/ui';
 import type { Group, Slot, Weekday } from '@/data/types';
@@ -127,6 +128,20 @@ export function GroupForm({
   const [endsOn, setEndsOn] = useState<string | undefined>(initial?.endsOn);
   const [pickingDate, setPickingDate] = useState<'startsOn' | 'endsOn' | null>(null);
 
+  /*
+    Which intake this is.
+
+    Held as a canonical `YYYY-season` key and defaulted from the start date,
+    because for almost every group the season is simply the season the first
+    class falls in — asking the teacher to state it would be asking them to
+    repeat themselves. `touchedTerm` is what stops that default fighting them:
+    until they pick a term by hand, moving the start date moves the term with
+    it, and the moment they choose one it stays chosen.
+  */
+  const [term, setTerm] = useState<string | undefined>(initial?.term ?? termOf(startsOn));
+  const [touchedTerm, setTouchedTerm] = useState(!!initial?.term);
+  const effectiveTerm = touchedTerm ? term : termOf(startsOn);
+
   const dayLabels = weekdayInitials();
   const chosenDays = useMemo(() => DAY_NUMBERS.filter((d) => days[d]), [days]);
 
@@ -159,6 +174,7 @@ export function GroupForm({
       slots,
       startsOn,
       endsOn,
+      term: effectiveTerm,
     });
   };
 
@@ -252,6 +268,45 @@ export function GroupForm({
             <Divider inset={15} />
             <TimeField label={t('groups.ends')} value={end} onPress={() => setPicking('end')} />
           </Card>
+
+          <Overline style={styles.label}>{t('groups.term')}</Overline>
+          {/*
+            The season this intake belongs to.
+
+            Four chips rather than a year-and-season picker: a tutor entering a
+            course means the term either side of today's, never one in 2019, and
+            two taps of a wheel to reach the obvious answer is two taps too many.
+            `termChoices` centres the window on the start date, so the right one
+            is already lit before the teacher looks at it.
+          */}
+          <View style={styles.durationRow}>
+            {termChoices(startsOn).map((key) => {
+              const on = effectiveTerm === key;
+              return (
+                <Press
+                  key={key}
+                  haptic
+                  onPress={() => {
+                    setTouchedTerm(true);
+                    setTerm(key);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on }}
+                  style={[
+                    styles.durationChip,
+                    {
+                      backgroundColor: on ? color.primaryTint : color.surface,
+                      borderColor: on ? color.primary : color.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[styles.durationLabel, { color: on ? color.primaryInk : color.inkSoft }]}>
+                    {termLabel(key, t)}
+                  </Text>
+                </Press>
+              );
+            })}
+          </View>
 
           <Overline style={styles.label}>{t('groups.runs')}</Overline>
           <Card style={styles.group}>

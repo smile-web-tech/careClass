@@ -21,8 +21,8 @@ import { Icon } from '@/components/Icon';
 import { Screen, StickyFooter, TopBar } from '@/components/layout';
 import { Button, Card, Divider, FieldRow, Overline, Press, SelectChip } from '@/components/ui';
 import { useGroups } from '@/data/store';
-import type { Student } from '@/data/types';
-import { fromKey, longDate } from '@/lib/date';
+import type { Gender, Student } from '@/data/types';
+import { ageFrom, fromKey, longDate } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
 
@@ -41,6 +41,7 @@ export type StudentDraft = {
   birthDate?: string;
   address?: string;
   school?: string;
+  gender?: Gender;
   documentId?: string;
   parentName?: string;
   parentPhone?: string;
@@ -69,18 +70,6 @@ const blank = {
   parent2Email: '',
   parent2Work: '',
 };
-
-/** Whole years, counting the birthday that has not happened yet as not counted. */
-function ageFrom(birthDate: string): number {
-  const born = fromKey(birthDate);
-  const now = new Date();
-  let age = now.getFullYear() - born.getFullYear();
-  const beforeBirthday =
-    now.getMonth() < born.getMonth() ||
-    (now.getMonth() === born.getMonth() && now.getDate() < born.getDate());
-  if (beforeBirthday) age -= 1;
-  return Math.max(0, age);
-}
 
 const fieldsOf = (initial?: Student) => ({
   name: initial?.name ?? '',
@@ -136,6 +125,8 @@ export function StudentForm({
   const [draftId] = useState(() => initial?.id ?? Crypto.randomUUID());
   /** Held apart from `form`: it is a date, not typed text. */
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? '');
+  /** Also apart, and also not typed: two chips, either of which can be off. */
+  const [gender, setGender] = useState<Gender | undefined>(initial?.gender);
   const [pickingDate, setPickingDate] = useState(false);
   const [picked, setPicked] = useState<Record<string, boolean>>(() => {
     const out: Record<string, boolean> = {};
@@ -169,6 +160,7 @@ export function StudentForm({
     birthDate: birthDate || undefined,
     address: trimmed(form.address),
     school: trimmed(form.school),
+    gender,
     documentId: trimmed(form.documentId),
     parentName: trimmed(form.parentName),
     parentPhone: trimmed(form.parentPhone),
@@ -321,6 +313,29 @@ export function StudentForm({
                 </View>
               </>
             ) : null}
+            <Divider inset={15} />
+            {/*
+              Two chips, and tapping the chosen one again clears it.
+
+              A toggle would force one of the two on every student, and plenty
+              arrive from a spreadsheet that never carried it. Absent has to
+              stay reachable, or the filter's "not recorded" bucket becomes a
+              list of children the teacher was made to guess about.
+            */}
+            <View style={styles.genderRow}>
+              <Text style={styles.dateLabel}>{t('student.gender')}</Text>
+              <View style={styles.genderChips}>
+                {(['female', 'male'] as const).map((g) => (
+                  <SelectChip
+                    key={g}
+                    height={34}
+                    label={t(g === 'male' ? 'students.male' : 'students.female')}
+                    selected={gender === g}
+                    onPress={() => setGender((cur) => (cur === g ? undefined : g))}
+                  />
+                ))}
+              </View>
+            </View>
             <Divider inset={15} />
             <FieldRow
               label={t('student.school')}
@@ -523,6 +538,16 @@ const makeStyles = ({ color }: Theme) =>
       gap: 12,
     },
     dateLabel: { fontFamily: body[600], fontSize: 14, color: color.inkSoft },
+
+    genderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 15,
+      paddingVertical: 10,
+      gap: 12,
+    },
+    genderChips: { flexDirection: 'row', gap: 8 },
     dateValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
     dateValue: { fontFamily: body[600], fontSize: 14, color: color.ink },
 

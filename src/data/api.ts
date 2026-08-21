@@ -57,6 +57,7 @@ const toGroup = (row: GroupRow, slots: GroupSlotRow[]): Group => ({
   // does on a group the device made itself and never sent.
   startsOn: row.starts_on ?? undefined,
   endsOn: row.ends_on ?? undefined,
+  term: row.term ?? undefined,
   slots: slots
     .filter((s) => s.group_id === row.id)
     .map((s) => ({
@@ -74,6 +75,7 @@ const toStudent = (row: StudentRow, groupIds: string[]): Student => ({
   birthDate: row.birth_date ?? undefined,
   address: row.address ?? undefined,
   school: row.school ?? undefined,
+  gender: (row.gender as Student['gender']) ?? undefined,
   documentId: row.document_id ?? undefined,
   parentName: row.parent_name ?? undefined,
   parentPhone: row.parent_phone ?? undefined,
@@ -414,6 +416,7 @@ export async function createGroup(group: Group): Promise<Group> {
         room: group.room,
         accent: group.accent,
         starts_on: group.startsOn ?? null,
+        term: group.term ?? null,
         ends_on: group.endsOn ?? null,
       })
       .select()
@@ -573,6 +576,7 @@ export async function updateGroup(id: string, patch: Partial<Omit<Group, 'id'>>)
   */
   if ('startsOn' in patch) fields.starts_on = patch.startsOn ?? null;
   if ('endsOn' in patch) fields.ends_on = patch.endsOn ?? null;
+  if ('term' in patch) fields.term = patch.term ?? null;
 
   if (Object.keys(fields).length) {
     // The teacher_id filter is belt-and-braces: RLS already blocks other rows,
@@ -632,6 +636,7 @@ export async function createStudent(student: Student): Promise<Student> {
         birth_date: student.birthDate ?? null,
         address: student.address ?? null,
         school: student.school ?? null,
+        gender: student.gender ?? null,
         document_id: student.documentId ?? null,
         parent_name: student.parentName ?? null,
         parent_phone: student.parentPhone ?? null,
@@ -695,6 +700,7 @@ export async function updateStudent(id: string, patch: Partial<Student>) {
         ...(patch.birthDate !== undefined && { birth_date: patch.birthDate ?? null }),
         ...(patch.address !== undefined && { address: patch.address ?? null }),
         ...(patch.school !== undefined && { school: patch.school ?? null }),
+        ...('gender' in patch && { gender: patch.gender ?? null }),
         ...(patch.documentId !== undefined && { document_id: patch.documentId ?? null }),
         ...(patch.parentWork !== undefined && { parent_work: patch.parentWork ?? null }),
         ...(patch.parent2Name !== undefined && { parent2_name: patch.parent2Name ?? null }),

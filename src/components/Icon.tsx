@@ -35,6 +35,19 @@ const GLYPHS = {
   plusLarge: { box: 22, sw: 2.1, d: ['M11 5v12M5 11h12'] },
   check: { box: 16, sw: 2, d: ['M2.5 8.4 6 11.9l7.5-8'] },
   search: { box: 20, sw: 1.8, circles: [[9, 9, 6]], d: ['m13.5 13.5 3.5 3.5'] },
+  // Three tracks with a knob on each, the standard "narrow this list" mark.
+  // The knobs sit at different points along their tracks on purpose: evenly
+  // spaced they read as a hamburger menu with dots, not as controls that move.
+  sliders: {
+    box: 18,
+    sw: 1.6,
+    d: ['M2.5 5h12.5', 'M2.5 9h12.5', 'M2.5 13h12.5'],
+    circles: [
+      [6, 5, 1.9],
+      [12, 9, 1.9],
+      [7.5, 13, 1.9],
+    ],
+  },
   refresh: {
     box: 18,
     sw: 1.7,

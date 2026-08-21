@@ -41,7 +41,7 @@
  */
 import { flushAll } from '@/data/persistence';
 import { useStore } from '@/data/store';
-import type { Group, Student } from '@/data/types';
+import type { Gender, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { accentNames } from '@/theme';
@@ -75,6 +75,7 @@ type CsvRow = {
   birthDate: string;
   address: string;
   school: string;
+  gender: string;
   documentId: string;
   parentName: string;
   parentPhone: string;
@@ -100,6 +101,11 @@ const COLUMNS: Column[] = [
   },
   { key: 'address', headingKey: 'csv.address', aliases: ['address', 'salgy', 'адрес'] },
   { key: 'school', headingKey: 'csv.school', aliases: ['school', 'mekdep', 'школа'] },
+  {
+    key: 'gender',
+    headingKey: 'csv.gender',
+    aliases: ['gender', 'sex', 'jyns', 'пол'],
+  },
   {
     key: 'documentId',
     headingKey: 'csv.documentId',
@@ -159,6 +165,39 @@ const normalise = (s: string) =>
 /** More than one group in one cell, since a student can be in several. */
 const GROUP_SEPARATOR = ' | ';
 
+/** What we write into the gender cell, in the language being read. */
+const GENDER_KEY = {
+  male: 'students.male',
+  female: 'students.female',
+} as const satisfies Record<Gender, TranslationKey>;
+
+/**
+ * Every spelling of "boy" and "girl" we will accept in a cell.
+ *
+ * Headings are matched in three languages, so the values have to be too — a
+ * teacher whose school exported `Пол: мужской` is not going to find and replace
+ * sixty cells before importing. Single letters are in because a hand-kept list
+ * is as likely to say `m` or `ж` as anything longer.
+ *
+ * Anything unrecognised leaves the field absent rather than guessing. A wrongly
+ * assigned gender is worse than a blank one: it is silently wrong, it appears
+ * on filtered lists the teacher trusts, and nothing on screen suggests it was
+ * inferred.
+ */
+const GENDER_WORDS: Record<Gender, string[]> = {
+  male: ['m', 'male', 'boy', 'man', 'erkek', 'oglan', 'м', 'муж', 'мужской', 'мальчик', 'мужчина'],
+  female: ['f', 'w', 'female', 'girl', 'woman', 'ayal', 'aýal', 'gyz', 'ж', 'жен', 'женский', 'девочка', 'женщина'],
+};
+
+function parseGender(raw: string): Gender | undefined {
+  const v = raw.trim().toLowerCase();
+  if (!v) return undefined;
+  for (const [gender, words] of Object.entries(GENDER_WORDS) as [Gender, string[]][]) {
+    if (words.includes(v)) return gender;
+  }
+  return undefined;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Writing                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -176,6 +215,7 @@ function rowFor(student: Student, nameOf: Map<string, string>): string[] {
     birthDate: student.birthDate ?? '',
     address: student.address ?? '',
     school: student.school ?? '',
+    gender: student.gender ? translateNow(GENDER_KEY[student.gender]) : '',
     documentId: student.documentId ?? '',
     parentName: student.parentName ?? '',
     parentPhone: student.parentPhone ?? '',
@@ -224,6 +264,9 @@ export function sampleStudentsXlsx(): Uint8Array {
     birthDate: '2011-03-15',
     address: 'Görogly köçesi 12',
     school: '№ 20',
+    // Written the way the export writes it, so the template teaches the
+    // vocabulary the importer already answers to.
+    gender: translateNow('students.female'),
     documentId: 'I-AŞ 123456',
     parentName: 'Maýa Berdiýewa',
     parentPhone: '+993 65 654321',
@@ -455,6 +498,7 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
         birthDate: normaliseDate(value(row, 'birthDate')),
         address: maybe(value(row, 'address')),
         school: maybe(value(row, 'school')),
+        gender: parseGender(value(row, 'gender')),
         documentId: maybe(value(row, 'documentId')),
         parentName: maybe(value(row, 'parentName')),
         parentPhone: maybe(phone(value(row, 'parentPhone'))),

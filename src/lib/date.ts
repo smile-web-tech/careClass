@@ -172,6 +172,22 @@ export const weekdayInitials = (): string[] => {
 
 export const isSameDay = (a: Date, b: Date) => toKey(a) === toKey(b);
 
+/**
+ * Whole years old, from a `YYYY-MM-DD` birth date.
+ *
+ * A birthday that has not happened yet this year does not count, which is what
+ * everyone means by age and what a filter of "10 to 13" has to agree with.
+ */
+export function ageFrom(birthDate: string, now = new Date()) {
+  const born = fromKey(birthDate);
+  let age = now.getFullYear() - born.getFullYear();
+  const beforeBirthday =
+    now.getMonth() < born.getMonth() ||
+    (now.getMonth() === born.getMonth() && now.getDate() < born.getDate());
+  if (beforeBirthday) age -= 1;
+  return Math.max(0, age);
+}
+
 /** "Friday 31 July" — the home screen eyebrow. */
 export const longDate = (d: Date) => `${dowLong(d)} ${d.getDate()} ${monthLong(d)}`;
 

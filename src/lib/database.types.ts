@@ -62,6 +62,8 @@ export type GroupRow = {
   /** `YYYY-MM-DD`. Null on every group that predates migration 0016. */
   starts_on: string | null;
   ends_on: string | null;
+  /** `YYYY-season`, e.g. `2026-spring`. Null on groups that predate 0018. */
+  term: string | null;
   archived_at: string | null;
   created_at: string;
 };
@@ -84,6 +86,8 @@ export type StudentRow = {
   birth_date: string | null;
   address: string | null;
   school: string | null;
+  /** `male` | `female` | null, where null means not recorded. */
+  gender: string | null;
   document_id: string | null;
   parent_name: string | null;
   parent_phone: string | null;
