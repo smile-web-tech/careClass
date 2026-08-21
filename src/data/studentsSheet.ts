@@ -272,9 +272,9 @@ export function sampleStudentsXlsx(): Uint8Array {
     phone: '+993 65 123456',
     email: 'aygul@example.com',
     birthDate: '2011-03-15',
-    // Courses done before this app. Blank means "count it from what is here",
-    // which is right for anyone who started with this teacher.
-    level: '2',
+    // The level as the teacher reads it. Blank means "count it from the
+    // courses in this app", which is right for anyone who started here.
+    level: '3',
     address: 'Görogly köçesi 12',
     school: '№ 20',
     // Written the way the export writes it, so the template teaches the
