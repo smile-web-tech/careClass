@@ -811,6 +811,31 @@ export async function syncNow(): Promise<'done' | 'offline' | 'failed'> {
 }
 
 /**
+ * Whether pulling from the server can mean anything right now.
+ *
+ * Every read path in this file replaces a whole collection with what came back,
+ * because that is what makes a delete on one phone disappear from the other.
+ * That is only safe when the answer is this account's answer. Two cases where
+ * it is not, and both of them are silent:
+ *
+ *  - **Offline mode.** There is no account at all. The tables are behind row
+ *    level security, so an unauthenticated read is not an error — it is an
+ *    empty list, which reads exactly like an account whose every group and
+ *    student was deleted.
+ *  - **No session.** Signed out, or a token that expired while the app was
+ *    closed. Same empty answer, same meaning taken from it.
+ *
+ * In both, local state is the only state there is. `hasSession` deliberately
+ * reads storage rather than the network, so a filtered connection cannot make
+ * a signed-in teacher look signed out.
+ */
+async function canPull(): Promise<boolean> {
+  if (!hasSupabase) return false;
+  if (useStore.getState().offline) return false;
+  return api.hasSession();
+}
+
+/**
  * Replace local state with what the server has. Call after sign-in and on focus.
  *
  * Push before pulling, always. This function overwrites every local collection,
@@ -821,7 +846,7 @@ export async function syncNow(): Promise<'done' | 'offline' | 'failed'> {
  * all: local state is the only correct state until the phone can talk again.
  */
 export async function hydrate() {
-  if (!hasSupabase) return;
+  if (!(await canPull())) return;
 
   if (queue.length) {
     const drained = await flushWrites();
@@ -878,7 +903,36 @@ export async function hydrate() {
     deleted term of work is not recoverable.
   */
   const local = useStore.getState();
-  const keepLocal = rejected || queue.length > 0;
+
+  /*
+    An answer of "you have nothing" is not believed on its own.
+
+    A teacher can genuinely delete everything, and this app has to reflect that.
+    But an account that returns no groups, no students and no registers while
+    this device is holding a term of them is far more often a read that failed
+    open — a session that vanished between the check above and the query, a
+    proxy answering 200 with an empty body, row level security matching nothing
+    because the token was refreshed mid-flight — than a teacher who deleted
+    every trace of their work on another phone.
+
+    The two are indistinguishable in the response, so the tie goes to the copy
+    that has something in it. A row deleted elsewhere lingers here until a pull
+    comes back holding *anything*; a term of work replaced by an empty list is
+    gone with nothing to restore it from.
+  */
+  const serverIsBare =
+    groups.length === 0 && students.length === 0 && Object.keys(attendance).length === 0;
+  const localHasWork = local.groups.length > 0 || local.students.length > 0;
+  const suspect = serverIsBare && localHasWork;
+
+  if (suspect) {
+    console.warn(
+      '[classcare] the account came back empty while this device holds ' +
+        `${local.groups.length} groups and ${local.students.length} students — keeping local`,
+    );
+  }
+
+  const keepLocal = rejected || queue.length > 0 || suspect;
 
   /**
    * Anything local the server did not return, counted as it goes.
@@ -1083,7 +1137,7 @@ export function installSync() {
  * locally can bring them in. Hence a manual pull as well as the subscription.
  */
 export async function refreshInbox() {
-  if (!hasSupabase) return;
+  if (!(await canPull())) return;
   const [messages, replies] = await Promise.all([api.fetchMessages(), api.fetchReplies()]);
   useStore.setState({ messages, replies });
 }
@@ -1098,7 +1152,7 @@ export async function refreshInbox() {
  * it invites the teacher to send the same result twice.
  */
 export async function refreshGrades() {
-  if (!hasSupabase) return;
+  if (!(await canPull())) return;
   useStore.setState({ grades: await api.fetchGrades() });
 }
 

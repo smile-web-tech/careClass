@@ -273,6 +273,20 @@ export type TeacherProfile = {
   hiddenTemplates: string[];
 };
 
+/**
+ * Whether this device holds a session, without asking the network.
+ *
+ * `getSession` reads what is stored; `getUser` would make a request, and on a
+ * filtered connection a request that fails is indistinguishable here from a
+ * teacher who is not signed in. Callers use this to decide whether a *pull* is
+ * meaningful, and getting that wrong deletes data, so it must not depend on
+ * whether the network happens to be up.
+ */
+export async function hasSession(): Promise<boolean> {
+  const { data } = await supabase.auth.getSession();
+  return Boolean(data.session);
+}
+
 export async function fetchTeacher(): Promise<TeacherProfile | null> {
   // The stored session, not `getUser()`, for the same reason as `requireUser`:
   // that call goes to the network and turns a dropped connection into a
