@@ -23,7 +23,7 @@ import type { TranslationKey } from '@/i18n';
 import { callNumber, smsNumber } from '@/lib/contact';
 import { ageFrom } from '@/lib/date';
 import { exportStudentsSheet, importStudentsSheet } from '@/lib/sheetFlow';
-import { compareTerms, termLabel } from '@/lib/term';
+import { compareTerms, termLabel, termOf } from '@/lib/term';
 import { radius, space, useTheme, useThemedStyles, type AccentName, type Theme } from '@/theme';
 import { body, text } from '@/theme/type';
 
@@ -126,16 +126,38 @@ export default function Students() {
     }
   }, []);
 
+  /*
+    A group's term, falling back to the one its start date implies.
+
+    Only groups created or edited since terms existed carry one, and a teacher
+    who has been using this app for a year would otherwise open the filter to
+    find no terms at all — every course they have ever run invisible to it until
+    they went through and re-saved each one. The start date already says which
+    season a course belongs to; `termOf` is the same reading of it the group
+    form offers as its default, so the filter and the form agree.
+
+    Derived on read rather than written back: a stored term is the teacher's
+    answer and a derived one is a guess, and quietly turning the second into the
+    first would overwrite a deliberate choice on the next sync.
+  */
+  const termFor = useCallback(
+    (g: { term?: string; startsOn?: string }) => g.term ?? (g.startsOn ? termOf(g.startsOn) : undefined),
+    [],
+  );
+
   /** Terms the teacher actually has, newest first. No term, no chip. */
   const terms = useMemo(() => {
     const seen = new Set<string>();
-    for (const g of groups) if (g.term) seen.add(g.term);
+    for (const g of groups) {
+      const key = termFor(g);
+      if (key) seen.add(key);
+    }
     return [...seen].sort((a, b) => compareTerms(b, a));
-  }, [groups]);
+  }, [groups, termFor]);
 
   /** Which terms each student belongs to, through their groups. */
   const termsByStudent = useMemo(() => {
-    const groupTerm = new Map(groups.map((g) => [g.id, g.term]));
+    const groupTerm = new Map(groups.map((g) => [g.id, termFor(g)]));
     const out = new Map<string, Set<string>>();
     for (const s of students) {
       const set = new Set<string>();
@@ -146,7 +168,7 @@ export default function Students() {
       out.set(s.id, set);
     }
     return out;
-  }, [students, groups]);
+  }, [students, groups, termFor]);
 
   const sections = useMemo(
     () =>
