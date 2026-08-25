@@ -55,6 +55,7 @@ import type { Gender, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { baseForLevel, levelOf, studentCourses } from '@/lib/courses';
+import { genderFromSurname, joinName, splitName, surnameOf } from '@/lib/names';
 import { accentNames } from '@/theme';
 import { readXlsx, serialToDate, writeXlsx } from '@/lib/xlsx';
 import { strFromU8 } from 'fflate';
@@ -94,12 +95,12 @@ type Column = {
 type CsvRow = {
   id: string;
   name: string;
+  surname: string;
   phone: string;
   email: string;
   birthDate: string;
   address: string;
   school: string;
-  gender: string;
   level: string;
   documentId: string;
   parentName: string;
@@ -116,6 +117,11 @@ type CsvRow = {
 const COLUMNS: Column[] = [
   { key: 'id', headingKey: 'csv.id', aliases: ['id', 'studentid'], readOnly: true },
   { key: 'name', headingKey: 'csv.name', aliases: ['name', 'fullname', 'student', 'ady', 'имя', 'фио'] },
+  {
+    key: 'surname',
+    headingKey: 'students.surname',
+    aliases: ['surname', 'lastname', 'familyname', 'familiya', 'familiýasy', 'фамилия'],
+  },
   { key: 'phone', headingKey: 'csv.phone', aliases: ['phone', 'mobile', 'telefon', 'телефон'] },
   { key: 'email', headingKey: 'csv.email', aliases: ['email', 'mail', 'эл почта', 'почта'] },
   {
@@ -125,11 +131,6 @@ const COLUMNS: Column[] = [
   },
   { key: 'address', headingKey: 'csv.address', aliases: ['address', 'salgy', 'адрес'] },
   { key: 'school', headingKey: 'csv.school', aliases: ['school', 'mekdep', 'школа'] },
-  {
-    key: 'gender',
-    headingKey: 'csv.gender',
-    aliases: ['gender', 'sex', 'jyns', 'пол'],
-  },
   {
     key: 'level',
     headingKey: 'students.level',
@@ -188,39 +189,6 @@ const normalise = (s: string) =>
 
 /** More than one group in one cell, since a student can be in several. */
 
-/** What we write into the gender cell, in the language being read. */
-const GENDER_KEY = {
-  male: 'students.male',
-  female: 'students.female',
-} as const satisfies Record<Gender, TranslationKey>;
-
-/**
- * Every spelling of "boy" and "girl" we will accept in a cell.
- *
- * Headings are matched in three languages, so the values have to be too — a
- * teacher whose school exported `Пол: мужской` is not going to find and replace
- * sixty cells before importing. Single letters are in because a hand-kept list
- * is as likely to say `m` or `ж` as anything longer.
- *
- * Anything unrecognised leaves the field absent rather than guessing. A wrongly
- * assigned gender is worse than a blank one: it is silently wrong, it appears
- * on filtered lists the teacher trusts, and nothing on screen suggests it was
- * inferred.
- */
-const GENDER_WORDS: Record<Gender, string[]> = {
-  male: ['m', 'male', 'boy', 'man', 'erkek', 'oglan', 'м', 'муж', 'мужской', 'мальчик', 'мужчина'],
-  female: ['f', 'w', 'female', 'girl', 'woman', 'ayal', 'aýal', 'gyz', 'ж', 'жен', 'женский', 'девочка', 'женщина'],
-};
-
-function parseGender(raw: string): Gender | undefined {
-  const v = raw.trim().toLowerCase();
-  if (!v) return undefined;
-  for (const [gender, words] of Object.entries(GENDER_WORDS) as [Gender, string[]][]) {
-    if (words.includes(v)) return gender;
-  }
-  return undefined;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Writing                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -238,13 +206,16 @@ function rowFor(student: Student, groups: Group[]): string[] {
     // out. Keeping it here means the row type stays one thing for reading and
     // writing both.
     id: student.id,
+    // The full name stays whole in its own column, so a file opened in Excel
+    // still reads as a register. The surname is repeated beside it because
+    // that is the column a teacher fills in for a new child.
     name: student.name,
+    surname: surnameOf(student),
     phone: student.phone,
     email: student.email ?? '',
     birthDate: student.birthDate ?? '',
     address: student.address ?? '',
     school: student.school ?? '',
-    gender: student.gender ? translateNow(GENDER_KEY[student.gender]) : '',
     // The level as a teacher reads it, not the base stored behind it. A column
     // of bases would be a column of numbers that do not match the app.
     level: String(levelOf(student, groups)),
@@ -286,6 +257,9 @@ export function sampleStudentsXlsx(): Uint8Array {
     // because the row shape is shared with reading.
     id: '',
     name: 'Aýgül Berdiýewa',
+    // Filled in here, though a teacher may leave it and put the whole name in
+    // the column to the left. It is what the app reads the gender from.
+    surname: 'Berdiýewa',
     phone: '+993 65 123456',
     email: 'aygul@example.com',
     birthDate: '2011-03-15',
@@ -294,9 +268,6 @@ export function sampleStudentsXlsx(): Uint8Array {
     level: '2',
     address: 'Görogly köçesi 12',
     school: '№ 20',
-    // Written the way the export writes it, so the template teaches the
-    // vocabulary the importer already answers to.
-    gender: translateNow('students.female'),
     documentId: 'I-AŞ 123456',
     parentName: 'Maýa Berdiýewa',
     parentPhone: '+993 65 654321',
@@ -309,6 +280,8 @@ export function sampleStudentsXlsx(): Uint8Array {
     note: '',
   };
 
+  // The second row is the part a teacher cannot otherwise guess: a name and a
+  // number are enough, and the surname column may be left to the name column.
   const minimal: CsvRow = { ...blankRow(), name: 'Batyr Amanow', phone: '+993 65 777888' };
 
   return writeXlsx([
@@ -532,20 +505,46 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
   const out: ParsedStudent[] = [];
 
   for (const row of rows.slice(1)) {
-    const name = value(row, 'name');
-    if (!name) continue; // A row with no name is a spacer, not a person.
+    /*
+      Two columns, and either one on its own is enough.
+
+      A file this app wrote has both. A file a school wrote has one column with
+      the whole name in it, and a teacher filling in the template may put the
+      surname in its own column and leave the name column for the given name —
+      which is what the headings invite. All three have to land as the same
+      student:
+
+        Name "Aýgül Berdiýewa", Surname ""            -> split it
+        Name "Aýgül",           Surname "Berdiýewa"   -> join it
+        Name "Aýgül Berdiýewa", Surname "Berdiýewa"   -> already whole
+
+      The last case is the one that needs care: joining blindly would produce
+      "Aýgül Berdiýewa Berdiýewa".
+    */
+    const nameCell = value(row, 'name');
+    const surnameCell = value(row, 'surname');
+    if (!nameCell && !surnameCell) continue; // A row with neither is a spacer.
+
+    const alreadyWhole =
+      !!surnameCell && nameCell.toLowerCase().endsWith(surnameCell.toLowerCase());
+    const name = alreadyWhole || !surnameCell ? nameCell : joinName(nameCell, surnameCell);
+    const surname = surnameCell || splitName(nameCell).surname;
 
     out.push({
       sourceId: maybe(value(row, 'id')),
       level: levelFrom(value(row, 'level')),
       student: {
         name,
+        surname: maybe(surname),
         phone: phone(value(row, 'phone')),
         email: maybe(value(row, 'email')),
         birthDate: normaliseDate(value(row, 'birthDate')),
         address: maybe(value(row, 'address')),
         school: maybe(value(row, 'school')),
-        gender: parseGender(value(row, 'gender')),
+        // Read from the surname rather than asked for. A Turkmen surname says
+        // which, in both scripts, and a column for it was a column of sixty
+        // cells holding a fact already present two columns to the left.
+        gender: genderFromSurname(surname),
         documentId: maybe(value(row, 'documentId')),
         parentName: maybe(value(row, 'parentName')),
         parentPhone: maybe(phone(value(row, 'parentPhone'))),

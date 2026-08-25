@@ -81,6 +81,7 @@ export type StudentRow = {
   id: string;
   teacher_id: string;
   name: string;
+  surname: string | null;
   phone: string;
   email: string | null;
   birth_date: string | null;

@@ -23,6 +23,7 @@ import { Button, Card, Divider, FieldRow, Overline, Press, SelectChip } from '@/
 import { useAllGroups, useGroups } from '@/data/store';
 import type { Gender, Group, Student } from '@/data/types';
 import { baseForLevel, levelOf } from '@/lib/courses';
+import { genderFromSurname, givenOf, joinName, splitName } from '@/lib/names';
 import { ageFrom, fromKey, longDate } from '@/lib/date';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body } from '@/theme/type';
@@ -37,6 +38,7 @@ export type StudentDraft = {
    */
   id: string;
   name: string;
+  surname?: string;
   phone: string;
   email?: string;
   birthDate?: string;
@@ -58,7 +60,8 @@ export type StudentDraft = {
 };
 
 const blank = {
-  name: '',
+  given: '',
+  surname: '',
   phone: '',
   email: '',
   address: '',
@@ -76,7 +79,10 @@ const blank = {
 };
 
 const fieldsOf = (initial: Student | undefined, allGroups: Group[]) => ({
-  name: initial?.name ?? '',
+  // Seeded by splitting the stored full name for anyone entered before the
+  // surname field existed, which is the same split `surnameOf` reads.
+  given: initial ? (initial.surname ? givenOf(initial) : splitName(initial.name).given) : '',
+  surname: initial?.surname ?? (initial ? splitName(initial.name).surname : ''),
   phone: initial?.phone ?? '',
   email: initial?.email ?? '',
   address: initial?.address ?? '',
@@ -157,13 +163,14 @@ export function StudentForm({
     added mid-lesson to be filled in later. Nothing downstream needs a number:
     the composer skips recipients without one and says how many it skipped.
   */
-  const ready = form.name.trim().length > 1;
+  const ready = joinName(form.given, form.surname).trim().length > 1;
   const groupIds = groups.filter((g) => picked[g.id]).map((g) => g.id);
 
   const trimmed = (v: string) => v.trim() || undefined;
   const draft = (): StudentDraft => ({
     id: draftId,
-    name: form.name.trim(),
+    name: joinName(form.given, form.surname),
+    surname: trimmed(form.surname),
     phone: form.phone.trim(),
     email: trimmed(form.email),
     // Undefined rather than '' when cleared, so the column goes back to null
@@ -171,7 +178,16 @@ export function StudentForm({
     birthDate: birthDate || undefined,
     address: trimmed(form.address),
     school: trimmed(form.school),
-    gender,
+    /*
+      What the teacher chose, or what the surname says when they chose nothing.
+
+      Never the other way round: a chip that has been tapped is a fact and the
+      ending is a guess, and the endings do not cover every name. Inferring at
+      save rather than while typing means the guess appears once, on a complete
+      surname, instead of flickering through male and female as the letters go
+      in.
+    */
+    gender: gender ?? genderFromSurname(form.surname),
     documentId: trimmed(form.documentId),
     /*
       Stored as the base, not as the number typed.
@@ -211,12 +227,18 @@ export function StudentForm({
       const picked = await pickContact();
       if (!picked) return;
 
-      setForm((f) => ({
-        ...f,
-        name: picked.name || f.name,
-        phone: picked.phone ?? f.phone,
-        email: picked.email ?? f.email,
-      }));
+      setForm((f) => {
+        // A contact arrives as one string, so it is split the same way a name
+        // typed before the two fields existed is — last word to the surname.
+        const split = picked.name ? splitName(picked.name) : null;
+        return {
+          ...f,
+          given: split ? split.given : f.given,
+          surname: split && split.surname ? split.surname : f.surname,
+          phone: picked.phone ?? f.phone,
+          email: picked.email ?? f.email,
+        };
+      });
     } catch (e) {
       showError(e, t('students.contactsNeeded'));
     }
@@ -261,7 +283,7 @@ export function StudentForm({
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <StudentPhotoPicker studentId={draftId} name={form.name} />
+          <StudentPhotoPicker studentId={draftId} name={joinName(form.given, form.surname)} />
 
           <Press onPress={importFromContacts}>
             <Card style={styles.importCard}>
@@ -278,11 +300,28 @@ export function StudentForm({
 
           <Overline style={styles.label}>{t('nav.students')}</Overline>
           <Card style={styles.group}>
+            {/*
+              Given name and surname apart, because the surname is doing a job.
+
+              A Turkmen surname carries the gender in its ending, and reading
+              that off the last word of a single free-text field guesses wrong
+              on anyone with two given names. Two fields make the same typing
+              produce a fact the app can use.
+            */}
             <FieldRow
-              label={t('students.name')}
-              placeholder={t('auth.fullName')}
-              value={form.name}
-              onChangeText={set('name')}
+              label={t('students.givenName')}
+              placeholder={t('students.givenNamePlaceholder')}
+              value={form.given}
+              onChangeText={set('given')}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+            <Divider inset={15} />
+            <FieldRow
+              label={t('students.surname')}
+              placeholder={t('students.surnamePlaceholder')}
+              value={form.surname}
+              onChangeText={set('surname')}
               autoCapitalize="words"
               autoCorrect={false}
             />

@@ -94,7 +94,19 @@ export type GroupPatch = Partial<Omit<Group, 'id' | 'startsOn' | 'endsOn' | 'ter
 
 export type Student = {
   id: string;
+  /** The whole name, as displayed, sorted and searched everywhere. */
   name: string;
+  /**
+   * The family name alone.
+   *
+   * `name` stays the full name — every screen shows it, the list sorts on it,
+   * the letter rail buckets by it — so this is not a second half of a split. It
+   * exists because a Turkmen surname carries the gender in its ending, and
+   * reading that needs the right word rather than the last word of whatever was
+   * typed. Absent on students entered before the field, where `surnameOf` falls
+   * back to exactly that last word.
+   */
+  surname?: string;
   phone: string;
   email?: string;
   /** `YYYY-MM-DD`. Drives the birthday reminder. */
