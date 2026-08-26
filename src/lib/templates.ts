@@ -20,6 +20,9 @@ const BUILT_IN: { id: string; titleKey: TranslationKey; bodyKey: TranslationKey 
   { id: 'cancel', titleKey: 'template.cancelTitle', bodyKey: 'template.cancelBody' },
   { id: 'absence', titleKey: 'template.absenceTitle', bodyKey: 'template.absenceBody' },
   { id: 'homework', titleKey: 'template.homeworkTitle', bodyKey: 'template.homeworkBody' },
+  // Last, deliberately. `starters[0]` is what the composer opens with when it
+  // was not sent to a particular template, and that should stay the reminder.
+  { id: 'birthday', titleKey: 'template.birthdayTitle', bodyKey: 'template.birthdayBody' },
 ];
 
 /**

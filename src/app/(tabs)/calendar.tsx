@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { showAlert } from '@/components/Dialog';
 import { Icon } from '@/components/Icon';
 import { Screen, useTabInset } from '@/components/layout';
 import type { TranslationKey } from '@/i18n';
@@ -31,6 +32,7 @@ import {
   toKey,
   weekDays,
 } from '@/lib/date';
+import { callNumber } from '@/lib/contact';
 import { sessionPhase, sessionsOn, roomLabel } from '@/lib/schedule';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
@@ -58,7 +60,16 @@ const ROWS = 6;
 type Entry =
   | { kind: 'session'; at: string; session: Session; group: Group }
   | { kind: 'event'; at: string; event: CalendarEvent }
-  | { kind: 'birthday'; at: string; name: string; studentId: string };
+  | {
+      kind: 'birthday';
+      at: string;
+      name: string;
+      studentId: string;
+      /** Carried on the entry so the row can offer to ring it. May be empty. */
+      phone: string;
+      /** Their first course, for attributing a message sent from here. */
+      groupId?: string;
+    };
 
 export default function Calendar() {
   const t = useT();
@@ -135,7 +146,10 @@ export default function Calendar() {
    * costs a loop over the visible month and is always right.
    */
   const birthdaysByDay = useMemo(() => {
-    const out: Record<string, { name: string; studentId: string }[]> = {};
+    const out: Record<
+      string,
+      { name: string; studentId: string; phone: string; groupId?: string }[]
+    > = {};
 
     for (const student of students) {
       if (!student.birthDate) continue;
@@ -148,7 +162,12 @@ export default function Calendar() {
           // The age is deliberately not worked out. It is the teacher's business
           // how they mark the day, and an app that announces a number gets it
           // wrong the moment a birth year was typed to fill a required field.
-          (out[toKey(day)] ??= []).push({ name: student.name, studentId: student.id });
+          (out[toKey(day)] ??= []).push({
+            name: student.name,
+            studentId: student.id,
+            phone: student.phone,
+            groupId: student.groupIds[0],
+          });
         }
       }
     }
@@ -169,7 +188,14 @@ export default function Calendar() {
     }
     // All-day, so they sort to the top alongside all-day events.
     for (const b of birthdaysByDay[selectedKey] ?? []) {
-      list.push({ kind: 'birthday', at: '', name: b.name, studentId: b.studentId });
+      list.push({
+        kind: 'birthday',
+        at: '',
+        name: b.name,
+        studentId: b.studentId,
+        phone: b.phone,
+        groupId: b.groupId,
+      });
     }
     return list.sort((a, b) => a.at.localeCompare(b.at));
   }, [sessionsByDay, eventsByDay, birthdaysByDay, selectedKey, groups]);
@@ -354,6 +380,31 @@ export default function Calendar() {
                 name={entry.name}
                 last={i === entries.length - 1}
                 onOpen={() => router.push(`/student/${entry.studentId}`)}
+                onCall={() => {
+                  // Said plainly, with the name in it, rather than a dialler
+                  // opening on an empty number and going nowhere.
+                  if (!entry.phone.trim()) {
+                    showAlert(
+                      t('students.noNumberTitle'),
+                      t('students.noNumberBody', { name: entry.name }),
+                    );
+                    return;
+                  }
+                  void callNumber(entry.phone);
+                }}
+                onMessage={() =>
+                  router.push({
+                    pathname: '/compose',
+                    params: {
+                      students: entry.studentId,
+                      // Opens on the template sheet, already holding the
+                      // birthday wording in case the teacher dismisses it.
+                      template: 'birthday',
+                      pick: '1',
+                      ...(entry.groupId ? { group: entry.groupId } : {}),
+                    },
+                  })
+                }
               />
             ),
           )
@@ -497,27 +548,59 @@ function BirthdayRow({
   name,
   last,
   onOpen,
+  onCall,
+  onMessage,
 }: {
   name: string;
   last: boolean;
   onOpen: () => void;
+  onCall: () => void;
+  onMessage: () => void;
 }) {
   const t = useT();
   const { accents } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
+  /*
+    Two ways to act on it, on the row itself.
+
+    Knowing about a birthday and then having to find the student, open them,
+    and find the call button is three taps to do the one thing the reminder
+    exists to prompt. The row stays quiet — small icon buttons, not the labelled
+    pair a class gets — but the wish is now one tap away.
+
+    The name is its own `Press` rather than the whole row being one, because a
+    button inside a pressable row is a bet on which of the two the tap lands in.
+  */
   return (
-    <Press onPress={onOpen} style={[styles.birthdayRow, last && { marginBottom: 6 }]}>
-      <View style={[styles.birthdayGlyph, { backgroundColor: accents.pink.tint }]}>
-        <Icon name="cake" size={15} color={accents.pink.ink} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.birthdayName} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={styles.birthdayNote}>{t('calendar.birthdayOf', { name })}</Text>
-      </View>
-    </Press>
+    <View style={[styles.birthdayRow, last && { marginBottom: 6 }]}>
+      <Press onPress={onOpen} style={styles.birthdayMain}>
+        <View style={[styles.birthdayGlyph, { backgroundColor: accents.pink.tint }]}>
+          <Icon name="cake" size={15} color={accents.pink.ink} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.birthdayName} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.birthdayNote}>{t('calendar.birthdayOf', { name })}</Text>
+        </View>
+      </Press>
+
+      <IconButton
+        name="phone"
+        onPress={onCall}
+        size={34}
+        iconSize={15}
+        accessibilityLabel={t('students.call')}
+      />
+      <IconButton
+        name="chat"
+        onPress={onMessage}
+        size={34}
+        iconSize={15}
+        accessibilityLabel={t('students.message')}
+      />
+    </View>
   );
 }
 
@@ -681,10 +764,12 @@ const makeStyles = ({ color, shadow }: Theme) =>
     birthdayRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: 8,
       paddingVertical: 12,
       paddingHorizontal: 4,
     },
+    /** The name half, which is what opens the student. */
+    birthdayMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
     birthdayGlyph: {
       width: 34,
       height: 34,

@@ -108,6 +108,8 @@ export default function Compose() {
     audience?: Audience;
     students?: string;
     template?: string;
+    /** `1` to arrive with the template sheet already open. */
+    pick?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -175,7 +177,15 @@ export default function Compose() {
     });
     return (starters.find((x) => x.id === params.template) ?? starters[0])?.body ?? '';
   });
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  /*
+    Open on arrival when the caller asked for it.
+
+    A birthday on the calendar sends the teacher here to pick their wording,
+    and landing on a composer holding the lesson reminder — with the templates
+    a tap away behind a row they have not noticed — is landing on the wrong
+    message. The sheet is the first thing they see instead.
+  */
+  const [templatesOpen, setTemplatesOpen] = useState(params.pick === '1');
 
   /** Room to scroll while the keyboard is up — see `useKeyboardInset`. */
   const keyboard = useKeyboardInset(
