@@ -41,6 +41,7 @@ import { levelOf, studentCourses } from '@/lib/courses';
 import { termLabel, termOfGroup } from '@/lib/term';
 import { callNumber, emailAddress, smsNumber } from '@/lib/contact';
 import { fromKey, longDate, shortDate } from '@/lib/date';
+import { genderOf } from '@/lib/names';
 import { deletePhoto, photoFile, useStudentPhoto } from '@/lib/studentPhoto';
 import { STATUS_KEY } from '@/app/attendance';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
@@ -631,10 +632,13 @@ function StudentDetails({ student }: { student: Student }) {
       value: `${longDate(born)} · ${t('student.age', { age: yearsSince(born) })}`,
     });
   }
-  if (student.gender) {
+  // Through `genderOf`, so a student whose surname says which shows it without
+  // anyone having opened and re-saved them.
+  const gender = genderOf(student);
+  if (gender) {
     rows.push({
       label: t('student.gender'),
-      value: t(student.gender === 'male' ? 'students.male' : 'students.female'),
+      value: t(gender === 'male' ? 'students.male' : 'students.female'),
     });
   }
   if (student.school) rows.push({ label: t('student.school'), value: student.school });

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Dimensions, Keyboard, Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconButton } from '@/components/ui';
@@ -91,11 +91,85 @@ export function TopBar({
  * Translucent action bar pinned to the bottom of a screen (Save, Send).
  * Sits above the home indicator without the caller having to think about it.
  */
+/**
+ * How far a bottom-pinned bar has to rise to clear the software keyboard.
+ *
+ * The footer is `position: absolute; bottom: 0` and sits *outside* the
+ * `KeyboardAvoidingView` on every screen that has one, so nothing was moving
+ * it. That was fine while the window itself shrank when the keyboard opened —
+ * and it stopped being fine when edge-to-edge became the default on Android,
+ * because an edge-to-edge window is not resized by `adjustResize` any more; the
+ * app is handed the keyboard as an inset and is expected to do something with
+ * it. iOS never resized the window at all.
+ *
+ * The result on both platforms was a Save button sitting underneath the
+ * keyboard: still mounted, still enabled, and impossible to hit. Which reads,
+ * from the other side of the screen, as "the button does not work sometimes" —
+ * sometimes being whenever the teacher had just finished typing.
+ *
+ * Measured rather than assumed, because both behaviours still exist in the
+ * wild: whatever height the window has already given up is subtracted, so on a
+ * build where `adjustResize` does still resize, this is zero and the footer
+ * stays exactly where it was. No double lift, no guessing which Android this
+ * is.
+ */
+export function useKeyboardLift() {
+  const [lift, setLift] = useState(0);
+  /** The window height with no keyboard up — the baseline to measure against. */
+  const full = useRef(Dimensions.get('window').height);
+  const open = useRef(false);
+
+  useEffect(() => {
+    // `will` on iOS so the bar travels with the keyboard rather than after it;
+    // Android only emits `did`.
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const show = Keyboard.addListener(showEvent, (e) => {
+      open.current = true;
+      const shrunk = Math.max(0, full.current - Dimensions.get('window').height);
+      setLift(Math.max(0, e.endCoordinates.height - shrunk));
+    });
+
+    const hide = Keyboard.addListener(hideEvent, () => {
+      open.current = false;
+      full.current = Dimensions.get('window').height;
+      setLift(0);
+    });
+
+    // A rotation changes the baseline. Only trusted while the keyboard is down,
+    // since a resized window is exactly what the baseline exists to detect.
+    const rotate = Dimensions.addEventListener('change', ({ window }) => {
+      if (!open.current) full.current = window.height;
+    });
+
+    return () => {
+      show.remove();
+      hide.remove();
+      rotate.remove();
+    };
+  }, []);
+
+  return lift;
+}
+
 export function StickyFooter({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   const styles = useThemedStyles(makeStyles);
   const insets = useSafeAreaInsets();
+  const lift = useKeyboardLift();
+
   return (
-    <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) + 6 }, style]}>
+    <View
+      style={[
+        styles.footer,
+        {
+          bottom: lift,
+          // The home indicator is under the keyboard while it is up, so the
+          // inset it reserves is padding nobody can see.
+          paddingBottom: (lift ? 14 : Math.max(insets.bottom, 14)) + 6,
+        },
+        style,
+      ]}>
       {children}
     </View>
   );

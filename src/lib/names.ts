@@ -111,6 +111,28 @@ export function surnameOf(student: { name: string; surname?: string }): string {
 }
 
 /**
+ * The gender to use for a student, recorded or read from their surname.
+ *
+ * The inference has to happen *here*, at every read, and not once at the
+ * moment a student is saved. Saving was where it used to live, and the
+ * consequence was that it applied to nobody who was already on the roster: a
+ * teacher with sixty students had to open and re-save all sixty before the
+ * filter stopped calling them "not recorded". Reading it means the whole
+ * register has a gender from the moment this ships, including the students
+ * imported from a spreadsheet years ago.
+ *
+ * A recorded gender always wins. It is a fact somebody stated; the ending is a
+ * guess, and the guess has nothing to say about a name from another tradition.
+ */
+export function genderOf(student: {
+  name: string;
+  surname?: string;
+  gender?: Gender;
+}): Gender | undefined {
+  return student.gender ?? genderFromSurname(surnameOf(student));
+}
+
+/**
  * The given-name half of a stored name.
  *
  * Takes the stored surname off the end when it is there and the name really

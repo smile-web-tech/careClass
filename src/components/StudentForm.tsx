@@ -18,7 +18,7 @@ import { StudentPhotoPicker } from '@/components/StudentPhotoPicker';
 import { useT } from '@/i18n/useT';
 import { pickContact, pickPhoneNumber } from '@/lib/contactPicker';
 import { Icon } from '@/components/Icon';
-import { Screen, StickyFooter, TopBar } from '@/components/layout';
+import { Screen, StickyFooter, TopBar, useKeyboardLift } from '@/components/layout';
 import { Button, Card, Divider, FieldRow, Overline, Press, SelectChip } from '@/components/ui';
 import { useAllGroups, useGroups } from '@/data/store';
 import type { Gender, Group, Student } from '@/data/types';
@@ -135,6 +135,7 @@ export function StudentForm({
   const styles = useThemedStyles(makeStyles);
   const t = useT();
   const insets = useSafeAreaInsets();
+  const lift = useKeyboardLift();
 
   const groups = useGroups();
   // Every group for the level, active ones for the picker: a finished course
@@ -146,8 +147,15 @@ export function StudentForm({
   const [draftId] = useState(() => initial?.id ?? Crypto.randomUUID());
   /** Held apart from `form`: it is a date, not typed text. */
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? '');
-  /** Also apart, and also not typed: two chips, either of which can be off. */
-  const [gender, setGender] = useState<Gender | undefined>(initial?.gender);
+  /*
+    Also apart, and also not typed: two chips, either of which can be off.
+
+    Three states, not two. `undefined` is "the teacher has not touched this",
+    which is what lets the surname speak; `null` is "they cleared it", which
+    has to survive — otherwise clearing a chip re-inferred the same answer on
+    the next render and the chip could not be turned off at all.
+  */
+  const [chosen, setChosen] = useState<Gender | null | undefined>(undefined);
   const [pickingDate, setPickingDate] = useState(false);
   const [picked, setPicked] = useState<Record<string, boolean>>(() => {
     const out: Record<string, boolean> = {};
@@ -156,6 +164,29 @@ export function StudentForm({
   });
 
   const set = (k: keyof typeof blank) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  /*
+    What the chips show and what gets saved, in order of authority.
+
+    The teacher's own answer first. Then whatever is already recorded on the
+    student, because that is a fact somebody stated and this is a guess. Then
+    the surname.
+
+    Shown rather than applied silently at save, which is where this used to
+    happen. Inferring at save meant a teacher editing a student they had had
+    for a year saw both chips blank, concluded the app had not worked it out,
+    and had no way to tell that it had. It also meant the inference reached
+    nobody who was not opened and re-saved — `genderOf` now covers those at
+    read time, and this covers the one on the screen.
+
+    The cost is that the chip can flicker once while a surname is typed:
+    "Berdiýew" reads male a keystroke before "Berdiýewa" reads female. Visible
+    and correctable beats invisible.
+  */
+  const gender: Gender | undefined =
+    chosen !== undefined
+      ? (chosen ?? undefined)
+      : (initial?.gender ?? genderFromSurname(form.surname));
 
   /*
     A name and a surname. Not a phone number, and not the patronymic.
@@ -195,16 +226,7 @@ export function StudentForm({
     birthDate: birthDate || undefined,
     address: trimmed(form.address),
     school: trimmed(form.school),
-    /*
-      What the teacher chose, or what the surname says when they chose nothing.
-
-      Never the other way round: a chip that has been tapped is a fact and the
-      ending is a guess, and the endings do not cover every name. Inferring at
-      save rather than while typing means the guess appears once, on a complete
-      surname, instead of flickering through male and female as the letters go
-      in.
-    */
-    gender: gender ?? genderFromSurname(form.surname),
+    gender,
     documentId: trimmed(form.documentId),
     /*
       Stored as the base, not as the number typed.
@@ -296,7 +318,10 @@ export function StudentForm({
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={{
             padding: space.gutter,
-            paddingBottom: insets.bottom + 140,
+            // Plus whatever the keyboard is covering, so the bottom of the form
+            // can still be scrolled to while it is up. Zero when it is down, and
+            // zero on a window that resizes itself. See `useKeyboardLift`.
+            paddingBottom: insets.bottom + 140 + lift,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
@@ -421,7 +446,9 @@ export function StudentForm({
                     height={34}
                     label={t(g === 'male' ? 'students.male' : 'students.female')}
                     selected={gender === g}
-                    onPress={() => setGender((cur) => (cur === g ? undefined : g))}
+                    // `null`, not `undefined`: clearing has to mean cleared,
+                    // not "fall back to whatever the surname says".
+                    onPress={() => setChosen(gender === g ? null : g)}
                   />
                 ))}
               </View>

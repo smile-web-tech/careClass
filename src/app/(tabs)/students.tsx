@@ -22,6 +22,7 @@ import { useT } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { callNumber, smsNumber } from '@/lib/contact';
 import { ageFrom, toKey } from '@/lib/date';
+import { genderOf } from '@/lib/names';
 import { exportStudentsSheet, importStudentsSheet } from '@/lib/sheetFlow';
 import { compareTerms, termLabel, termOf } from '@/lib/term';
 import { radius, space, useTheme, useThemedStyles, type AccentName, type Theme } from '@/theme';
@@ -521,10 +522,18 @@ function buildSections({
       if (!hit) return false;
     }
 
-    // "Not recorded" is its own answer, not a third gender: it selects the
-    // students whose gender nobody has filled in, which is the list a teacher
-    // wants when they are trying to finish filling it in.
-    if (gender === 'none' ? !!s.gender : gender !== 'any' && s.gender !== gender) return false;
+    /*
+      "Not recorded" is its own answer, not a third gender: it selects the
+      students whose gender nobody has filled in, which is the list a teacher
+      wants when they are trying to finish filling it in.
+
+      Read through `genderOf`, so a surname that says which counts as recorded.
+      Filtering on the stored column alone put every student entered before the
+      inference existed in the "not recorded" bucket, and left the male and
+      female filters returning only the handful saved since.
+    */
+    const known = genderOf(s);
+    if (gender === 'none' ? !!known : gender !== 'any' && known !== gender) return false;
 
     if (term !== 'any' && !termsByStudent.get(s.id)?.has(term)) return false;
 

@@ -10,7 +10,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DateField, DatePicker } from '@/components/DatePicker';
-import { Screen, StickyFooter, TopBar } from '@/components/layout';
+import { Screen, StickyFooter, TopBar, useKeyboardLift } from '@/components/layout';
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { fromKey, longDate, toKey, weekdayInitials } from '@/lib/date';
@@ -95,6 +95,7 @@ export function GroupForm({
   const styles = useThemedStyles(makeStyles);
   const t = useT();
   const insets = useSafeAreaInsets();
+  const lift = useKeyboardLift();
 
   const [name, setName] = useState(initial?.name ?? '');
   const [subject, setSubject] = useState(initial?.subject ?? '');
@@ -202,7 +203,10 @@ export function GroupForm({
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={{
             padding: space.gutter,
-            paddingBottom: insets.bottom + 130,
+            // Plus whatever the keyboard is covering, so the bottom of the form
+            // can still be scrolled to while it is up. Zero when it is down, and
+            // zero on a window that resizes itself. See `useKeyboardLift`.
+            paddingBottom: insets.bottom + 130 + lift,
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
