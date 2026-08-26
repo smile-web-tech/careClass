@@ -39,6 +39,8 @@ export type StudentDraft = {
   id: string;
   name: string;
   surname?: string;
+  /** The father's name — the patronymic, not the father as a contact. */
+  patronymic?: string;
   phone: string;
   email?: string;
   birthDate?: string;
@@ -62,6 +64,7 @@ export type StudentDraft = {
 const blank = {
   given: '',
   surname: '',
+  patronymic: '',
   phone: '',
   email: '',
   address: '',
@@ -83,6 +86,7 @@ const fieldsOf = (initial: Student | undefined, allGroups: Group[]) => ({
   // surname field existed, which is the same split `surnameOf` reads.
   given: initial ? (initial.surname ? givenOf(initial) : splitName(initial.name).given) : '',
   surname: initial?.surname ?? (initial ? splitName(initial.name).surname : ''),
+  patronymic: initial?.patronymic ?? '',
   phone: initial?.phone ?? '',
   email: initial?.email ?? '',
   address: initial?.address ?? '',
@@ -154,16 +158,28 @@ export function StudentForm({
   const set = (k: keyof typeof blank) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   /*
-    A name, and that is all.
+    A name and a surname. Not a phone number, and not the patronymic.
 
-    This used to demand a phone number of more than five characters as well,
-    and the Save button simply sat there greyed out saying nothing — which
-    reads as a broken button, not as a validation message. Plenty of students
-    have no phone of their own and are reached through a parent, and plenty are
-    added mid-lesson to be filled in later. Nothing downstream needs a number:
-    the composer skips recipients without one and says how many it skipped.
+    The surname is required because the app reads the gender off its ending,
+    and a roster half of which has no surname is a roster where that inference
+    silently stops working — the teacher sees a blank gender on some children
+    and no reason for it. Asking for the word costs one field and makes the
+    whole feature dependable.
+
+    The father's name stays optional. It is on every document, but it is not
+    needed to identify a child in a class of sixty, and demanding it would stop
+    a teacher adding somebody mid-lesson.
+
+    A phone number is not asked for either, and used to be. Plenty of students
+    have no phone of their own and are reached through a parent. Nothing
+    downstream needs one: the composer skips recipients without a number and
+    says how many it skipped.
+
+    Whichever half is missing says so under the button. A disabled control with
+    no explanation is indistinguishable from one that does not work.
   */
-  const ready = joinName(form.given, form.surname).trim().length > 1;
+  const missing = !form.given.trim() ? 'needName' : !form.surname.trim() ? 'needSurname' : null;
+  const ready = !missing;
   const groupIds = groups.filter((g) => picked[g.id]).map((g) => g.id);
 
   const trimmed = (v: string) => v.trim() || undefined;
@@ -171,6 +187,7 @@ export function StudentForm({
     id: draftId,
     name: joinName(form.given, form.surname),
     surname: trimmed(form.surname),
+    patronymic: trimmed(form.patronymic),
     phone: form.phone.trim(),
     email: trimmed(form.email),
     // Undefined rather than '' when cleared, so the column goes back to null
@@ -322,6 +339,20 @@ export function StudentForm({
               placeholder={t('students.surnamePlaceholder')}
               value={form.surname}
               onChangeText={set('surname')}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+            <Divider inset={15} />
+            {/*
+              The father's name, which is the third part of a name here and is
+              not the father in the card further down — that one is a person to
+              ring, with his own phone and place of work.
+            */}
+            <FieldRow
+              label={t('students.patronymic')}
+              placeholder={t('students.patronymicPlaceholder')}
+              value={form.patronymic}
+              onChangeText={set('patronymic')}
               autoCapitalize="words"
               autoCorrect={false}
             />
@@ -540,9 +571,8 @@ export function StudentForm({
       />
 
       <StickyFooter style={{ gap: 10 }}>
-        {/* Say why the button is off. A disabled control with no explanation is
-            indistinguishable from one that does not work. */}
-        {!ready ? <Text style={styles.blocker}>{t('students.needName')}</Text> : null}
+        {/* Which half is missing, not merely that something is. */}
+        {missing ? <Text style={styles.blocker}>{t(`students.${missing}`)}</Text> : null}
         {secondary ? (
           <Press
             onPress={async () => {

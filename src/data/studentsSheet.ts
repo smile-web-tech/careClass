@@ -96,6 +96,7 @@ type CsvRow = {
   id: string;
   name: string;
   surname: string;
+  patronymic: string;
   phone: string;
   email: string;
   birthDate: string;
@@ -121,6 +122,29 @@ const COLUMNS: Column[] = [
     key: 'surname',
     headingKey: 'students.surname',
     aliases: ['surname', 'lastname', 'familyname', 'familiya', 'familiýasy', 'фамилия'],
+  },
+  /*
+    The father's name, sitting where it is spoken: after the surname and before
+    anything else.
+
+    Its aliases deliberately exclude `fathername`, which belongs to the father
+    *as a contact* three columns further along. The two are different facts —
+    one is part of the child's name, the other is a man with a phone number —
+    and a file whose heading matched both would put a patronymic in the parent
+    column, or the reverse, without saying so.
+  */
+  {
+    key: 'patronymic',
+    headingKey: 'students.patronymic',
+    aliases: [
+      'patronymic',
+      'middlename',
+      'fathersname',
+      'atasynynady',
+      'atasynyňady',
+      'atasyady',
+      'отчество',
+    ],
   },
   { key: 'phone', headingKey: 'csv.phone', aliases: ['phone', 'mobile', 'telefon', 'телефон'] },
   { key: 'email', headingKey: 'csv.email', aliases: ['email', 'mail', 'эл почта', 'почта'] },
@@ -180,11 +204,17 @@ const COLUMNS: Column[] = [
   { key: 'note', headingKey: 'csv.note', aliases: ['note', 'notes', 'bellik', 'заметка'] },
 ];
 
-/** Comparison form for a heading: no case, no spaces, no punctuation. */
+/**
+ * Comparison form for a heading: no case, no spaces, no punctuation.
+ *
+ * Apostrophes go too, and both shapes of them. A heading of "Father's name"
+ * arrives typed straight in one file and curled by Word's autocorrect in the
+ * next, and they are the same column.
+ */
 const normalise = (s: string) =>
   s
     .toLowerCase()
-    .replace(/[\s_\-.]/g, '')
+    .replace(/[\s_\-.'’]/g, '')
     .trim();
 
 /** More than one group in one cell, since a student can be in several. */
@@ -211,6 +241,7 @@ function rowFor(student: Student, groups: Group[]): string[] {
     // that is the column a teacher fills in for a new child.
     name: student.name,
     surname: surnameOf(student),
+    patronymic: student.patronymic ?? '',
     phone: student.phone,
     email: student.email ?? '',
     birthDate: student.birthDate ?? '',
@@ -260,6 +291,8 @@ export function sampleStudentsXlsx(): Uint8Array {
     // Filled in here, though a teacher may leave it and put the whole name in
     // the column to the left. It is what the app reads the gender from.
     surname: 'Berdiýewa',
+    // The father's name, not the father. He is further along, with his number.
+    patronymic: 'Serdar',
     phone: '+993 65 123456',
     email: 'aygul@example.com',
     birthDate: '2011-03-15',
@@ -536,6 +569,7 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
       student: {
         name,
         surname: maybe(surname),
+        patronymic: maybe(value(row, 'patronymic')),
         phone: phone(value(row, 'phone')),
         email: maybe(value(row, 'email')),
         birthDate: normaliseDate(value(row, 'birthDate')),

@@ -619,6 +619,11 @@ function StudentDetails({ student }: { student: Student }) {
 
   const rows: { label: string; value: string }[] = [];
 
+  // First, because it is part of the name at the top of the screen rather than
+  // a fact about the student — and it is the one a school asks for by phone.
+  if (student.patronymic) {
+    rows.push({ label: t('students.patronymic'), value: student.patronymic });
+  }
   if (student.birthDate) {
     const born = fromKey(student.birthDate);
     rows.push({

@@ -107,6 +107,21 @@ export type Student = {
    * back to exactly that last word.
    */
   surname?: string;
+  /**
+   * The father's name — the patronymic, `atasynyň ady`.
+   *
+   * The third part of a name on every document issued here, and the thing a
+   * teacher is asked for when they ring a school about a child. It is not
+   * `parent2Name`: that is the father as somebody to contact, with his own
+   * phone and place of work, and it is often written differently — "Serdar
+   * Berdiýew" there against "Serdar" here.
+   *
+   * Optional, and deliberately kept out of `name`. The full name is what the
+   * list sorts and the letter rail buckets by, and dropping a patronymic into
+   * the middle of it would reorder a roster that teachers already know the
+   * shape of.
+   */
+  patronymic?: string;
   phone: string;
   email?: string;
   /** `YYYY-MM-DD`. Drives the birthday reminder. */

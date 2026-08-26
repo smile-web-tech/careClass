@@ -82,6 +82,8 @@ export type StudentRow = {
   teacher_id: string;
   name: string;
   surname: string | null;
+  /** The father's name (patronymic). Null on students entered before 0021. */
+  patronymic: string | null;
   phone: string;
   email: string | null;
   birth_date: string | null;
