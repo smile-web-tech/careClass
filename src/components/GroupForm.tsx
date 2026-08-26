@@ -24,10 +24,15 @@ import { body, display } from '@/theme/type';
 /**
  * Monday first, and labelled by the phone's own language.
  *
- * These were seven hardcoded English abbreviations, so a Turkmen teacher picked
- * their class days off a row reading Mon Tue Wed. `weekdayInitials` returns them
- * in the app's language, Sunday-first as `Date#getDay` numbers them, so the
- * order here is the reordering.
+ * A slot stores its day as a `Date#getDay` number, where Sunday is 0 and lands
+ * at the front. Nobody here reads a week that way, so this is the order the
+ * chips are laid out in and the stored numbers are what they carry.
+ *
+ * `weekdayInitials` is *already* in this order — it does the same rotation
+ * internally and hands back seven labels running Monday to Sunday. So the two
+ * are walked together by position. Indexing the labels by the day number
+ * instead, which is what this used to do, read every chip off by one and gave
+ * a row headed Tu We Th Fr Sa Su Mo above buttons that meant Mon to Sun.
  */
 const DAY_NUMBERS: Weekday[] = [1, 2, 3, 4, 5, 6, 0];
 
@@ -238,7 +243,7 @@ export function GroupForm({
 
           <Overline style={styles.label}>{t('groups.meetsOn')}</Overline>
           <View style={styles.dayRow}>
-            {DAY_NUMBERS.map((day) => {
+            {DAY_NUMBERS.map((day, i) => {
               const on = !!days[day];
               return (
                 <Press
@@ -255,7 +260,7 @@ export function GroupForm({
                     },
                   ]}>
                   <Text style={[styles.dayLabel, { color: on ? '#fff' : color.inkSoft }]}>
-                    {dayLabels[day]}
+                    {dayLabels[i]}
                   </Text>
                 </Press>
               );
@@ -483,9 +488,19 @@ const makeStyles = ({ color }: Theme) =>
     label: { marginBottom: 10 },
     group: { overflow: 'hidden', marginBottom: 22 },
 
-    dayRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 22 },
+    /*
+      One row, always.
+
+      Seven chips at a fixed 46 wide plus six 8pt gaps came to 370, which is
+      more than the gutters leave on any phone this app runs on — so the week
+      wrapped, and Sunday sat alone on a second line looking like a different
+      control. The chips share the row instead: no wrapping, and they narrow to
+      fit whatever the screen gives them.
+    */
+    dayRow: { flexDirection: 'row', flexWrap: 'nowrap', gap: 6, marginBottom: 22 },
     dayChip: {
-      width: 46,
+      flex: 1,
+      minWidth: 0,
       height: 42,
       borderRadius: radius.field,
       borderWidth: 1.5,

@@ -160,10 +160,35 @@ const COLUMNS: Column[] = [
     headingKey: 'students.level',
     aliases: ['level', 'dereje', 'derejesi', 'уровень'],
   },
+  /*
+    "Document" said nothing. A teacher opening the template met a column headed
+    with a word that could mean any piece of paper a child has, and the answer
+    it wants is specific: the passport number for anyone who has one, the birth
+    certificate number for the younger ones who do not.
+
+    The old headings stay in the aliases, all three languages of them. A file
+    this app exported last month is headed "Resminama" or "Документ", and it has
+    to keep importing.
+  */
   {
     key: 'documentId',
     headingKey: 'csv.documentId',
-    aliases: ['document', 'documentid', 'passport', 'pasport', 'документ', 'паспорт'],
+    aliases: [
+      'document',
+      'documentid',
+      'resminama',
+      'документ',
+      'passport',
+      'pasport',
+      'паспорт',
+      'birthcertificate',
+      'şahadatnama',
+      'sahadatnama',
+      'свидетельство',
+      'passportbirthcertificateid',
+      'pasportşahadatnamabelgisi',
+      'паспортсвидетельствоорождении',
+    ],
   },
   {
     key: 'parentName',
@@ -209,12 +234,13 @@ const COLUMNS: Column[] = [
  *
  * Apostrophes go too, and both shapes of them. A heading of "Father's name"
  * arrives typed straight in one file and curled by Word's autocorrect in the
- * next, and they are the same column.
+ * next, and they are the same column. So does the slash, which only ever turns
+ * up separating two names for one thing — "Passport / birth certificate ID".
  */
 const normalise = (s: string) =>
   s
     .toLowerCase()
-    .replace(/[\s_\-.'’]/g, '')
+    .replace(/[\s_\-.'’\/]/g, '')
     .trim();
 
 /** More than one group in one cell, since a student can be in several. */
