@@ -51,4 +51,26 @@ config.resolver.blockList = Array.isArray(existing)
     ? [existing, GRADLE_BUILD_OUTPUT]
     : [GRADLE_BUILD_OUTPUT];
 
+/*
+  `.wasm` is an asset, and by default Metro has never heard of it.
+
+  `expo-sqlite`'s web build is SQLite compiled to WebAssembly, and its worker
+  does `import wasmModule from './wa-sqlite/wa-sqlite.wasm'`. Metro resolves an
+  extension it does not know as neither source nor asset, so the whole web
+  bundle fails on that one line:
+
+    Unable to resolve module ./wa-sqlite/wa-sqlite.wasm
+
+  Nothing is wrong with the install — the file is there, 600KB of it. Metro was
+  simply never told the extension exists. This is the configuration the
+  expo-sqlite documentation asks for, and it only affects web: the native builds
+  use the platform's own SQLite and never reach this file.
+
+  Pushed rather than assigned, so the default list of images, fonts and media
+  survives.
+*/
+if (!config.resolver.assetExts.includes('wasm')) {
+  config.resolver.assetExts.push('wasm');
+}
+
 module.exports = config;
