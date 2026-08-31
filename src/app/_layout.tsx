@@ -11,7 +11,6 @@ import {
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
 import { useFonts } from 'expo-font';
-import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -44,6 +43,7 @@ import {
   registerForPush,
   rescheduleBirthdays,
   rescheduleReminders,
+  useLastNotificationResponse,
 } from '@/lib/notifications';
 import { hasSupabase, supabase } from '@/lib/supabase';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -285,7 +285,7 @@ function useIncomingBackup() {
  * The effect re-runs when that flips, so nothing is lost by waiting.
  */
 function useNotificationRouting() {
-  const response = Notifications.useLastNotificationResponse();
+  const response = useLastNotificationResponse();
   const signedIn = useStore((s) => s.signedIn);
 
   useEffect(() => {

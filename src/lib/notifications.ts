@@ -24,6 +24,31 @@ import { translateNow } from '@/i18n/useT';
 import { at, fromKey, toKey } from '@/lib/date';
 import { sessionsOn } from '@/lib/schedule';
 
+/**
+ * Whether this platform has the native notification module at all.
+ *
+ * It does not on web. `expo-notifications` still resolves there and still hands
+ * back every function, but each one throws the moment it is called:
+ *
+ *   The method or property Notifications.getAllScheduledNotificationsAsync is
+ *   not available on web
+ *
+ * So the check cannot be a try/catch around one call — the first throw happened
+ * inside `rescheduleReminders`, which runs from a hook on the root layout, and
+ * took the whole app down at startup rather than losing one reminder.
+ *
+ * `Device.isDevice`, which several of these already checked, does not help: a
+ * browser reports itself as a real device, and rightly so. This is about the
+ * module, not the hardware.
+ *
+ * Everything below returns the same thing it would return for a teacher who
+ * declined notifications, which is a state the app already handles everywhere.
+ * Web simply never has permission, and there is nothing to explain to anybody:
+ * a browser tab cannot raise a reminder for a lesson at four while it is
+ * closed, so the feature has no meaning there.
+ */
+const supported = Platform.OS === 'ios' || Platform.OS === 'android';
+
 /** How far ahead to schedule. iOS caps an app at 64 pending notifications. */
 const HORIZON_DAYS = 14;
 
@@ -97,14 +122,29 @@ export type ReminderLead = 0 | 5 | 10 | 15 | 20 | 30 | 60;
  */
 
 /** Foreground presentation: show the banner rather than swallowing it. */
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+if (supported) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
+
+/**
+ * The notification the app was opened from, or nothing where there cannot be
+ * one.
+ *
+ * A hook, so it cannot be called conditionally at the point of use. The choice
+ * is made here instead, once, against a platform that does not change while the
+ * app is running — the caller gets a stable function either way and the rules
+ * of hooks are not bent.
+ */
+export const useLastNotificationResponse = supported
+  ? Notifications.useLastNotificationResponse
+  : () => null;
 
 /**
  * Ask for permission, returning whether we have it.
@@ -114,6 +154,7 @@ Notifications.setNotificationHandler({
  * the prompt once. The profile screen asks at the moment they enable reminders.
  */
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (!supported) return false;
   if (!Device.isDevice) return false; // Simulators cannot receive them.
 
   const existing = await Notifications.getPermissionsAsync();
@@ -129,7 +170,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export async function notificationPermissionStatus(): Promise<
   'granted' | 'denied' | 'undetermined'
 > {
-  if (!Device.isDevice) return 'denied';
+  if (!supported || !Device.isDevice) return 'denied';
   const { granted, canAskAgain } = await Notifications.getPermissionsAsync();
   if (granted) return 'granted';
   return canAskAgain ? 'undetermined' : 'denied';
@@ -185,7 +226,7 @@ export async function rescheduleReminders(
   events: CalendarEvent[],
   lead: ReminderLead,
 ) {
-  if (!Device.isDevice) return 0;
+  if (!supported || !Device.isDevice) return 0;
   const { granted } = await Notifications.getPermissionsAsync();
   if (!granted) return 0;
 
@@ -342,7 +383,7 @@ const BIRTHDAY_HOUR = 18;
  * a deleted student wishing themselves many happy returns next March.
  */
 export async function rescheduleBirthdays(students: Student[]) {
-  if (!Device.isDevice) return 0;
+  if (!supported || !Device.isDevice) return 0;
   const { granted } = await Notifications.getPermissionsAsync();
   if (!granted) return 0;
 
@@ -397,6 +438,7 @@ export async function rescheduleBirthdays(students: Student[]) {
 }
 
 export async function cancelBirthdays() {
+  if (!supported) return;
   const pending = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     pending
@@ -411,6 +453,7 @@ const isReminder = (kind: unknown) =>
 
 /** Remove only our reminders, leaving any other notification alone. */
 export async function cancelClassReminders() {
+  if (!supported) return;
   const pending = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     pending
@@ -421,6 +464,7 @@ export async function cancelClassReminders() {
 
 /** How many reminders are currently queued — shown in the profile screen. */
 export async function scheduledReminderCount() {
+  if (!supported) return 0;
   const pending = await Notifications.getAllScheduledNotificationsAsync();
   return pending.filter((n) => isReminder(n.content.data?.kind)).length;
 }
@@ -435,7 +479,7 @@ export async function scheduledReminderCount() {
  * to FCM directly.
  */
 export async function getDevicePushToken(): Promise<string | null> {
-  if (!Device.isDevice) return null;
+  if (!supported || !Device.isDevice) return null;
   try {
     const { granted } = await Notifications.getPermissionsAsync();
     if (!granted) return null;
