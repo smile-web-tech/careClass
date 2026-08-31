@@ -178,9 +178,20 @@ export async function importStudentsSheet(): Promise<void> {
       outcome.keptForHistory
         ? t('csv.keptHistory', { count: outcome.keptForHistory })
         : '',
-      // Imported students arrive in no class, and a teacher who is not told
-      // that reads a students list full of "no group" as a broken import.
-      outcome.added ? t('csv.assignGroups') : '',
+      // What the Groups column did, when the file had one. Said out loud
+      // because creating a class is the one thing an import does that the
+      // teacher did not ask for by name, and they should find it in the list
+      // rather than discover it.
+      outcome.groupsCreated ? t('csv.groupsMade', { count: outcome.groupsCreated }) : '',
+      outcome.joined ? t('csv.groupsJoined', { count: outcome.joined }) : '',
+      /*
+        Only where the file said nothing about classes.
+
+        A teacher whose file *did* carry the column has just been told what it
+        did, and telling them in the same breath that their students are in no
+        class would be telling them something untrue.
+      */
+      outcome.added && !outcome.joined ? t('csv.assignGroups') : '',
     ].filter(Boolean);
 
     await showAlert(t('csv.imported'), lines.join('\n\n'), 'success');

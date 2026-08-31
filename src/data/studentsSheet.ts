@@ -32,19 +32,28 @@
  *
  * ## What travels, and what deliberately does not
  *
- * Everything on a student except two things.
+ * Everything on a student except the photograph, which is a picture and not a
+ * cell — pictures are added by hand afterwards, and a column of base64 would
+ * make the file unreadable in the tool it exists to be read in.
  *
- * The photograph, because it is a picture and not a cell — they are added by
- * hand afterwards, and a column of base64 would make the file unreadable in the
- * tool it exists to be read in.
+ * ## Classes are added, never taken away
  *
- * And which classes they are in. That column existed and was removed: it could
- * only name active groups, so re-importing a class list took students out of
- * the courses they had finished, emptied archived groups and dropped
- * everybody's level. Every attempt to fix it was another rule about which
- * memberships a spreadsheet may overrule, and the honest answer turned out to
- * be none of them. A file carries who a student *is*; the app carries which
- * classes they are in.
+ * The Groups column was removed once, and for a real reason: it used to *set*
+ * a student's memberships to whatever the cell said. A cell can only name the
+ * classes a teacher happened to type, so re-importing this year's list took
+ * students out of the courses they had finished, emptied archived groups and
+ * dropped everybody's level with them.
+ *
+ * It is back, reading in one direction only. A name in the cell puts the
+ * student in that class — joining the existing one, or creating it when there
+ * is no class by that name. A name *missing* from the cell does nothing at all.
+ * That single rule is what makes the column safe: there is no sequence of
+ * imports that can cost a student a course they have done, because nothing here
+ * can remove them from anything.
+ *
+ * The cost is that a class cannot be left by deleting it from a spreadsheet.
+ * That is done from the group's roster screen, where the teacher can see the
+ * class they are emptying.
  *
  * The id column is read but never written, for a similar reason from the other
  * direction — see `readOnly` on `Column`.
@@ -55,7 +64,16 @@ import type { Gender, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { baseForLevel, levelOf, studentCourses } from '@/lib/courses';
+import { toKey } from '@/lib/date';
+import {
+  GROUP_SEP,
+  groupKey,
+  indexGroupsByName,
+  mergeGroupIds,
+  splitGroups,
+} from '@/lib/groupNames';
 import { genderFromSurname, joinName, splitName, surnameOf } from '@/lib/names';
+import { termOf } from '@/lib/term';
 import { accentNames } from '@/theme';
 import { readXlsx, serialToDate, writeXlsx } from '@/lib/xlsx';
 import { strFromU8 } from 'fflate';
@@ -102,6 +120,7 @@ type CsvRow = {
   birthDate: string;
   address: string;
   school: string;
+  groups: string;
   level: string;
   documentId: string;
   parentName: string;
@@ -155,6 +174,30 @@ const COLUMNS: Column[] = [
   },
   { key: 'address', headingKey: 'csv.address', aliases: ['address', 'salgy', 'адрес'] },
   { key: 'school', headingKey: 'csv.school', aliases: ['school', 'mekdep', 'школа'] },
+  /*
+    The classes a student is in, one cell, separated by commas.
+
+    Read as instructions to join, never as the complete list — see the note at
+    the top of this file. Written out in full, archived courses included,
+    because the file is then a true record of what a student has done and
+    re-importing it cannot do any harm.
+  */
+  {
+    key: 'groups',
+    headingKey: 'csv.groups',
+    aliases: [
+      'group',
+      'groups',
+      'class',
+      'classes',
+      'topar',
+      'toparlar',
+      'группа',
+      'группы',
+      'класс',
+      'классы',
+    ],
+  },
   {
     key: 'level',
     headingKey: 'students.level',
@@ -243,7 +286,6 @@ const normalise = (s: string) =>
     .replace(/[\s_\-.'’\/]/g, '')
     .trim();
 
-/** More than one group in one cell, since a student can be in several. */
 
 /* -------------------------------------------------------------------------- */
 /* Writing                                                                    */
@@ -273,6 +315,18 @@ function rowFor(student: Student, groups: Group[]): string[] {
     birthDate: student.birthDate ?? '',
     address: student.address ?? '',
     school: student.school ?? '',
+    /*
+      Every class, the archived ones included.
+
+      A file listing only this term's courses would look, to the teacher reading
+      it, like the app had forgotten last term's. And it costs nothing to write
+      them: reading is additive, so a row naming a course the student is already
+      in is a row that changes nothing.
+    */
+    groups: groups
+      .filter((g) => student.groupIds.includes(g.id))
+      .map((g) => g.name)
+      .join(GROUP_SEP),
     // The level as a teacher reads it, not the base stored behind it. A column
     // of bases would be a column of numbers that do not match the app.
     level: String(levelOf(student, groups)),
@@ -322,6 +376,9 @@ export function sampleStudentsXlsx(): Uint8Array {
     phone: '+993 65 123456',
     email: 'aygul@example.com',
     birthDate: '2011-03-15',
+    // Two classes, comma separated. A name that matches a class the teacher
+    // already has puts the student in it; a name that matches nothing makes it.
+    groups: `Matematika A2${GROUP_SEP}Iňlis dili B1`,
     // The level as the teacher reads it. Blank means "count it from the
     // courses in this app", which is right for anyone who started here.
     level: '2',
@@ -482,6 +539,18 @@ export type ParsedStudent = {
   sourceId?: string;
   student: Omit<Student, 'id' | 'groupIds'>;
   /**
+   * The classes named in the row, as written.
+   *
+   * Names rather than ids, because the file cannot know an id and a teacher
+   * types what they call the class. Resolved against the groups this account
+   * holds at the moment the import runs — see `applyStudentSheet`.
+   *
+   * Empty means the row said nothing about classes, which is not the same as
+   * saying the student is in none: nothing is what happens to their
+   * memberships.
+   */
+  groupNames: string[];
+  /**
    * The level as the file states it, before it is turned into a stored base.
    *
    * Converted only once the student's groups are known — the base is the level
@@ -591,6 +660,7 @@ export function studentsFromRows(rows: string[][]): ParsedStudent[] {
 
     out.push({
       sourceId: maybe(value(row, 'id')),
+      groupNames: splitGroups(value(row, 'groups')),
       level: levelFrom(value(row, 'level')),
       student: {
         name,
@@ -677,6 +747,10 @@ export type ImportOutcome = {
    * have a finished course behind them.
    */
   keptForHistory: number;
+  /** Classes the file named that this account did not have, so they were made. */
+  groupsCreated: number;
+  /** Memberships added. Counted per student per class, and never removed. */
+  joined: number;
 };
 
 /**
@@ -807,6 +881,8 @@ export async function applyStudentSheet(
     updated: 0,
     removed: 0,
     keptForHistory: 0,
+    groupsCreated: 0,
+    joined: 0,
   };
 
   /*
@@ -856,39 +932,91 @@ export async function applyStudentSheet(
   }
 
   /*
-    Nothing here touches a single membership, and that is the point.
+    Class names to class ids, making the ones that are not here yet.
 
-    The file used to carry a Groups column, and it caused more trouble than it
-    saved: it could name only active groups, so re-importing a class list took
-    students out of the courses they had finished, emptied archived groups and
-    dropped everybody's level. Every workaround for that was a rule about which
-    memberships a spreadsheet is allowed to overrule, and the honest answer
-    turned out to be none of them.
+    Built once and mutated as it goes, so twenty rows naming the same new class
+    create one class and all twenty join it — resolving each row against the
+    store on its own would create twenty classes with the same name.
 
-    So a spreadsheet now carries who a student *is*, and the app carries which
-    classes they are in. Imported students arrive in no group and are added to
-    one from the group's roster screen, which takes a tap each and cannot
-    quietly rewrite a term of history.
+    `indexGroupsByName` decides which class an ambiguous name means.
   */
+  const groupIds = indexGroupsByName(state.groups);
+
+  const resolveGroups = (names: string[]): string[] =>
+    names.map((name) => {
+      const key = groupKey(name);
+      const found = groupIds.get(key);
+      if (found) return found;
+
+      /*
+        A class with a name and nothing else.
+
+        No days, no room, no subject: the file did not say, and inventing a
+        Monday four o'clock would put sessions in the teacher's calendar that
+        nobody agreed to. A group with no slots simply shows no sessions until
+        they are set, which is a visible, fixable state — and it is already how
+        the group form behaves for a course whose times are not settled.
+
+        The term is this one, which is what a teacher importing a class list in
+        September means. Without it `termOfGroup` would fall back to the current
+        term anyway, so this only makes the answer stable as the year turns.
+      */
+      const id = state.addGroup({
+        name: name.trim(),
+        subject: '',
+        room: '',
+        slots: [],
+        term: termOf(toKey(new Date())),
+      });
+      groupIds.set(key, id);
+      outcome.groupsCreated += 1;
+      return id;
+    });
+
   for (const [i, row] of parsed.entries()) {
     const existingId = matches.get(i);
+    const named = resolveGroups(row.groupNames);
 
     if (existingId) {
       /*
-        `groupIds` is not in this patch at all.
+        Memberships are unioned, never replaced.
 
-        `accent` is left out for a related reason: the parser hands colours out
-        round robin, so including it reshuffled the whole roster's colours on
-        every import, and the colour on an existing student is one the teacher
-        has been recognising them by. `photoPath` is absent from a parsed row
-        rather than empty, so it is not in the patch and is not cleared either.
+        This is the whole reason the Groups column is safe to have back. A
+        student keeps every class they were already in — finished courses,
+        archived ones, classes the teacher added by hand and never wrote down —
+        and gains the ones this row names. Nothing a spreadsheet can say takes a
+        course away from anybody.
+
+        `accent` is left out of the patch: the parser hands colours out round
+        robin, so including it reshuffled the whole roster's colours on every
+        import, and the colour on an existing student is one the teacher has
+        been recognising them by. `photoPath` is absent from a parsed row rather
+        than empty, so it is not in the patch and is not cleared either.
       */
       const { accent: _ignored, ...fields } = row.student;
       const held = useStore.getState().students.find((s) => s.id === existingId);
-      updateStudent(existingId, { ...fields, ...levelPatch(row, held?.groupIds ?? []) });
+      const before = held?.groupIds ?? [];
+      const after = mergeGroupIds(before, named);
+      const joined = after.length - before.length;
+
+      /*
+        `groupIds` only where it actually changed.
+
+        Sending it otherwise is not merely wasteful: a mirrored `updateStudent`
+        deletes and rewrites that student's whole `student_groups` row set, so
+        an import of a file with no Groups column at all would rewrite sixty
+        rosters on the server to arrive at exactly what was already there.
+      */
+      updateStudent(existingId, {
+        ...fields,
+        ...(joined ? { groupIds: after } : {}),
+        ...levelPatch(row, after),
+      });
+      outcome.joined += joined;
       outcome.updated += 1;
     } else {
-      addStudent({ ...row.student, groupIds: [], ...levelPatch(row, []) });
+      addStudent({ ...row.student, groupIds: named, ...levelPatch(row, named) });
+      outcome.joined += named.length;
       outcome.added += 1;
     }
   }
