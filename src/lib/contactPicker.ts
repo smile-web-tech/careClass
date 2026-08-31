@@ -27,6 +27,7 @@
  * question.
  */
 import * as Contacts from 'expo-contacts';
+import { Platform } from 'react-native';
 
 import { showAlert, showDialog } from '@/components/Dialog';
 import type { TranslationKey } from '@/i18n';
@@ -34,6 +35,22 @@ import { translateNow } from '@/i18n/useT';
 
 const t = (key: TranslationKey, vars?: Record<string, string | number>) =>
   translateNow(key, vars);
+
+/**
+ * Whether there is an address book to open.
+ *
+ * There is not, in a browser. `expo-contacts` still resolves on web and still
+ * hands back the picker, and calling it throws — which the callers turn into
+ * "ClassCare needs access to your contacts", a message about a permission that
+ * has nothing to do with what went wrong and that the teacher cannot act on.
+ *
+ * So it is answered here, before the call, in words that are true.
+ */
+async function noAddressBook(): Promise<boolean> {
+  if (Platform.OS !== 'web') return false;
+  await showAlert(t('students.importContacts'), t('error.phoneOnly'), 'danger');
+  return true;
+}
 
 /** What the teacher picked out of a contact, or null if they backed out. */
 export type PickedContact = {
@@ -50,6 +67,7 @@ export type PickedContact = {
  * caller should simply leave the field alone.
  */
 export async function pickPhoneNumber(): Promise<string | null> {
+  if (await noAddressBook()) return null;
   const contact = await Contacts.Contact.presentPicker();
   if (!contact) return null;
 
@@ -65,6 +83,7 @@ export async function pickPhoneNumber(): Promise<string | null> {
  * of their fields is both slower and more than the teacher agreed to hand over.
  */
 export async function pickContact(): Promise<PickedContact | null> {
+  if (await noAddressBook()) return null;
   const contact = await Contacts.Contact.presentPicker();
   if (!contact) return null;
 

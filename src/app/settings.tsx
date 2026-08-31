@@ -12,7 +12,6 @@
  * app's own details.
  */
 import Constants from 'expo-constants';
-import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -42,6 +41,7 @@ import {
   scheduledReminderCount,
   type ReminderLead,
 } from '@/lib/notifications';
+import { pickOneFile } from '@/lib/filePicker';
 import { importFromFile } from '@/lib/importFlow';
 import { hasSupabase } from '@/lib/supabase';
 import { radius, space, useTheme, useThemedStyles, type Theme, type ThemePref } from '@/theme';
@@ -133,16 +133,29 @@ export default function Settings() {
       return;
     }
 
-    // One file, so the single-file overload: it hands back the `File` itself
-    // rather than an array.
-    const picked = await File.pickFileAsync({ mimeTypes: ['application/json', '*/*'] });
-    if (picked.canceled) return;
+    /*
+      Every step inside the same try, the picker included.
 
-    setBusyBackup('import');
+      It used to sit outside, and a throw from it went nowhere: this is an async
+      handler nobody awaits, so the rejection was swallowed and the button did
+      nothing at all — no picker, no message, no clue. Which is exactly what a
+      broken button looks like, and it is what web does, where the whole
+      file-system module is a stub that resolves `undefined`.
+    */
     try {
-      await importFromFile(picked.result);
-    } finally {
-      setBusyBackup(null);
+      // One file, so the single-file overload: it hands back the `File` itself
+      // rather than an array.
+      const picked = await pickOneFile(['application/json', '*/*']);
+      if (picked.canceled) return;
+
+      setBusyBackup('import');
+      try {
+        await importFromFile(picked.result);
+      } finally {
+        setBusyBackup(null);
+      }
+    } catch (e) {
+      showError(e, t('backup.importFailed'));
     }
   };
 

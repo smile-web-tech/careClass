@@ -25,6 +25,7 @@ import {
 import type { TranslationKey } from '@/i18n';
 import { translateNow } from '@/i18n/useT';
 import { backupsDirectory } from '@/lib/appFolder';
+import { NoFilePicker, pickOneFile } from '@/lib/filePicker';
 
 const t = (key: TranslationKey, vars?: Record<string, string | number>) =>
   translateNow(key, vars);
@@ -132,18 +133,16 @@ export async function importStudentsSheet(): Promise<void> {
   running = true;
 
   try {
-    const picked = await File.pickFileAsync({
-      // `*/*` alongside the specific types because Android file managers
+    const picked = await pickOneFile([
+      // The wildcard alongside the specific types because Android file managers
       // routinely hand a spreadsheet over as `application/octet-stream`, and a
       // filter that excludes it makes the teacher's own file unpickable.
-      mimeTypes: [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-excel',
-        'text/csv',
-        'text/comma-separated-values',
-        '*/*',
-      ],
-    });
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv',
+      'text/comma-separated-values',
+      '*/*',
+    ]);
     if (picked.canceled) return;
 
     // Bytes rather than text: a workbook is a zip, and decoding one as UTF-8
@@ -196,7 +195,15 @@ export async function importStudentsSheet(): Promise<void> {
 
     await showAlert(t('csv.imported'), lines.join('\n\n'), 'success');
   } catch (e) {
-    await offerTemplate(e);
+    /*
+      A platform with no picker is not a bad spreadsheet.
+
+      `offerTemplate` says "we could not read that file, here is one that
+      works", which is the right thing to say about a file and a misleading
+      thing to say when no file was ever chosen.
+    */
+    if (e instanceof NoFilePicker) await showAlert(t('csv.import'), e.message, 'danger');
+    else await offerTemplate(e);
   } finally {
     running = false;
   }

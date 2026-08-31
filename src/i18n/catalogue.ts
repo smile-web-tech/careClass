@@ -926,6 +926,7 @@ const tk = {
   'error.unknownMessage': 'Gaýtadan synanyş. Gaýtalansa, programmany täzeden aç.',
   'error.cannotOpen': 'Açyp bolmady',
   'error.noAppFor': 'Bu enjamda {what} üçin programma ýok.',
+  'error.phoneOnly': 'Bu telefondaky ClassCare programmasynda işleýär. Brauzerde elýeterli däl.',
 } as const;
 
 export type TranslationKey = keyof typeof tk;
@@ -1846,6 +1847,7 @@ const ru: Record<TranslationKey, string> = {
   'error.unknownMessage': 'Попробуйте снова. Если повторится, перезапустите приложение.',
   'error.cannotOpen': 'Не удалось открыть',
   'error.noAppFor': 'На этом устройстве нет приложения для {what}.',
+  'error.phoneOnly': 'Это работает в приложении ClassCare на телефоне. В браузере недоступно.',
 };
 
 const en: Record<TranslationKey, string> = {
@@ -2761,6 +2763,7 @@ const en: Record<TranslationKey, string> = {
   'error.unknownMessage': 'Please try again. If it keeps happening, restart the app.',
   'error.cannotOpen': 'Cannot open',
   'error.noAppFor': 'This device has no app registered for {what}.',
+  'error.phoneOnly': 'This works in the ClassCare app on a phone. A browser cannot do it.',
 };
 
 export const catalogue = { tk, ru, en } as const;
