@@ -64,6 +64,8 @@ type Recipient = {
   studentPhone: string;
   address: string;
   birthDate: string;
+  /** Absences recorded for the course this message is about. */
+  missedClasses: number;
 };
 
 const json = (body: unknown, status = 200) =>
@@ -79,7 +81,8 @@ const cors = {
 };
 
 /**
- * Substitute the placeholders the composer offers — all eight of them.
+ * Substitute the placeholders the composer offers — all nine of them, plus the
+ * two aliases a teacher writing in Turkmen reaches for.
  *
  * The same set and the same order as `renderBody` in `src/lib/messageVars.ts`,
  * which does this for SMS. They have to agree: one draft, two channels, and a
@@ -94,7 +97,11 @@ function render(template: string, r: Recipient) {
     .replaceAll('{parent_name}', r.parentName)
     .replaceAll('{phone}', r.studentPhone)
     .replaceAll('{address}', r.address)
-    .replaceAll('{birthdate}', r.birthDate);
+    .replaceAll('{birthdate}', r.birthDate)
+    .replaceAll('{missed_classes}', String(r.missedClasses))
+    .replaceAll('{parent}', r.parentName)
+    .replaceAll('{jynsy}', r.gender)
+    .replaceAll('{jyns}', r.gender);
 }
 
 /** E.164-ish: Uzbek numbers are stored spaced, gateways want digits only. */
@@ -632,6 +639,34 @@ Deno.serve(async (req) => {
   for (const l of links ?? [])
     if (!groupOfStudent.has(l.student_id)) groupOfStudent.set(l.student_id, l.group_id);
 
+  /*
+    Absences for `{missed_classes}`, counted against the same course
+    `{group}` and `{time}` name — not every group the student is in.
+
+    One query for the whole batch rather than one per student: a class of
+    thirty is thirty avoidable round trips otherwise. Failure here is not
+    failure to send — a class reminder does not need this number to be right,
+    and a teacher waiting on a send should not lose the whole thing because a
+    supplementary count could not be read. Missing counts default to zero,
+    the same as the device does for a student who has no attendance rows yet.
+  */
+  const missedByStudent = new Map<string, number>();
+  const { data: absenceRows, error: absenceError } = await db
+    .from('attendance')
+    .select('student_id, group_id')
+    .eq('teacher_id', teacherId)
+    .eq('status', 'absent')
+    .in('student_id', studentIds)
+    .in('group_id', groupIds);
+  if (absenceError) {
+    console.error('attendance lookup for {missed_classes} failed:', absenceError.message);
+  } else {
+    for (const row of absenceRows ?? []) {
+      if (row.group_id !== groupOfStudent.get(row.student_id)) continue;
+      missedByStudent.set(row.student_id, (missedByStudent.get(row.student_id) ?? 0) + 1);
+    }
+  }
+
   // Build the recipient list. "Both" produces two rows for the same student —
   // one to them, one to their guardian — each rendered with its own name.
   const recipients: Recipient[] = [];
@@ -651,6 +686,7 @@ Deno.serve(async (req) => {
       studentPhone: (s.phone ?? '').trim(),
       address: (s.address ?? '').trim(),
       birthDate: fullDate(s.birth_date, language),
+      missedClasses: missedByStudent.get(s.id) ?? 0,
     };
 
     if (audience === 'students' || audience === 'both') {

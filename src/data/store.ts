@@ -23,7 +23,7 @@ import type {
 } from '@/data/types';
 import type { Language } from '@/i18n';
 import { DEFAULT_LANGUAGE, setActiveLanguage } from '@/i18n';
-import { at, toKey } from '@/lib/date';
+import { at, fromKey, toKey } from '@/lib/date';
 import { runsOn } from '@/lib/schedule';
 import { termOfGroup, termsFor } from '@/lib/term';
 import { accentNames, type AccentName } from '@/theme';
@@ -1329,7 +1329,10 @@ export function useRecentSessions(student?: Student, limit = 3) {
   );
 }
 
-/** Absences for a student in a group over the trailing `weeks` — the roster badge. */
+/**
+ * Absences for a student in a group over the trailing `weeks` — the roster
+ * badge, which only ever asks about "lately".
+ */
 export function absenceCount(studentId: string, groupId: string, weeks = 6) {
   const { groups, attendance } = useStore.getState();
   const g = groups.find((x) => x.id === groupId);
@@ -1352,6 +1355,43 @@ export function absenceCount(studentId: string, groupId: string, weeks = 6) {
     }
   }
   return n;
+}
+
+/**
+ * How many weeks of a group's own life to walk for `missedClasses`.
+ *
+ * Not a fixed window: a warning about accumulated absences means the whole
+ * course, and a course that has been running for four months needs four
+ * months looked at or the count understates exactly the thing a teacher is
+ * about to tell a parent. Derived from `startsOn` when there is one; where
+ * there is not — a group made before dates existed — the guess is a term,
+ * which is the same length this app already assumes a course runs for
+ * everywhere else it has to guess. Capped at two years either way, so a typo
+ * in a start date cannot turn one message into a two-thousand-iteration loop.
+ */
+const TERM_WEEKS = 26;
+const MAX_LOOKBACK_WEEKS = 104;
+
+function courseWeeks(group: Pick<Group, 'startsOn'>, now: Date): number {
+  if (!group.startsOn) return TERM_WEEKS;
+  const days = Math.max(0, Math.ceil((now.getTime() - fromKey(group.startsOn).getTime()) / 86_400_000));
+  return Math.min(MAX_LOOKBACK_WEEKS, Math.ceil(days / 7) + 1);
+}
+
+/**
+ * Absences for a student in one group, for the `{missed_classes}` placeholder.
+ *
+ * Unlike `absenceCount`, which is a snapshot for a badge, this is meant to
+ * answer "how many has {name} missed" as a teacher would answer it out loud —
+ * across the course, not the last six weeks. Only marks actually recorded as
+ * `absent` count; a session nobody has taken a register for is not evidence of
+ * anything and is silently skipped, the same as everywhere else attendance is
+ * read.
+ */
+export function missedClasses(studentId: string, groupId: string, now = new Date()) {
+  const g = useStore.getState().groups.find((x) => x.id === groupId);
+  if (!g) return 0;
+  return absenceCount(studentId, groupId, courseWeeks(g, now));
 }
 
 export type { Group, Message, Reply, Student, Session, AttendanceStatus };

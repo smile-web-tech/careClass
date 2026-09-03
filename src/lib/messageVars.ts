@@ -23,6 +23,15 @@
  * even that says nothing, the neutral word is used: `çagaňyz`, "your child". A
  * message that reads slightly generally is fine; one that calls somebody's
  * daughter their son is not.
+ *
+ * ## Aliases
+ *
+ * `{parent}` is `{parent_name}` and `{jynsy}` / `{jyns}` is `{gender}` — the
+ * Turkmen word for it, which is what a teacher who thinks in Turkmen reaches
+ * for before they reach for the English one this app happens to use for the
+ * chip. Not offered as their own chips, so the row does not carry two buttons
+ * that insert the same thing; a template typed or pasted in with either spelling
+ * still renders correctly rather than arriving with the brace intact.
  */
 import type { Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
@@ -39,6 +48,7 @@ export const PLACEHOLDERS = [
   '{phone}',
   '{address}',
   '{birthdate}',
+  '{missed_classes}',
 ] as const;
 
 export type MessageVars = {
@@ -51,6 +61,8 @@ export type MessageVars = {
   phone: string;
   address: string;
   birthDate: string;
+  /** Absences recorded for this course. See `missedClasses` in `data/store`. */
+  missedClasses: number;
 };
 
 /** "your daughter" / "your son" / "your child", in the app's language. */
@@ -74,6 +86,12 @@ export function varsFor(
   student: Student,
   group: { name: string } | undefined,
   time: string,
+  /**
+   * Computed by the caller rather than here, the same as `time`: it needs the
+   * attendance store, which this module deliberately knows nothing about so it
+   * stays usable from the Edge Function's Deno runtime too.
+   */
+  missedClasses: number,
 ): MessageVars {
   return {
     name: student.name,
@@ -84,6 +102,7 @@ export function varsFor(
     phone: student.phone?.trim() ?? '',
     address: student.address?.trim() ?? '',
     birthDate: student.birthDate ? fullDate(fromKey(student.birthDate)) : '',
+    missedClasses,
   };
 }
 
@@ -103,5 +122,9 @@ export function renderBody(template: string, vars: MessageVars): string {
     .replaceAll('{parent_name}', vars.parentName)
     .replaceAll('{phone}', vars.phone)
     .replaceAll('{address}', vars.address)
-    .replaceAll('{birthdate}', vars.birthDate);
+    .replaceAll('{birthdate}', vars.birthDate)
+    .replaceAll('{missed_classes}', String(vars.missedClasses))
+    .replaceAll('{parent}', vars.parentName)
+    .replaceAll('{jynsy}', vars.gender)
+    .replaceAll('{jyns}', vars.gender);
 }
