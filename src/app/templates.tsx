@@ -8,8 +8,10 @@
  * starter still follows the teacher's language; an edited one is their words
  * and stays put.
  */
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -105,6 +107,32 @@ export default function Templates() {
     setEditingId(null);
     setEditingBuiltIn(null);
   };
+
+  /*
+    The editors are a state inside this one screen, not a route of their own —
+    so tapping the on-screen chevron and calling `closeEditor` was the whole
+    fix for one way back can be asked for, and the phone's own back button is
+    the other. Unhandled, it goes to the stack instead of the state: Android's
+    back button pops the *route*, which is this whole modal, and a teacher two
+    taps into writing a template lands back in Settings rather than on the
+    list they were just looking at.
+
+    Same fix as the selection mode on the Messages tab: catch it while there is
+    editor state to close, close that, and consume the event so the route is
+    left alone. Falls through to the normal pop — out of Templates entirely —
+    the moment neither editor is open, which is the one time that pop is right.
+  */
+  useFocusEffect(
+    useCallback(() => {
+      if (editingId === null && editingGrade === null) return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (editingGrade !== null) setEditingGrade(null);
+        else closeEditor();
+        return true;
+      });
+      return () => sub.remove();
+    }, [editingId, editingGrade]),
+  );
 
   const save = () => {
     if (!ready) {

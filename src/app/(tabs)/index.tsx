@@ -245,6 +245,7 @@ export default function Home() {
                 params: { group: upNextGroup.id },
               })
             }
+            onOpen={() => router.push(`/group/${upNextGroup.id}`)}
           />
         ) : null}
 
@@ -444,6 +445,7 @@ function UpNextCard({
   studentCount,
   onAttendance,
   onNotify,
+  onOpen,
 }: {
   group: Group;
   date: string;
@@ -452,6 +454,7 @@ function UpNextCard({
   studentCount: number;
   onAttendance: () => void;
   onNotify: () => void;
+  onOpen: () => void;
 }) {
   const t = useT();
   const { color } = useTheme();
@@ -461,7 +464,19 @@ function UpNextCard({
 
   return (
     <View style={styles.heroWrap}>
-      <View style={styles.hero}>
+      {/*
+        The card itself opens the group now, same as every row below it. It
+        used to be a plain `View`: Attendance and Notify worked because they
+        are their own `Press`, and everything around them — the name, the
+        room, the clock — was not wired to anything, so tapping the one card
+        the teacher looks at first on opening the app did nothing.
+
+        `Press` wraps the whole card and the two buttons stay their own nested
+        `Press`; RN routes a tap to the innermost pressable it lands on, so
+        pressing Attendance opens Attendance and not the group, the same
+        nesting `GroupRow` already relies on further down this screen.
+      */}
+      <Press onPress={onOpen} style={styles.hero}>
         <AngledGradient colors={[color.heroFrom, color.heroTo]} angle={150} />
         <Ring
           size={190}
@@ -502,7 +517,7 @@ function UpNextCard({
             <Text style={styles.heroSecondaryLabel}>{t('home.notify')}</Text>
           </Press>
         </View>
-      </View>
+      </Press>
     </View>
   );
 }
