@@ -930,32 +930,57 @@ export default function Compose() {
         animationType="slide"
         onRequestClose={() => setTemplatesOpen(false)}>
         <Press style={styles.scrim} onPress={() => setTemplatesOpen(false)} />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
+        {/*
+          Capped as a fraction of the screen, not at a pixel height.
+
+          The sheet used to be however tall its contents were, which was fine
+          with three starters and stopped being fine at five plus whatever the
+          teacher has written: the rows ran off the bottom of the screen and
+          took "Manage templates" with them, and nothing scrolled. A fixed
+          `maxHeight` would only move the problem to the next phone — 85% of
+          whatever this screen is leaves the scrim visible to tap on, and is
+          shorter than that whenever the list is.
+        */}
+        <View
+          style={[
+            styles.sheet,
+            { maxHeight: '85%', paddingBottom: Math.max(insets.bottom, 16) + 12 },
+          ]}>
           <View style={styles.grabber} />
           <Text style={[text.sheetTitle, styles.ink, { marginBottom: 4 }]}>
             {t('messages.templates')}
           </Text>
           <Txt style={styles.sheetHint}>{t('messages.placeholderHint')}</Txt>
-          {[...savedTemplates, ...starterTemplates].map((template, i) => (
-            <View key={template.id}>
-              {i > 0 ? <Divider /> : null}
-              <Press
-                onPress={() => {
-                  setDraft(template.body);
-                  setTemplatesOpen(false);
-                }}
-                style={styles.templateRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.templateTitle}>{template.title}</Text>
-                  <Text style={styles.templateBody} numberOfLines={2}>
-                    {template.body}
-                  </Text>
-                </View>
-                <Icon name="disclosure" size={16} color={color.chevron} />
-              </Press>
-            </View>
-          ))}
 
+          {/*
+            Only the list scrolls. The title says what the sheet is and "Manage
+            templates" is the way out of it; both scrolling away would leave a
+            teacher halfway down a list of their own wording with no heading and
+            no exit.
+          */}
+          <ScrollView style={styles.templateList} keyboardShouldPersistTaps="handled">
+            {[...savedTemplates, ...starterTemplates].map((template, i) => (
+              <View key={template.id}>
+                {i > 0 ? <Divider /> : null}
+                <Press
+                  onPress={() => {
+                    setDraft(template.body);
+                    setTemplatesOpen(false);
+                  }}
+                  style={styles.templateRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.templateTitle}>{template.title}</Text>
+                    <Text style={styles.templateBody} numberOfLines={2}>
+                      {template.body}
+                    </Text>
+                  </View>
+                  <Icon name="disclosure" size={16} color={color.chevron} />
+                </Press>
+              </View>
+            ))}
+          </ScrollView>
+
+          <Divider />
           <Press
             onPress={() => {
               setTemplatesOpen(false);
@@ -1117,6 +1142,14 @@ const makeStyles = ({ color, accents }: Theme) =>
       marginBottom: 14,
     },
     sheetHint: { fontSize: 13, color: color.muted, marginBottom: 8 },
+    /*
+      Shrinks, never grows.
+
+      `flexGrow: 0` so a sheet with two templates in it stays two templates
+      tall rather than stretching to the cap, and `flexShrink: 1` so a long one
+      gives way to the header and the footer instead of pushing them out.
+    */
+    templateList: { flexGrow: 0, flexShrink: 1 },
     templateRow: {
       flexDirection: 'row',
       alignItems: 'center',
