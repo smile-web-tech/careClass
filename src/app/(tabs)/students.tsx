@@ -237,7 +237,7 @@ export default function Students() {
             </Text>
           </View>
           <IconButton
-            name="check"
+            name="grades"
             iconSize={18}
             fg={color.inkSoft}
             accessibilityLabel={t('nav.grades')}

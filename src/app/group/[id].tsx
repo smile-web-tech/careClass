@@ -238,7 +238,7 @@ export default function GroupDetail() {
           <Button
             grow
             variant="outline"
-            icon="check"
+            icon="grades"
             label={t('nav.grades')}
             onPress={() => router.push(`/grades?group=${group.id}`)}
           />

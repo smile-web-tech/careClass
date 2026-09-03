@@ -188,6 +188,24 @@ const GLYPHS = {
       'M2.6 15.2v-2.1c0-1.3 1-2.3 2.3-2.3h8.2c1.3 0 2.3 1 2.3 2.3v2.1',
     ],
   },
+  /*
+    Grades. Three ascending bars, sharing one baseline.
+
+    Chosen over a checkmark deliberately: attendance already owns that mark
+    everywhere in the app, and the grades button used to be a second check
+    beside it on the group screen and on the students tab, so both buttons
+    read as the same action from a glance. Bars are the standard shorthand for
+    scores and read as "grades" rather than "done", which a checkmark cannot.
+  */
+  grades: {
+    box: 18,
+    sw: 1.6,
+    rects: [
+      [2.8, 10.2, 3.4, 5, 1],
+      [7.3, 6.8, 3.4, 8.4, 1],
+      [11.8, 3.4, 3.4, 11.8, 1],
+    ],
+  },
   /** Settings. A gear, drawn as a ring with eight teeth. */
   gear: {
     box: 18,
