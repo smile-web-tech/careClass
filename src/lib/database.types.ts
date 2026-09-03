@@ -155,7 +155,11 @@ export type MessageDeliveryRow = {
   message_id: string;
   teacher_id: string;
   student_id: string | null;
-  recipient: 'student' | 'parent';
+  /**
+   * Who this copy went to. `parent` is the mother (parent_name, parent_phone),
+   * `parent2` the father. Widened from two values in migration 0023.
+   */
+  recipient: 'student' | 'parent' | 'parent2';
   channel: MessageChannelRow;
   destination: string;
   rendered: string;

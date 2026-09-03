@@ -47,8 +47,10 @@ import {
   sendSmsBatch,
   subscribeSmsDelivery,
   SYSTEM_CONFIRM_THRESHOLD,
+  type ParentTarget,
   type SmsOutcome,
 } from '@/lib/deviceSms';
+import { deviceOnlyPlaceholders, PLACEHOLDERS } from '@/lib/messageVars';
 import { describeError } from '@/lib/errors';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { builtInTemplates } from '@/lib/templates';
@@ -79,7 +81,10 @@ const writeDelivery = (
   return markSmsDelivery({
     messageId,
     studentId,
-    recipient: recipient === 'parent' ? 'parent' : 'student',
+    // Three now: the student, the mother, the father. Anything else is a key
+    // this build did not write, and the student is the safe reading.
+    recipient:
+      recipient === 'parent' ? 'parent' : recipient === 'parent2' ? 'parent2' : 'student',
     delivered: report.delivered,
     reason: report.reason,
   });
@@ -96,7 +101,13 @@ const AUDIENCES: { key: Audience; labelKey: TranslationKey }[] = [
   { key: 'both', labelKey: 'messages.audienceBoth' },
 ];
 
-const PLACEHOLDERS = ['{name}', '{group}', '{time}'];
+const PARENTS: { key: ParentTarget; labelKey: TranslationKey }[] = [
+  { key: 'mother', labelKey: 'messages.mother' },
+  { key: 'father', labelKey: 'messages.father' },
+  { key: 'both', labelKey: 'messages.bothParents' },
+];
+
+
 
 export default function Compose() {
   const t = useT();
@@ -156,6 +167,16 @@ export default function Compose() {
         : ({} as Record<string, boolean>));
   const toggleGroup = (id: string) => setPicked({ ...selection, [id]: !selection[id] });
   const [audience, setAudience] = useState<Audience>(params.audience ?? 'students');
+  /*
+    Which guardian, when the audience includes them.
+
+    Both by default: a teacher who has entered two numbers for a family entered
+    them because both are worth having, and quietly picking one of them is a
+    decision the app has no basis for. The fallback in `buildRecipients` makes
+    the other two choices safe — asking for the mother on a child whose only
+    number is the father's sends to the father rather than dropping it.
+  */
+  const [parents, setParents] = useState<ParentTarget>('both');
   const [channels, setChannels] = useState<Record<Channel, boolean>>({
     // SMS unless the phone cannot send it, in which case email is the only way
     // out and starting with nothing chosen would just be a step to nowhere.
@@ -379,6 +400,7 @@ export default function Compose() {
   // From the platform where possible, because the naive `length / 160` is wrong
   // for every message containing a Turkmen letter — those cost 70 per segment.
   const seg = countSegments(draft);
+  const deviceOnly = deviceOnlyPlaceholders(draft);
 
   /**
    * Sending is the one action that must not be optimistic. Everywhere else a
@@ -420,6 +442,7 @@ export default function Compose() {
       students: targeted,
       groups: selectedGroups,
       audience,
+      parents,
       body,
     });
     if (recipients.length === 0) return;
@@ -750,13 +773,32 @@ export default function Compose() {
           )}
 
           <Overline style={styles.label}>{t('messages.recipients')}</Overline>
-          <View style={{ marginBottom: 20 }}>
+          <View style={{ marginBottom: audience === 'students' ? 20 : 12 }}>
             <Segmented
               options={AUDIENCES.map((a) => ({ key: a.key, label: t(a.labelKey) }))}
               value={audience}
               onChange={setAudience}
             />
           </View>
+
+          {/*
+            Only where it can change anything. On a message to students alone
+            there is no guardian in the send, and a control that does nothing is
+            a control the teacher has to work out the irrelevance of.
+          */}
+          {audience !== 'students' ? (
+            <View style={{ marginBottom: 20 }}>
+              <Overline style={styles.label}>{t('messages.whichParent')}</Overline>
+              <Segmented
+                options={PARENTS.map((p) => ({ key: p.key, label: t(p.labelKey) }))}
+                value={parents}
+                onChange={setParents}
+              />
+              <Text style={[styles.infoText, { marginTop: 8 }]}>
+                {t('messages.parentFallback')}
+              </Text>
+            </View>
+          ) : null}
 
           <Overline style={styles.label}>{t('messages.sendVia')}</Overline>
           <View style={styles.channelRow}>
@@ -830,6 +872,23 @@ export default function Compose() {
               </Text>
             </View>
           </Card>
+
+          {/*
+            The placeholders the server cannot fill in.
+
+            Email is rendered by the Edge Function from its own copy of the
+            recipient, and it knows only name, group and time. A draft using the
+            rest is right in a text and would reach a parent's inbox with the
+            braces still in it, so it is said here rather than discovered there.
+          */}
+          {channels.email && deviceOnly.length ? (
+            <View style={styles.warn}>
+              <Icon name="info" size={18} color={color.warningDeep} />
+              <Text style={styles.warnText}>
+                {t('messages.smsOnlyVars', { vars: deviceOnly.join(' ') })}
+              </Text>
+            </View>
+          ) : null}
 
           {/* Only worth saying once the message is long enough for it to cost
               something — a two-word draft in Turkmen is still one segment. */}
@@ -995,7 +1054,9 @@ const makeStyles = ({ color, accents }: Theme) =>
       borderTopWidth: 1,
       borderTopColor: color.divider,
     },
-    placeholderRow: { flexDirection: 'row', gap: 7 },
+    // Eight of them now rather than three, so they wrap instead of running off
+    // the side of the card.
+    placeholderRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, flex: 1 },
     placeholderChip: {
       height: 30,
       paddingHorizontal: 10,

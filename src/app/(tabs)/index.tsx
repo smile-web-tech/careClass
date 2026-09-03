@@ -16,7 +16,7 @@ import { useT } from '@/i18n/useT';
 import { smsNumber } from '@/lib/contact';
 import { at, countdownTo, longDate, relativeSlot } from '@/lib/date';
 import { nextSessionForGroup, nextSessionOverall, roomLabel } from '@/lib/schedule';
-import { compareTerms, termLabel, termOfGroup } from '@/lib/term';
+import { chosenTerm, compareTerms, termLabel } from '@/lib/term';
 import { radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display, text } from '@/theme/type';
 
@@ -90,15 +90,31 @@ export default function Home() {
     */
     if (!q) for (const term of allTerms) buckets.set(term, []);
 
+    /*
+      Courses that state no term go in their own pile rather than into this one.
+
+      `termOfGroup` would answer with the term we happen to be in, which is what
+      the import used to write into the row: a guess wearing the clothes of an
+      answer, filed where nobody would ever go back and correct it. A course
+      with nothing said about its term is shown as waiting for one.
+    */
+    const waiting: Group[] = [];
+
     for (const g of shown) {
-      const key = termOfGroup(g);
+      const key = chosenTerm(g);
+      if (!key) {
+        waiting.push(g);
+        continue;
+      }
       const list = buckets.get(key);
       if (list) list.push(g);
       else buckets.set(key, [g]);
     }
-    return [...buckets.entries()]
+    const sorted = [...buckets.entries()]
       .sort((a, b) => compareTerms(b[0], a[0]))
       .map(([term, list]) => ({ term, groups: list }));
+
+    return { terms: sorted, waiting };
   }, [shown, allTerms, q]);
 
   const [openTerms, setOpenTerms] = useState<Record<string, boolean>>({});
@@ -242,7 +258,33 @@ export default function Home() {
         </View>
 
         <View style={styles.list}>
-          {termed.map(({ term, groups: inTerm }, i) => {
+          {/*
+            First, because it is the only block on this screen with something
+            outstanding in it. A course waiting for a term is one the teacher has
+            to touch before it files itself with the rest, and at the bottom of a
+            year of seasons it would never be seen.
+          */}
+          {termed.waiting.length ? (
+            <View style={styles.termBlock}>
+              <View style={styles.termHead}>
+                <Icon name="warning" size={14} color={color.muted} />
+                <Text style={[styles.termName, { color: color.ink }]}>{t('term.none')}</Text>
+                <Text style={styles.termCount}>{termed.waiting.length}</Text>
+              </View>
+              <Text style={styles.termEmpty}>{t('term.noneHint')}</Text>
+              {termed.waiting.map((g) => (
+                <GroupRow
+                  key={g.id}
+                  group={g}
+                  count={students.filter((s) => s.groupIds.includes(g.id)).length}
+                  now={now}
+                  onPress={() => router.push(`/group/edit?id=${g.id}`)}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {termed.terms.map(({ term, groups: inTerm }, i) => {
             const open = isOpen(term, i);
             return (
               <View key={term} style={styles.termBlock}>

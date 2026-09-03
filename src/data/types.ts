@@ -248,7 +248,7 @@ export type SentMessageLog = {
   sentAt: number;
   deliveries: {
     studentId: string;
-    recipient: 'student' | 'parent';
+    recipient: 'student' | 'parent' | 'parent2';
     channel: Channel;
     /** The number or address it went to. */
     destination: string;

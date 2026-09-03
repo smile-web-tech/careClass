@@ -64,7 +64,6 @@ import type { Gender, Group, Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
 import type { TranslationKey } from '@/i18n';
 import { baseForLevel, levelOf, studentCourses } from '@/lib/courses';
-import { toKey } from '@/lib/date';
 import {
   GROUP_SEP,
   groupKey,
@@ -73,7 +72,6 @@ import {
   splitGroups,
 } from '@/lib/groupNames';
 import { genderFromSurname, joinName, splitName, surnameOf } from '@/lib/names';
-import { termOf } from '@/lib/term';
 import { accentNames } from '@/theme';
 import { readXlsx, serialToDate, writeXlsx } from '@/lib/xlsx';
 import { strFromU8 } from 'fflate';
@@ -957,16 +955,18 @@ export async function applyStudentSheet(
         they are set, which is a visible, fixable state — and it is already how
         the group form behaves for a course whose times are not settled.
 
-        The term is this one, which is what a teacher importing a class list in
-        September means. Without it `termOfGroup` would fall back to the current
-        term anyway, so this only makes the answer stable as the year turns.
+        No term either, and that is deliberate. This used to be set to whichever
+        term the import happened to run in, which is a guess wearing the clothes
+        of an answer: it looked decided, so nobody ever went back to decide it,
+        and a class list imported in September was filed under autumn whether or
+        not that is the intake it belongs to. With none, the course shows on the
+        home screen under "no term yet" and asks.
       */
       const id = state.addGroup({
         name: name.trim(),
         subject: '',
         room: '',
         slots: [],
-        term: termOf(toKey(new Date())),
       });
       groupIds.set(key, id);
       outcome.groupsCreated += 1;

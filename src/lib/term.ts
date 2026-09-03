@@ -84,6 +84,25 @@ export function termsInUse(groups: Group[]) {
 }
 
 /**
+ * The term this course actually states, or nothing when nobody has said.
+ *
+ * The difference from `termOfGroup` is the last step, and it matters. That one
+ * always answers, falling back to the term we are in, because the places that
+ * use it are showing a course's history and "no term" is not a useful thing to
+ * tell somebody looking at a finished course.
+ *
+ * This one is allowed to say nothing, and the home screen needs that: a course
+ * created by a spreadsheet import has no term and no dates, because a file
+ * carries neither, and the honest thing is to show it as waiting for one rather
+ * than to file it under whatever season the import happened to run in. A guess
+ * put there silently is a guess nobody will ever go back and correct.
+ */
+export function chosenTerm(group: { term?: string; startsOn?: string }): string | undefined {
+  if (group.term) return group.term;
+  return group.startsOn ? termOf(group.startsOn) : undefined;
+}
+
+/**
  * Every term the teacher has, newest first.
  *
  * The union of two things, and it has to be both. `declared` are the terms they
@@ -92,16 +111,20 @@ export function termsInUse(groups: Group[]) {
  * the list whether or not anybody declared it, which is what every group made
  * before terms could be declared relies on.
  *
- * Read through `termOfGroup`, so a group with no stored term still lands
- * somewhere rather than vanishing from the list it is plainly part of.
+ * Read through `chosenTerm` rather than `termOfGroup`, so a course that states
+ * no term contributes none. Inventing the current term for it would put a term
+ * on the list that nobody chose, and then quietly file the course there — which
+ * is exactly what the import used to do.
  */
 export function termsFor(
   declared: string[],
   groups: { term?: string; startsOn?: string }[],
-  today = new Date(),
 ): string[] {
   const seen = new Set(declared);
-  for (const g of groups) seen.add(termOfGroup(g, today));
+  for (const g of groups) {
+    const term = chosenTerm(g);
+    if (term) seen.add(term);
+  }
   return [...seen].filter(Boolean).sort((a, b) => compareTerms(b, a));
 }
 

@@ -890,7 +890,7 @@ export async function recordDeviceSms(input: {
   announcement?: boolean;
   deliveries: {
     studentId: string;
-    recipient: 'student' | 'parent';
+    recipient: 'student' | 'parent' | 'parent2';
     destination: string;
     rendered: string;
     /**
@@ -965,7 +965,7 @@ export async function recordDeviceSms(input: {
 export async function markSmsDelivery(input: {
   messageId: string;
   studentId: string;
-  recipient: 'student' | 'parent';
+  recipient: 'student' | 'parent' | 'parent2';
   delivered: boolean;
   reason?: string;
 }): Promise<void> {
