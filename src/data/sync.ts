@@ -133,7 +133,9 @@ export type Op =
   | { kind: 'teacher.gradeTemplateFail'; template: string | null }
   /** The teacher's rewrites of the built-in templates, as one whole map. */
   | { kind: 'teacher.templateOverrides'; overrides: Record<string, { title: string; body: string }> }
-  | { kind: 'teacher.hiddenTemplates'; ids: string[] };
+  | { kind: 'teacher.hiddenTemplates'; ids: string[] }
+  /** The teacher's declared terms, as one whole list. See migration 0022. */
+  | { kind: 'teacher.terms'; terms: string[] };
 
 /**
  * Upload one student's picture, then point their row at it.
@@ -252,6 +254,8 @@ function perform(op: Op): Promise<unknown> {
       return api.updateTeacher({ templateOverrides: op.overrides });
     case 'teacher.hiddenTemplates':
       return api.updateTeacher({ hiddenTemplates: op.ids });
+    case 'teacher.terms':
+      return api.updateTeacher({ terms: op.terms });
   }
 }
 
@@ -608,6 +612,8 @@ function supersedes(a: Op, b: Op): boolean {
     // did. A teacher retyping a template is one write, not one per keystroke.
     case 'teacher.templateOverrides':
     case 'teacher.hiddenTemplates':
+    // Also whole-list, so the newest write is the only one that matters.
+    case 'teacher.terms':
     case 'replies.read':
       return true;
     case 'reply.read':
@@ -986,6 +992,7 @@ export async function hydrate() {
       gradeTemplateFail: teacher.gradeTemplateFail,
       templateOverrides: teacher.templateOverrides,
       hiddenTemplates: teacher.hiddenTemplates,
+      terms: teacher.terms,
     }),
   });
 
@@ -1089,6 +1096,8 @@ export const remote: StoreMirror = {
   setTemplateOverrides: (overrides) => enqueue({ kind: 'teacher.templateOverrides', overrides }),
 
   setHiddenTemplates: (ids: string[]) => enqueue({ kind: 'teacher.hiddenTemplates', ids }),
+
+  setTerms: (terms: string[]) => enqueue({ kind: 'teacher.terms', terms }),
 
   markRepliesRead: () => enqueue({ kind: 'replies.read' }),
 

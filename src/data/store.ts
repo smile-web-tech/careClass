@@ -25,7 +25,7 @@ import type { Language } from '@/i18n';
 import { DEFAULT_LANGUAGE, setActiveLanguage } from '@/i18n';
 import { at, toKey } from '@/lib/date';
 import { runsOn } from '@/lib/schedule';
-import { termOfGroup } from '@/lib/term';
+import { termOfGroup, termsFor } from '@/lib/term';
 import { accentNames, type AccentName } from '@/theme';
 import type { ReminderLead } from '@/lib/notifications';
 
@@ -137,6 +137,18 @@ type State = {
   templateOverrides: Record<string, { title: string; body: string }>;
   /** Starter ids the teacher removed from the list. */
   hiddenTemplates: string[];
+  /**
+   * Terms the teacher has created, as `YYYY-season` keys.
+   *
+   * A term used to exist only as a side effect of a group carrying its key,
+   * which meant a term could not be set up before there was a course in it —
+   * and setting the term up first is the order teachers plan in. These are the
+   * empty ones. Everywhere a term list is shown it is these *and* the terms the
+   * groups themselves carry, so nothing here has to be kept in step with
+   * anything: a group moved out of the last term in it leaves the term standing,
+   * which is right, and a group carrying a term nobody declared still shows.
+   */
+  terms: string[];
   /** Reusable message bodies the teacher wrote. Built-ins are not in here. */
   templates: MessageTemplate[];
 
@@ -250,6 +262,11 @@ type State = {
   /** Put every hidden starter back, edits included. */
   restoreBuiltInTemplates: () => void;
 
+  /** Declare a term so it can hold courses. Already-present is a no-op. */
+  createTerm: (term: string) => void;
+  /** Undeclare one. Groups keep their own `term` and go on showing it. */
+  deleteTerm: (term: string) => void;
+
   setLanguage: (language: Language) => void;
   /** Null puts the teacher back on the app's translated default. */
   setGradeTemplate: (template: string | null) => void;
@@ -334,6 +351,7 @@ export type StoreMirror = {
   setGradeTemplateFail: (template: string | null) => void;
   setTemplateOverrides: (overrides: Record<string, { title: string; body: string }>) => void;
   setHiddenTemplates: (ids: string[]) => void;
+  setTerms: (terms: string[]) => void;
   markRepliesRead: () => void;
   markReplyRead: (id: string) => void;
   deleteReply: (id: string) => void;
@@ -392,6 +410,7 @@ export const useStore = create<State>()((set, get) => ({
   templates: [],
   templateOverrides: {},
   hiddenTemplates: [],
+  terms: [],
   language: DEFAULT_LANGUAGE,
   languageChosen: false,
   permissionsAsked: false,
@@ -832,6 +851,27 @@ export const useStore = create<State>()((set, get) => ({
     mirror.setHiddenTemplates?.([]);
   },
 
+  createTerm: (term) => {
+    if (get().terms.includes(term)) return;
+    set((s) => ({ terms: [...s.terms, term] }));
+    mirror.setTerms?.(get().terms);
+  },
+
+  /*
+    Only the declaration goes.
+
+    Nothing cascades: a term is a key, not a parent, and the groups that carry
+    it are unaffected — they still say `2026-autumn` and the home screen still
+    shows that term because a term in use is listed whether or not it was ever
+    declared. Which is why the screen only offers this on a term holding no
+    courses: on a term with courses it would look like a delete and do nothing.
+  */
+  deleteTerm: (term) => {
+    if (!get().terms.includes(term)) return;
+    set((s) => ({ terms: s.terms.filter((x) => x !== term) }));
+    mirror.setTerms?.(get().terms);
+  },
+
   removeTemplate: (id) => {
     set((s) => ({ templates: s.templates.filter((x) => x.id !== id) }));
     mirror.deleteTemplate?.(id);
@@ -895,6 +935,16 @@ export const useArchivedGroups = () =>
         .sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? '')),
     ),
   );
+/**
+ * Every term the teacher has, newest first.
+ *
+ * Declared terms and terms in use together — see `termsFor`. Built off the
+ * whole `groups` list rather than the teaching one, because a term whose
+ * courses have all been archived is still a term, and moving a group back into
+ * it has to be possible.
+ */
+export const useTerms = () => useStore(useShallow((s) => termsFor(s.terms, s.groups)));
+
 export const useStudents = () => useStore((s) => s.students);
 export const useEvents = () => useStore((s) => s.events);
 

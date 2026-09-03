@@ -49,6 +49,14 @@ export type TeacherRow = {
   template_overrides: Record<string, { title: string; body: string }>;
   /** Built-in templates the teacher took off their list. */
   hidden_templates: string[];
+  /**
+   * Terms the teacher created, as `YYYY-season` keys. See migration 0022.
+   *
+   * Lets a term exist before any course is in it. Never authoritative for a
+   * group — `groups.term` is — and the app shows these together with the terms
+   * the groups themselves are carrying.
+   */
+  terms: string[];
   created_at: string;
 };
 

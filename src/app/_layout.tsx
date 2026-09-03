@@ -426,6 +426,7 @@ function RootNavigator() {
         <Stack.Screen name="student/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="student/edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/new" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="term/new" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/edit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="group/roster" options={{ presentation: 'modal' }} />
         <Stack.Screen name="event/new" options={{ presentation: 'modal' }} />

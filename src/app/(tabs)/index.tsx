@@ -8,7 +8,7 @@ import { Icon } from '@/components/Icon';
 import { PageHeading, Screen, useTabInset } from '@/components/layout';
 import { SyncPill } from '@/components/SyncPill';
 import { Avatar, Card, EmptyState, IconButton, initialsOf, Press, Txt } from '@/components/ui';
-import { useGroups, useStore, useStudents } from '@/data/store';
+import { useGroups, useStore, useStudents, useTerms } from '@/data/store';
 import type { Group, Student } from '@/data/types';
 import type { TranslationKey } from '@/i18n';
 import { confirm } from '@/components/Dialog';
@@ -72,8 +72,24 @@ export default function Home() {
     running now are the ones the teacher came here for, and the older terms are
     a tap away rather than a scroll away.
   */
+  const allTerms = useTerms();
+
   const termed = useMemo(() => {
     const buckets = new Map<string, Group[]>();
+
+    /*
+      Seeded with every term that exists, so one holding no courses still shows.
+
+      That is the whole point of a term being a thing a teacher makes: they set
+      up the autumn intake in August and fill it in over the following week, and
+      a term that vanished until its first course was in it would make the
+      button they just pressed look broken.
+
+      Not while searching, though. A search is a question about courses, and
+      answering it with a column of empty seasons buries the matches.
+    */
+    if (!q) for (const term of allTerms) buckets.set(term, []);
+
     for (const g of shown) {
       const key = termOfGroup(g);
       const list = buckets.get(key);
@@ -83,11 +99,15 @@ export default function Home() {
     return [...buckets.entries()]
       .sort((a, b) => compareTerms(b[0], a[0]))
       .map(([term, list]) => ({ term, groups: list }));
-  }, [shown]);
+  }, [shown, allTerms, q]);
 
   const [openTerms, setOpenTerms] = useState<Record<string, boolean>>({});
 
   const archiveTerm = useStore((s) => s.archiveTerm);
+  const deleteTerm = useStore((s) => s.deleteTerm);
+  // Only a term the teacher declared can be undeclared. One that exists because
+  // a course carries its key is not theirs to remove; the course is.
+  const declared = useStore((s) => s.terms);
 
   /*
     Archiving a whole term, from the term's own header.
@@ -104,6 +124,24 @@ export default function Home() {
       tone: 'info',
     });
     if (ok) archiveTerm(term);
+  };
+
+  /*
+    Removing an empty term, which is not a delete of anything.
+
+    Offered only where there is nothing in it, because on a term with courses
+    the word would promise something it does not do: the groups keep their own
+    `term` and the term goes on being listed because of them. A button that
+    appears to delete twelve courses and changes nothing is worse than no
+    button.
+  */
+  const askDeleteTerm = async (term: string) => {
+    const ok = await confirm({
+      title: t('term.deleteTitle', { term: termLabel(term, t) }),
+      message: t('term.deleteBody'),
+      confirmLabel: t('term.delete'),
+    });
+    if (ok) deleteTerm(term);
   };
 
   /*
@@ -233,12 +271,43 @@ export default function Home() {
                   to file away the term you are teaching.
                 */}
                 {open ? (
-                  <Press
-                    onPress={() => void askArchiveTerm(term, inTerm.length)}
-                    style={styles.termArchive}>
-                    <Icon name="archive" size={13} color={color.mutedLight} />
-                    <Text style={styles.termArchiveLabel}>{t('archive.archiveTerm')}</Text>
-                  </Press>
+                  <View style={styles.termActions}>
+                    {/*
+                      Adding a course from the term it belongs to, which is the
+                      order a teacher plans in: the intake first, then what is
+                      being taught in it. The term travels with the tap, so the
+                      form opens on it and the start date cannot quietly move
+                      the course somewhere else.
+                    */}
+                    <Press
+                      onPress={() =>
+                        router.push({ pathname: '/group/new', params: { term } })
+                      }
+                      style={styles.termAction}>
+                      <Icon name="plus" size={13} color={color.primary} strokeWidth={2.2} />
+                      <Text style={[styles.termActionLabel, { color: color.primary }]}>
+                        {t('groups.new')}
+                      </Text>
+                    </Press>
+
+                    {inTerm.length ? (
+                      <Press
+                        onPress={() => void askArchiveTerm(term, inTerm.length)}
+                        style={styles.termAction}>
+                        <Icon name="archive" size={13} color={color.mutedLight} />
+                        <Text style={styles.termActionLabel}>{t('archive.archiveTerm')}</Text>
+                      </Press>
+                    ) : declared.includes(term) ? (
+                      <Press onPress={() => void askDeleteTerm(term)} style={styles.termAction}>
+                        <Icon name="close" size={13} color={color.mutedLight} />
+                        <Text style={styles.termActionLabel}>{t('term.delete')}</Text>
+                      </Press>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {open && !inTerm.length ? (
+                  <Text style={styles.termEmpty}>{t('term.empty')}</Text>
                 ) : null}
 
                 {open
@@ -260,6 +329,19 @@ export default function Home() {
             <EmptyState title={t('home.noMatches')} hint={t('home.tryAnother')} />
           ) : null}
 
+          <Press onPress={() => router.push('/term/new')} style={styles.newGroup}>
+            <Icon name="plus" size={16} color={color.muted} />
+            <Text style={styles.newGroupLabel}>{t('term.new')}</Text>
+          </Press>
+
+          {/*
+            Still here, and still second.
+
+            A course made this way lands in whichever term its start date says,
+            which is what it has always done and is right for a tutor adding a
+            class in the middle of a week. Making it from inside a term is the
+            deliberate version, and it is the one at the top of each term.
+          */}
           <Press onPress={() => router.push('/group/new')} style={styles.newGroup}>
             <Icon name="plus" size={16} color={color.muted} />
             <Text style={styles.newGroupLabel}>{t('groups.new')}</Text>
@@ -622,10 +704,12 @@ const makeStyles = ({ color, shadow }: Theme) =>
     // header and its groups, which are now siblings inside a term rather than
     // children of the list.
     termBlock: { gap: 10 },
-    termArchive: {
+    // Two small controls now rather than one, so they share a row and wrap on a
+    // narrow screen instead of pushing each other off it.
+    termActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: -2 },
+    termAction: {
       flexDirection: 'row',
       alignItems: 'center',
-      alignSelf: 'flex-start',
       gap: 6,
       paddingVertical: 5,
       paddingHorizontal: 9,
@@ -633,9 +717,14 @@ const makeStyles = ({ color, shadow }: Theme) =>
       backgroundColor: color.bg,
       borderWidth: 1,
       borderColor: color.border,
-      marginTop: -2,
     },
-    termArchiveLabel: { fontFamily: body[600], fontSize: 11.5, color: color.muted },
+    termActionLabel: { fontFamily: body[600], fontSize: 11.5, color: color.muted },
+    termEmpty: {
+      fontFamily: body[400],
+      fontSize: 12.5,
+      color: color.mutedLight,
+      paddingVertical: 2,
+    },
     termName: {
       flex: 1,
       fontFamily: body[700],

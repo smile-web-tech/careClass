@@ -274,6 +274,8 @@ export type TeacherProfile = {
   gradeTemplateFail: string | null;
   templateOverrides: Record<string, { title: string; body: string }>;
   hiddenTemplates: string[];
+  /** Terms created before any course is in them. See migration 0022. */
+  terms: string[];
 };
 
 /**
@@ -322,6 +324,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
       gradeTemplateFail: null,
       templateOverrides: {},
       hiddenTemplates: [],
+      terms: [],
     };
 
     // Create it rather than returning a convincing-looking profile that exists
@@ -361,6 +364,7 @@ export async function fetchTeacher(): Promise<TeacherProfile | null> {
     gradeTemplateFail: row.grade_template_fail ?? null,
     templateOverrides: row.template_overrides ?? {},
     hiddenTemplates: row.hidden_templates ?? [],
+    terms: row.terms ?? [],
   };
 }
 
@@ -374,6 +378,7 @@ export async function updateTeacher(patch: {
   gradeTemplateFail?: string | null;
   templateOverrides?: Record<string, { title: string; body: string }>;
   hiddenTemplates?: string[];
+  terms?: string[];
 }) {
   const teacherId = await requireUser();
   unwrap(
@@ -391,6 +396,7 @@ export async function updateTeacher(patch: {
         ...(patch.hiddenTemplates !== undefined && {
           hidden_templates: patch.hiddenTemplates,
         }),
+        ...(patch.terms !== undefined && { terms: patch.terms }),
         ...(patch.gradeTemplateFail !== undefined && {
           grade_template_fail: patch.gradeTemplateFail,
         }),

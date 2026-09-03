@@ -84,6 +84,28 @@ export function termsInUse(groups: Group[]) {
 }
 
 /**
+ * Every term the teacher has, newest first.
+ *
+ * The union of two things, and it has to be both. `declared` are the terms they
+ * set up on purpose, which is the only way an empty term can exist at all. The
+ * groups contribute the rest: a course carrying `2026-autumn` puts that term on
+ * the list whether or not anybody declared it, which is what every group made
+ * before terms could be declared relies on.
+ *
+ * Read through `termOfGroup`, so a group with no stored term still lands
+ * somewhere rather than vanishing from the list it is plainly part of.
+ */
+export function termsFor(
+  declared: string[],
+  groups: { term?: string; startsOn?: string }[],
+  today = new Date(),
+): string[] {
+  const seen = new Set(declared);
+  for (const g of groups) seen.add(termOfGroup(g, today));
+  return [...seen].filter(Boolean).sort((a, b) => compareTerms(b, a));
+}
+
+/**
  * The terms to offer when creating a group: the one the start date implies,
  * plus its neighbours either side.
  *

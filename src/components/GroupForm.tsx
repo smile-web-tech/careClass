@@ -14,9 +14,10 @@ import { Screen, StickyFooter, TopBar, useKeyboardLift } from '@/components/layo
 import type { TranslationKey } from '@/i18n';
 import { useT } from '@/i18n/useT';
 import { fromKey, longDate, toKey, weekdayInitials } from '@/lib/date';
-import { termChoices, termLabel, termOf } from '@/lib/term';
+import { compareTerms, termLabel, termOf } from '@/lib/term';
 import { TimeField, TimePicker } from '@/components/TimePicker';
 import { Button, Card, Divider, FieldRow, Overline, Press } from '@/components/ui';
+import { useTerms } from '@/data/store';
 import type { Group, Slot, Weekday } from '@/data/types';
 import { accentNames, radius, space, useTheme, useThemedStyles, type Theme } from '@/theme';
 import { body, display } from '@/theme/type';
@@ -83,6 +84,11 @@ export function GroupForm({
   title,
   submitLabel,
   initial,
+  /**
+   * The term this course is being created in, when the teacher said so by
+   * tapping "add a course" on that term rather than "new group" on its own.
+   */
+  initialTerm,
   /** Rendered under the form — the danger zone on the edit screen. */
   footer,
   /** Blocks the submit while the caller is working — e.g. the online check. */
@@ -92,11 +98,13 @@ export function GroupForm({
   title: string;
   submitLabel: string;
   initial?: Group;
+  initialTerm?: string;
   footer?: React.ReactNode;
   busy?: boolean;
   onSubmit: (draft: GroupDraft) => void;
 }) {
   const { accents, color } = useTheme();
+  const terms = useTerms();
   const styles = useThemedStyles(makeStyles);
   const t = useT();
   const insets = useSafeAreaInsets();
@@ -137,16 +145,45 @@ export function GroupForm({
   /*
     Which intake this is.
 
-    Held as a canonical `YYYY-season` key and defaulted from the start date,
-    because for almost every group the season is simply the season the first
-    class falls in — asking the teacher to state it would be asking them to
-    repeat themselves. `touchedTerm` is what stops that default fighting them:
-    until they pick a term by hand, moving the start date moves the term with
-    it, and the moment they choose one it stays chosen.
+    Held as a canonical `YYYY-season` key. Three sources, in order.
+
+    A term the caller gave — which is what arriving from a term's own "add a
+    course" does — is the answer, full stop. The teacher said which term by
+    where they tapped, and having the start date quietly move the course into a
+    different one would undo the thing they just did.
+
+    A term already on the group is the same: their earlier answer, kept.
+
+    Otherwise it follows the start date, because for a course entered on its own
+    the season is simply the season the first class falls in, and asking would be
+    asking them to repeat themselves. `touchedTerm` stops that default fighting
+    them: until they pick by hand the date moves the term, and the moment they
+    choose one it stays chosen.
   */
-  const [term, setTerm] = useState<string | undefined>(initial?.term ?? termOf(startsOn));
-  const [touchedTerm, setTouchedTerm] = useState(!!initial?.term);
+  const given = initial?.term ?? initialTerm;
+  const [term, setTerm] = useState<string | undefined>(given ?? termOf(startsOn));
+  const [touchedTerm, setTouchedTerm] = useState(!!given);
   const effectiveTerm = touchedTerm ? term : termOf(startsOn);
+
+  /*
+    Every term the teacher has, plus wherever this group currently sits.
+
+    The list used to be four seasons around the start date, which was right when
+    a term was only ever a by-product of a group. Now that terms are made on
+    purpose, the ones they made are the ones to offer — otherwise a teacher who
+    set up next autumn in advance could not put a course into it without first
+    moving the start date there.
+
+    `effectiveTerm` is folded in because it may be a term nobody has declared:
+    the date-derived default on a new group, or the term an old group has been
+    carrying since before any of this. A chip row that does not contain the
+    selected chip reads as nothing being selected.
+  */
+  const termOptions = useMemo(
+    () => [...new Set([...terms, ...(effectiveTerm ? [effectiveTerm] : [])])]
+      .sort((a, b) => compareTerms(b, a)),
+    [terms, effectiveTerm],
+  );
 
   const dayLabels = weekdayInitials();
   const chosenDays = useMemo(() => DAY_NUMBERS.filter((d) => days[d]), [days]);
@@ -280,16 +317,15 @@ export function GroupForm({
 
           <Overline style={styles.label}>{t('groups.term')}</Overline>
           {/*
-            The season this intake belongs to.
+            The intake this course belongs to, and the way it is moved to
+            another one.
 
-            Four chips rather than a year-and-season picker: a tutor entering a
-            course means the term either side of today's, never one in 2019, and
-            two taps of a wheel to reach the obvious answer is two taps too many.
-            `termChoices` centres the window on the start date, so the right one
-            is already lit before the teacher looks at it.
+            Chips rather than a year-and-season wheel: the answer is nearly
+            always already on screen, and two taps of a wheel to reach something
+            you can see is two taps too many.
           */}
           <View style={styles.durationRow}>
-            {termChoices(startsOn).map((key) => {
+            {termOptions.map((key) => {
               const on = effectiveTerm === key;
               return (
                 <Press

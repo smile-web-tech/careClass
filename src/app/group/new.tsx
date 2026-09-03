@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { GroupForm } from '@/components/GroupForm';
 import { useT } from '@/i18n/useT';
@@ -17,11 +17,15 @@ export default function NewGroup() {
   const router = useRouter();
   const t = useT();
   const addGroup = useStore((s) => s.addGroup);
+  // Set when the teacher came from a term's own "add a course" rather than from
+  // the plain New group button, and it decides the term the course lands in.
+  const { term } = useLocalSearchParams<{ term?: string }>();
 
   return (
     <GroupForm
       title={t('groups.new')}
       submitLabel={t('groups.create')}
+      initialTerm={term}
       onSubmit={(draft) => {
         // No connectivity check any more. The write queue is durable — it is
         // written to disk and replayed in order after a relaunch — and the id

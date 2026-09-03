@@ -114,6 +114,7 @@ const SETTINGS = [
   'reminderLead',
   'templateOverrides',
   'hiddenTemplates',
+  'terms',
 ] as const;
 
 type SettingKey = (typeof SETTINGS)[number];
