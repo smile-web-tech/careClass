@@ -9,7 +9,7 @@
  * So this is a picker over the students that already exist, with the current
  * roster pre-ticked. Unticking removes, which makes it the one screen that owns
  * membership rather than splitting add and remove across two places. Creating
- * someone genuinely new is still one tap away at the bottom.
+ * someone genuinely new is one tap away at the top of the list.
  */
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -51,13 +51,28 @@ export default function GroupRoster() {
           (s) => s.name.toLowerCase().includes(q) || s.phone.replace(/\s/g, '').includes(q),
         )
       : students;
-    // Members first, so the teacher can see who is already in without hunting.
+
+    /*
+      Members first, ordered by the *saved* roster rather than by the ticks.
+
+      Both put the group's students at the top, and only one of them holds
+      still. Sorting on `picked` re-ordered the list on every tap: the student
+      just ticked jumped to the top, the rows underneath slid up a place, and
+      the next name the teacher was reaching for was no longer where their
+      finger was going. Ticking ten students in a row meant re-finding the list
+      ten times.
+
+      `groupIds` is what the roster was when the picker opened, and nothing
+      writes to it until Save, so it does not move while the screen is open. It
+      is also right after the store hydrates, where a snapshot taken at mount
+      would have been empty.
+    */
     return [...list].sort((a, b) => {
-      const am = picked.has(a.id) ? 0 : 1;
-      const bm = picked.has(b.id) ? 0 : 1;
+      const am = a.groupIds.includes(id) ? 0 : 1;
+      const bm = b.groupIds.includes(id) ? 0 : 1;
       return am - bm || a.name.localeCompare(b.name);
     });
-  }, [students, query, picked]);
+  }, [students, query, id]);
 
   if (!group) {
     return (
@@ -116,16 +131,21 @@ export default function GroupRoster() {
           paddingTop: 6,
           paddingBottom: insets.bottom + 150,
         }}
-        ListEmptyComponent={
-          <EmptyState
-            title={t(students.length === 0 ? 'students.noneYet' : 'students.nobodyMatches')}
-            hint={students.length === 0 ? t('students.addFirst') : t('students.tryAnother')}
-          />
-        }
-        renderItem={({ item }) => (
-          <PickRow student={item} checked={picked.has(item.id)} onPress={() => toggle(item.id)} />
-        )}
-        ListFooterComponent={
+        /*
+          First, not last.
+
+          This used to be the list footer, which put it under every student on
+          the account: a teacher with sixty of them had to scroll the whole
+          roster to reach the one thing on this screen that is not a tick box.
+          It is also the wrong way round for how the screen is used — somebody
+          who came here to add a child who is not on the register yet wants it
+          before the list, not after it.
+
+          As the header it is on screen the moment the picker opens, and it
+          scrolls away once they start working through the names, which is the
+          point at which they are no longer looking for it.
+        */
+        ListHeaderComponent={
           <Press
             onPress={() => router.push({ pathname: '/student/new', params: { group: group.id } })}
             style={styles.newRow}>
@@ -135,6 +155,15 @@ export default function GroupRoster() {
             <Text style={styles.newLabel}>{t('students.new')}</Text>
           </Press>
         }
+        ListEmptyComponent={
+          <EmptyState
+            title={t(students.length === 0 ? 'students.noneYet' : 'students.nobodyMatches')}
+            hint={students.length === 0 ? t('students.addFirst') : t('students.tryAnother')}
+          />
+        }
+        renderItem={({ item }) => (
+          <PickRow student={item} checked={picked.has(item.id)} onPress={() => toggle(item.id)} />
+        )}
       />
 
       <StickyFooter>
@@ -250,7 +279,9 @@ const makeStyles = ({ color }: Theme) =>
       alignItems: 'center',
       gap: 12,
       paddingVertical: 12,
-      marginTop: 4,
+      // Below rather than above: it sits at the head of the list now, and the
+      // student rows carry their own 8 of bottom margin.
+      marginBottom: 4,
     },
     newIcon: {
       width: 40,
