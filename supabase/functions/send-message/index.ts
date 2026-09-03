@@ -13,6 +13,8 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import { asLanguage, childNoun, fullDate } from '../_shared/messageVars.ts';
+
 type Audience = 'students' | 'parents' | 'both';
 type Channel = 'sms' | 'email' | 'push';
 
@@ -42,11 +44,26 @@ type ResolvedAttachment = { filename: string; path: string };
 type Recipient = {
   studentId: string;
   kind: 'student' | 'parent';
+  /**
+   * The *student's* name, on a parent's copy as much as on their own.
+   *
+   * This used to be the parent's own name on a parent row, which meant one
+   * draft said two different things depending on the channel: the device has
+   * always put the student's name here, because "your daughter Aýgül" reads
+   * correctly and "your daughter Maýa Berdiýewa" does not. The parent's name is
+   * `{parent_name}`, which now exists.
+   */
   name: string;
   phone: string | null;
   email: string | null;
   groupName: string;
   time: string;
+  /** "your daughter" / "your son" / "your child", already in the right language. */
+  gender: string;
+  parentName: string;
+  studentPhone: string;
+  address: string;
+  birthDate: string;
 };
 
 const json = (body: unknown, status = 200) =>
@@ -61,12 +78,23 @@ const cors = {
   'access-control-allow-methods': 'POST, OPTIONS',
 };
 
-/** Substitute the placeholders the composer offers. */
+/**
+ * Substitute the placeholders the composer offers — all eight of them.
+ *
+ * The same set and the same order as `renderBody` in `src/lib/messageVars.ts`,
+ * which does this for SMS. They have to agree: one draft, two channels, and a
+ * teacher who sends by both should not be sending two different messages.
+ */
 function render(template: string, r: Recipient) {
   return template
     .replaceAll('{name}', r.name)
     .replaceAll('{group}', r.groupName)
-    .replaceAll('{time}', r.time);
+    .replaceAll('{time}', r.time)
+    .replaceAll('{gender}', r.gender)
+    .replaceAll('{parent_name}', r.parentName)
+    .replaceAll('{phone}', r.studentPhone)
+    .replaceAll('{address}', r.address)
+    .replaceAll('{birthdate}', r.birthDate);
 }
 
 /** E.164-ish: Uzbek numbers are stored spaced, gateways want digits only. */
@@ -467,11 +495,14 @@ Deno.serve(async (req) => {
   // and gives the parent someone to reply to.
   const { data: teacherRow } = await db
     .from('teachers')
-    .select('name, email')
+    .select('name, email, language')
     .eq('id', teacherId)
     .single();
   const teacherName = (teacherRow?.name ?? '').trim() || 'Your teacher';
   const teacherEmail = teacherRow?.email ?? undefined;
+  // The gendered noun and the month names are words, so they are written in
+  // whichever language the teacher is composing in.
+  const language = asLanguage(teacherRow?.language);
 
   let payload: Payload;
   try {
@@ -586,7 +617,10 @@ Deno.serve(async (req) => {
 
   const { data: students, error: studentError } = await db
     .from('students')
-    .select('id, name, phone, email, parent_name, parent_phone, parent_email')
+    .select(
+      'id, name, surname, gender, phone, email, address, birth_date, ' +
+        'parent_name, parent_phone, parent_email',
+    )
     .eq('teacher_id', teacherId)
     .in('id', studentIds)
     .is('archived_at', null);
@@ -606,15 +640,26 @@ Deno.serve(async (req) => {
     const groupName = g?.name ?? '';
     const time = nextSlotTime(g?.group_slots ?? [], now);
 
+    // Everything that is about the student rather than about who is being
+    // written to, so both rows below carry the same values.
+    const about = {
+      name: s.name,
+      groupName,
+      time,
+      gender: childNoun(s, language),
+      parentName: (s.parent_name ?? '').trim(),
+      studentPhone: (s.phone ?? '').trim(),
+      address: (s.address ?? '').trim(),
+      birthDate: fullDate(s.birth_date, language),
+    };
+
     if (audience === 'students' || audience === 'both') {
       recipients.push({
         studentId: s.id,
         kind: 'student',
-        name: s.name,
         phone: s.phone,
         email: s.email,
-        groupName,
-        time,
+        ...about,
       });
     }
     // A guardian counts as reachable if we hold any way to reach them. Keying
@@ -627,12 +672,9 @@ Deno.serve(async (req) => {
       recipients.push({
         studentId: s.id,
         kind: 'parent',
-        // Parents get addressed by their own name where we have one.
-        name: s.parent_name ?? s.name,
         phone: s.parent_phone,
         email: s.parent_email,
-        groupName,
-        time,
+        ...about,
       });
     }
   }

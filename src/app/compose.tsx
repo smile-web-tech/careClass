@@ -50,7 +50,7 @@ import {
   type ParentTarget,
   type SmsOutcome,
 } from '@/lib/deviceSms';
-import { deviceOnlyPlaceholders, PLACEHOLDERS } from '@/lib/messageVars';
+import { PLACEHOLDERS } from '@/lib/messageVars';
 import { describeError } from '@/lib/errors';
 import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { builtInTemplates } from '@/lib/templates';
@@ -400,7 +400,6 @@ export default function Compose() {
   // From the platform where possible, because the naive `length / 160` is wrong
   // for every message containing a Turkmen letter — those cost 70 per segment.
   const seg = countSegments(draft);
-  const deviceOnly = deviceOnlyPlaceholders(draft);
 
   /**
    * Sending is the one action that must not be optimistic. Everywhere else a
@@ -872,23 +871,6 @@ export default function Compose() {
               </Text>
             </View>
           </Card>
-
-          {/*
-            The placeholders the server cannot fill in.
-
-            Email is rendered by the Edge Function from its own copy of the
-            recipient, and it knows only name, group and time. A draft using the
-            rest is right in a text and would reach a parent's inbox with the
-            braces still in it, so it is said here rather than discovered there.
-          */}
-          {channels.email && deviceOnly.length ? (
-            <View style={styles.warn}>
-              <Icon name="info" size={18} color={color.warningDeep} />
-              <Text style={styles.warnText}>
-                {t('messages.smsOnlyVars', { vars: deviceOnly.join(' ') })}
-              </Text>
-            </View>
-          ) : null}
 
           {/* Only worth saying once the message is long enough for it to cost
               something — a two-word draft in Turkmen is still one segment. */}

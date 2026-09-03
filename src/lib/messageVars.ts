@@ -26,7 +26,7 @@
  */
 import type { Student } from '@/data/types';
 import { translateNow } from '@/i18n/useT';
-import { fromKey, longDate } from '@/lib/date';
+import { fromKey, fullDate } from '@/lib/date';
 import { genderOf } from '@/lib/names';
 
 /** Every placeholder the composer offers, in the order the chips show them. */
@@ -40,22 +40,6 @@ export const PLACEHOLDERS = [
   '{address}',
   '{birthdate}',
 ] as const;
-
-/**
- * The three the server also knows how to fill in.
- *
- * The Edge Function renders email itself, from its own copy of the recipient,
- * and it has only ever known these. The rest are filled in on the device, which
- * is where SMS is sent from — so a draft using them is right in a text and would
- * arrive in an email with the braces still in it. The composer says so rather
- * than letting a parent receive `{address}`.
- */
-export const SERVER_PLACEHOLDERS: readonly string[] = ['{name}', '{group}', '{time}'];
-
-/** Placeholders in this draft that only the device can fill in. */
-export function deviceOnlyPlaceholders(body: string): string[] {
-  return PLACEHOLDERS.filter((p) => !SERVER_PLACEHOLDERS.includes(p) && body.includes(p));
-}
 
 export type MessageVars = {
   /** The student's name, even in a message to a parent. */
@@ -99,7 +83,7 @@ export function varsFor(
     parentName: student.parentName?.trim() || student.parent2Name?.trim() || '',
     phone: student.phone?.trim() ?? '',
     address: student.address?.trim() ?? '',
-    birthDate: student.birthDate ? longDate(fromKey(student.birthDate)) : '',
+    birthDate: student.birthDate ? fullDate(fromKey(student.birthDate)) : '',
   };
 }
 

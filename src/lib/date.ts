@@ -195,6 +195,16 @@ export const longDate = (d: Date) => `${dowLong(d)} ${d.getDate()} ${monthLong(d
 export const shortDate = (d: Date) => `${dowShort(d)} ${d.getDate()} ${monthShort(d)}`;
 
 /**
+ * "15 March 2011" — a date somebody was born on.
+ *
+ * Neither `longDate` nor `shortDate` will do for this. Both name the weekday
+ * and neither carries the year, which is the right shape for "when is the next
+ * class" and the wrong shape for a birthday: nobody needs to know that a child
+ * was born on a Tuesday, and everybody needs the year.
+ */
+export const fullDate = (d: Date) => `${d.getDate()} ${monthLong(d)} ${d.getFullYear()}`;
+
+/**
  * "Fri 31 Jul at 16:05" — for a single item's own screen.
  *
  * A list shows "2h ago", which is the right unit while scanning. Once the
