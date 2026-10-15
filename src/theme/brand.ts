@@ -19,3 +19,17 @@ export const brand = {
   /** KERVEN BAYLYEV'S, above the mark on the title card. */
   sage: '#C9D7AE',
 } as const;
+
+/**
+ * The title card's own four, sampled off the reference frame it reproduces.
+ *
+ * Softer than the icon's: the card is a picture someone made, and it is copied
+ * as it is rather than re-coloured to match the launcher. The two-tone name is
+ * the reference's too — the given name sage, the family name silver.
+ */
+export const titleCard = {
+  givenName: '#ABC39D',
+  familyName: '#BBBFC8',
+  classWord: '#3C64AA',
+  careWord: '#009946',
+} as const;

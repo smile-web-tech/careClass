@@ -2,7 +2,7 @@
   "expo": {
     "name": "ClassCare",
     "slug": "classcare",
-    "version": "1.8.1",
+    "version": "1.8.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "classcare",
@@ -64,7 +64,7 @@
           ]
         }
       ],
-      "versionCode": 10801
+      "versionCode": 10802
     },
     "web": {
       "output": "static",

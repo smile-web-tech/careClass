@@ -16,6 +16,9 @@ export const display = {
  */
 export const mark = 'ArchivoBlack_400Regular';
 
+/** KERVEN BAYLYEV'S on the title card, and nowhere else. */
+export const markName = 'Audiowide_400Regular';
+
 export const body = {
   400: 'PlusJakartaSans_400Regular',
   500: 'PlusJakartaSans_500Medium',
